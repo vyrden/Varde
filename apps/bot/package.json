@@ -1,0 +1,24 @@
+{
+  "name": "@varde/bot",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Processus bot : connexion Discord, dispatch des événements.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "echo 'no tests yet' && exit 0"
+  },
+  "dependencies": {
+    "pino": "10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "typescript": "6.0.3"
+  }
+}

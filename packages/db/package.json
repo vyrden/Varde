@@ -1,0 +1,24 @@
+{
+  "name": "@varde/db",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Schémas Drizzle, migrations, client DB.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "echo 'no tests yet' && exit 0"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "typescript": "6.0.3"
+  }
+}

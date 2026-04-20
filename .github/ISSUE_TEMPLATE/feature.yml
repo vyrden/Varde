@@ -1,0 +1,52 @@
+name: Feature
+description: Proposer une fonctionnalité ou une amélioration.
+labels: [feature]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ouvrir une issue avant une PR pour les changements significatifs
+        (voir `CONTRIBUTING.md`).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème
+      description: Quel problème est résolu par cette feature ? Qui est concerné ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution envisagée
+      description: Piste d'implémentation. Pas besoin d'être complète.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considérées
+      description: Autres approches envisagées et pourquoi rejetées.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      description: Comment saura-t-on que la feature est faite et correcte ?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope V1
+      description: |
+        La feature est-elle compatible avec le scope V1 (voir `docs/SCOPE.md`) ?
+      options:
+        - Compatible avec le scope V1 actuel
+        - Hors scope V1, viendra en module additionnel
+        - À discuter
+    validations:
+      required: true

@@ -1,0 +1,31 @@
+{
+  "name": "varde",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Bot Discord auto-hébergé, pensé comme plateforme d'extensions.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "typecheck": "turbo run typecheck",
+    "check": "turbo run lint typecheck test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.12",
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "turbo": "2.9.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  }
+}

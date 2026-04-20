@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# Hook pre-commit.
+#
+# Lint et typecheck ciblés sur les fichiers staged. Refuse le commit si
+# quelque chose est non conforme, ne modifie rien automatiquement.
+# Auto-fix manuel : `pnpm lint --write` et `pnpm format` avant commit.
+#
+# Ce hook est versionné dans .githooks/. Pour l'activer sur une machine
+# locale, lancer scripts/setup-hooks.sh une fois après clone.
+#
+# Tolérant en phase de bootstrap : si pnpm ou la config Biome ne sont
+# pas encore installés (premières PR du jalon 0), le hook sort en
+# succès sans vérification. Les checks deviennent obligatoires dès que
+# l'outillage est en place.
+
+set -euo pipefail
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+[[ -z "$STAGED" ]] && exit 0
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  exit 0
+fi
+
+HAS_BIOME_CONFIG=0
+for candidate in biome.json biome.jsonc packages/config/biome.json; do
+  if [[ -f "$candidate" ]]; then
+    HAS_BIOME_CONFIG=1
+    break
+  fi
+done
+
+if [[ $HAS_BIOME_CONFIG -eq 1 ]]; then
+  pnpm biome check --staged --no-errors-on-unmatched
+fi
+
+if echo "$STAGED" | grep -qE '\.(ts|tsx|mts|cts)$'; then
+  if [[ -f "package.json" ]] && grep -q '"typecheck"' package.json; then
+    pnpm -r typecheck
+  fi
+fi
+
+exit 0

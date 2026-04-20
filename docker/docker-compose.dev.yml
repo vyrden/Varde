@@ -1,0 +1,62 @@
+# Services de développement local pour Varde.
+#
+# Démarrer : docker compose -f docker/docker-compose.dev.yml up -d
+# Arrêter  : docker compose -f docker/docker-compose.dev.yml down
+# Purger   : docker compose -f docker/docker-compose.dev.yml down -v
+#
+# Variables d'environnement lues depuis le .env.local de la racine du
+# repo (ou depuis l'environnement shell). Les défauts sont adaptés au
+# développement local, à ne pas utiliser en production.
+
+name: varde-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: varde-postgres
+    restart: unless-stopped
+    ports:
+      - "${VARDE_POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${VARDE_POSTGRES_USER:-varde}
+      POSTGRES_PASSWORD: ${VARDE_POSTGRES_PASSWORD:-varde}
+      POSTGRES_DB: ${VARDE_POSTGRES_DB:-varde}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VARDE_POSTGRES_USER:-varde} -d ${VARDE_POSTGRES_DB:-varde}"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - varde
+
+  redis:
+    image: redis:7-alpine
+    container_name: varde-redis
+    restart: unless-stopped
+    ports:
+      - "${VARDE_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    networks:
+      - varde
+
+volumes:
+  postgres_data:
+    name: varde_postgres_data
+  redis_data:
+    name: varde_redis_data
+
+networks:
+  varde:
+    driver: bridge

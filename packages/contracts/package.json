@@ -1,0 +1,21 @@
+{
+  "name": "@varde/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Types et schémas partagés entre core, modules, API, dashboard.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "echo 'no tests yet' && exit 0"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@varde/dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Dashboard web du projet Varde.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "echo 'no tests yet' && exit 0"
+  },
+  "dependencies": {
+    "@varde/ui": "workspace:*",
+    "next": "16.2.4",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.2.2",
+    "@types/node": "24.12.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@varde/config": "workspace:*",
+    "tailwindcss": "4.2.2",
+    "typescript": "6.0.3"
+  }
+}

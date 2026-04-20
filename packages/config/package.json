@@ -1,0 +1,29 @@
+{
+  "name": "@varde/config",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Configurations partagées : TypeScript, Biome, Vitest.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.browser.json": "./tsconfig.browser.json",
+    "./biome.json": "./biome.json",
+    "./vitest": "./src/vitest.ts"
+  },
+  "files": [
+    "tsconfig.base.json",
+    "tsconfig.node.json",
+    "tsconfig.browser.json",
+    "biome.json",
+    "src/**/*.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ."
+  },
+  "peerDependencies": {
+    "vitest": ">=4.0.0"
+  }
+}

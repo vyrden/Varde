@@ -1,0 +1,63 @@
+name: Bug
+description: Signaler un bug reproductible.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de remonter le bug. Pour les vulnérabilités de sécurité,
+        ne jamais ouvrir d'issue publique — voir `SECURITY.md`.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Tag, commit, ou branche concernée.
+      placeholder: "ex. v1.0.0, dev@abc1234, main"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environnement
+      description: Versions Node, OS, Postgres, Redis, config notable.
+      placeholder: |
+        Node: 24.x
+        OS: Linux 6.x
+        Postgres: 17
+        Redis: 7 (ou mode dégradé)
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportement observé
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs ou erreurs
+      description: Logs pertinents, stack trace, extrait d'audit log.
+      render: shell
