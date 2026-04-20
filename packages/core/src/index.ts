@@ -21,3 +21,10 @@ export {
   createKeystoreService,
 } from './keystore.js';
 export { type CreateLoggerOptions, createLogger, type LogLevel } from './logger.js';
+export {
+  type CorePermissionService,
+  type CreatePermissionServiceOptions,
+  createPermissionService,
+  type MemberContextResolver,
+  type PermissionContext,
+} from './permissions.js';
