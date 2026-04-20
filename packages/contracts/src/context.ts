@@ -1,0 +1,213 @@
+import type { ZodType } from 'zod';
+
+import type { CoreEvent, CoreEventType } from './events.js';
+import type {
+  ActionId,
+  ChannelId,
+  GuildId,
+  ModuleId,
+  PermissionId,
+  RoleId,
+  UserId,
+} from './ids.js';
+
+/**
+ * Interfaces des services exposés aux modules via `ctx`. Types
+ * uniquement : les implémentations vivent dans `@varde/core` et
+ * packages associés. Les modules ne dépendent à la compilation que
+ * de `@varde/contracts`.
+ */
+
+/** Logger scoped à un module. */
+export interface Logger {
+  readonly trace: (message: string, meta?: Record<string, unknown>) => void;
+  readonly debug: (message: string, meta?: Record<string, unknown>) => void;
+  readonly info: (message: string, meta?: Record<string, unknown>) => void;
+  readonly warn: (message: string, meta?: Record<string, unknown>) => void;
+  readonly error: (message: string, error?: Error, meta?: Record<string, unknown>) => void;
+  readonly fatal: (message: string, error?: Error, meta?: Record<string, unknown>) => void;
+  readonly child: (bindings: Record<string, unknown>) => Logger;
+}
+
+/** Accès à la configuration d'un serveur. */
+export interface ConfigService {
+  readonly get: <T = unknown>(guildId: GuildId) => Promise<T>;
+  readonly set: <T = unknown>(guildId: GuildId, patch: Partial<T>) => Promise<void>;
+}
+
+/** Acteur d'une action auditée. */
+export type AuditActor =
+  | { readonly type: 'user'; readonly id: UserId }
+  | { readonly type: 'system' }
+  | { readonly type: 'module'; readonly id: ModuleId };
+
+/** Cible optionnelle d'une action auditée. */
+export type AuditTarget =
+  | { readonly type: 'user'; readonly id: UserId }
+  | { readonly type: 'channel'; readonly id: ChannelId }
+  | { readonly type: 'role'; readonly id: RoleId }
+  | { readonly type: 'message'; readonly id: string };
+
+/** Niveau de gravité d'une entrée d'audit. */
+export type AuditSeverity = 'info' | 'warn' | 'error';
+
+/** Entrée d'audit soumise par un module. */
+export interface AuditEntry {
+  readonly action: ActionId;
+  readonly actor: AuditActor;
+  readonly target?: AuditTarget;
+  readonly severity: AuditSeverity;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly guildId?: GuildId;
+}
+
+/** Service d'audit log. Append-only, écriture unique. */
+export interface AuditService {
+  readonly log: (entry: AuditEntry) => Promise<void>;
+}
+
+/** Service de permissions applicatives. */
+export interface PermissionService {
+  readonly can: (
+    actor: AuditActor,
+    permission: PermissionId,
+    target?: AuditTarget,
+  ) => Promise<boolean>;
+}
+
+/** Handler d'événement, signature générique. */
+export type EventHandler<TEvent = CoreEvent> = (event: TEvent) => Promise<void> | void;
+
+/** Bus d'événements typé, avec narrowing par `type`. */
+export interface EventBus {
+  readonly emit: <T extends CoreEvent>(event: T) => Promise<void>;
+  readonly on: <TType extends CoreEventType>(
+    type: TType,
+    handler: EventHandler<Extract<CoreEvent, { type: TType }>>,
+  ) => () => void;
+  readonly onAny: (handler: EventHandler) => () => void;
+}
+
+/** Signature d'une tâche planifiée. */
+export type ScheduledTaskHandler = () => Promise<void> | void;
+
+/** Service de planification de tâches différées. */
+export interface SchedulerService {
+  readonly in: (durationMs: number, jobKey: string, handler: ScheduledTaskHandler) => Promise<void>;
+  readonly at: (date: Date, jobKey: string, handler: ScheduledTaskHandler) => Promise<void>;
+  readonly cron: (
+    expression: string,
+    jobKey: string,
+    handler: ScheduledTaskHandler,
+  ) => Promise<void>;
+  readonly cancel: (jobKey: string) => Promise<boolean>;
+}
+
+/** Service d'internationalisation (contrat V1 minimal). */
+export interface I18nService {
+  readonly t: (key: string, params?: Record<string, string | number>) => string;
+}
+
+/** Service d'accès au keystore chiffré. */
+export interface KeystoreService {
+  readonly put: (guildId: GuildId, key: string, value: string) => Promise<void>;
+  readonly get: (guildId: GuildId, key: string) => Promise<string | null>;
+  readonly delete: (guildId: GuildId, key: string) => Promise<void>;
+}
+
+/**
+ * Surface minimale d'accès Discord autorisée aux modules. Les modules
+ * n'accèdent jamais au client discord.js directement : tout passe
+ * par `ctx.discord.*` pour que le core applique rate limiting et
+ * audit.
+ */
+export interface DiscordService {
+  readonly sendMessage: (channelId: ChannelId, content: string) => Promise<void>;
+}
+
+/** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */
+export interface ModuleQuery<TInput = unknown, TOutput = unknown> {
+  readonly schema: ZodType<TInput>;
+  readonly resultSchema: ZodType<TOutput>;
+  readonly handler: (input: TInput) => Promise<TOutput> | TOutput;
+}
+
+/** Service d'accès aux autres modules. */
+export interface ModulesService {
+  readonly query: <TInput = unknown, TOutput = unknown>(
+    moduleId: ModuleId,
+    queryId: string,
+    input: TInput,
+  ) => Promise<TOutput>;
+  readonly isEnabled: (guildId: GuildId, moduleId: ModuleId) => Promise<boolean>;
+}
+
+/** Service IA. `null` côté `ctx.ai` si aucun provider n'est configuré. */
+export interface AIService {
+  readonly complete: (prompt: string, options?: { readonly maxTokens?: number }) => Promise<string>;
+  readonly classify: (text: string, labels: readonly string[]) => Promise<string>;
+  readonly summarize: (texts: readonly string[]) => Promise<string>;
+}
+
+/** Type de message UI normalisé. */
+export type UIMessageKind = 'embed' | 'success' | 'error' | 'confirm';
+
+/** Message UI normalisé, retourné par le module au handler d'interaction. */
+export interface UIMessage {
+  readonly kind: UIMessageKind;
+  readonly payload: unknown;
+}
+
+/**
+ * Factory d'UI standard (embeds, réponses, confirmations). Seule
+ * surface autorisée pour répondre à une interaction Discord. Toute
+ * tentative de contourner la factory est rejetée (dev) ou journalisée
+ * comme violation (prod).
+ */
+export interface UIService {
+  readonly embed: (options: {
+    readonly title?: string;
+    readonly description?: string;
+  }) => UIMessage;
+  readonly success: (message: string) => UIMessage;
+  readonly error: (message: string) => UIMessage;
+  readonly confirm: (options: {
+    readonly message: string;
+    readonly confirmLabel?: string;
+    readonly cancelLabel?: string;
+  }) => UIMessage;
+}
+
+/**
+ * Accès DB scoped au module. Seules les tables préfixées par l'id
+ * du module sont visibles. Les vues du core (guild_config, etc.) sont
+ * exposées en lecture via les services `ctx.config`, `ctx.audit`, etc.
+ *
+ * Typage fin de cette surface : établi en parallèle avec l'arrivée
+ * du client Drizzle dans `@varde/db`.
+ */
+export interface ScopedDatabase {
+  readonly __scoped: true;
+}
+
+/**
+ * Contexte d'exécution d'un module. Seul point d'accès autorisé du
+ * module vers le core : aucune autre importation n'est tolérée
+ * depuis les packages internes.
+ */
+export interface ModuleContext {
+  readonly module: { readonly id: ModuleId; readonly version: string };
+  readonly logger: Logger;
+  readonly config: ConfigService;
+  readonly db: ScopedDatabase;
+  readonly events: EventBus;
+  readonly audit: AuditService;
+  readonly permissions: PermissionService;
+  readonly discord: DiscordService;
+  readonly scheduler: SchedulerService;
+  readonly i18n: I18nService;
+  readonly modules: ModulesService;
+  readonly keystore: KeystoreService;
+  readonly ai: AIService | null;
+  readonly ui: UIService;
+}
