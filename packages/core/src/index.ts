@@ -1,4 +1,12 @@
 export {
+  type AuditPurgeOptions,
+  type AuditQueryOptions,
+  type AuditScope,
+  type CoreAuditService,
+  type CreateAuditServiceOptions,
+  createAuditService,
+} from './audit.js';
+export {
   type ConfigChangedListener,
   type ConfigObject,
   type CoreConfigService,
