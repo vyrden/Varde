@@ -34,3 +34,11 @@ export {
   type CreateSchedulerServiceOptions,
   createSchedulerService,
 } from './scheduler.js';
+export {
+  type ConfirmPayload,
+  createUIService,
+  type EmbedPayload,
+  type ErrorPayload,
+  isUIMessage,
+  type SuccessPayload,
+} from './ui.js';
