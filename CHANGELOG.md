@@ -26,6 +26,28 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
   - Interfaces `ModuleContext` et ses 13 sous-services (types
     uniquement, implémentations à venir).
   - Shapes des 11 records DB du core (contrat avec `@varde/db`).
+- `@varde/db` : schéma du core et client Drizzle.
+  - Schémas Drizzle Postgres et SQLite pour les 11 tables de l'ADR 0001
+    (guilds, guild_config, modules_registry, guild_modules,
+    permissions_registry, permission_bindings, audit_log,
+    scheduled_tasks, onboarding_sessions, ai_invocations, keystore).
+  - PK applicatives en ULID, cascades ON DELETE explicites, index
+    nommés, index partiel Postgres `idx_onboarding_expires`, enums
+    via CHECK pour rester portable SQLite.
+  - Client factory `createDbClient({ driver, url, poolSize? })` sur
+    `postgres-js` ou `better-sqlite3` (avec `PRAGMA foreign_keys=ON`
+    et `journal_mode=WAL`).
+  - `withTransaction` portable (PG via `db.transaction`, SQLite via
+    pilotage manuel `BEGIN` / `COMMIT` / `ROLLBACK`).
+  - Helpers `toCanonicalDate` / `fromCanonicalDate` vers
+    `Iso8601DateTime`.
+  - `applyMigrations` + runner CLI `scripts/migrate.ts` exposés via
+    `pnpm db:migrate` au root.
+  - Migrations initiales `0000_init.sql` générées par drizzle-kit
+    (PG et SQLite), commitées comme source canonique.
+  - Tests : 7 unitaires + 16 d'intégration (SQLite en mémoire et
+    Postgres via Testcontainers), couvrent cascades, RESTRICT, CHECK,
+    unicité, rollback.
 
 ### Jalon 0 — fondations (2026-04-20)
 
