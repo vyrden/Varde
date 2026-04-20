@@ -7,6 +7,26 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Jalon 1 — core minimum viable (en cours)
+
+- `@varde/contracts` : surface typée initiale.
+  - Branded types Discord (`GuildId`, `UserId`, `ChannelId`, `RoleId`,
+    `MessageId`) et applicatifs (`ModuleId`, `PermissionId`,
+    `ActionId`) avec guards et asserts.
+  - Générateur ULID monotone, helpers `isUlid`, `parseUlid`,
+    `ulidTimestamp`.
+  - Hiérarchie `AppError` (`ValidationError`, `NotFoundError`,
+    `PermissionDeniedError`, `ConflictError`, `DependencyFailureError`,
+    `ModuleError`) avec codes canoniques stables, httpStatus mappé,
+    `toJSON` sans fuite.
+  - Catalogue d'événements core V1 (19 événements Discord et système)
+    typés et validés par Zod, avec union discriminée `CoreEvent`.
+  - Meta-schema Zod du manifeste statique de module, helper
+    `validateEmitPrefix`.
+  - Interfaces `ModuleContext` et ses 13 sous-services (types
+    uniquement, implémentations à venir).
+  - Shapes des 11 records DB du core (contrat avec `@varde/db`).
+
 ### Jalon 0 — fondations (2026-04-20)
 
 Posé :
