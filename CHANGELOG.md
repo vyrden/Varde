@@ -82,6 +82,32 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
     automatique des recurrences après exécution. `lastError`
     persisté pour diagnostic.
   - Tests : 7 unitaires EventBus + 13 d'intégration SQLite Scheduler.
+- `@varde/contracts` : runtime `defineModule()`.
+  - `ModuleDefinition` (manifest statique + hooks onLoad/onEnable/
+    onDisable/onUnload + queries + configSchema/configDefaults) et
+    `defineModule<T>(definition): T` : valide manifest via
+    `manifestStaticSchema`, vérifie le préfixe d'émission
+    d'événements, `Object.freeze` le résultat.
+- `@varde/core` : plugin loader, ctx factory, UIService.
+  - `createUIService()` produit un UIService contract conforme
+    (embed/success/error/confirm → UIMessage frozen) + guard
+    `isUIMessage(value)` pour le middleware du bot (PR 1.6).
+  - `createPluginLoader({ coreVersion, logger, ctxFactory })` :
+    register avec check semver, loadAll en tri topologique Kahn
+    (cycle et dépendance manquante refusés, optionnelle warn),
+    enable/disable par guild idempotents, unloadAll ordre inverse
+    avec isolation d'erreur. Erreurs des hooks encapsulées dans
+    `ModuleError`.
+  - `createCtxFactory({ client, loggerRoot, eventBus, config,
+    permissions, keystoreMasterKey, ... })` compose tous les
+    services scopés en un ModuleContext figé. Services Discord /
+    Modules / AI stubbés en V1 (discord.sendMessage jette explicite,
+    modules.query jette, modules.isEnabled retourne false, ai = null).
+    `shutdown()` arrête les schedulers instanciés.
+  - Ajout : semver 7.7.4 (check coreVersion).
+  - Tests : 10 unitaires UIService + 14 unitaires loader +
+    4 d'intégration ctx (composition, mémoïsation, stubs,
+    bout en bout loader+ctx+events+audit+scheduler).
 
 ### Jalon 0 — fondations (2026-04-20)
 
