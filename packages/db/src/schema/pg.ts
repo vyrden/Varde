@@ -38,7 +38,7 @@ const targetTypes = ['user', 'channel', 'role', 'message'] as const;
 const severities = ['info', 'warn', 'error'] as const;
 const permissionLevels = ['admin', 'moderator', 'member', 'nobody'] as const;
 const taskKinds = ['one_shot', 'recurring'] as const;
-const taskStatuses = ['pending', 'running', 'succeeded', 'failed', 'cancelled'] as const;
+const taskStatuses = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const;
 const onboardingStatuses = ['in_progress', 'completed', 'aborted', 'rolled_back'] as const;
 const onboardingModes = ['fresh', 'existing', 'replay'] as const;
 
@@ -161,7 +161,7 @@ export const auditLog = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: 'cascade' }),
     actorType: text('actor_type').$type<ActorType>().notNull(),
-    actorId: varchar('actor_id', { length: 128 }).notNull(),
+    actorId: varchar('actor_id', { length: 128 }),
     action: varchar('action', { length: 256 }).notNull(),
     targetType: text('target_type').$type<TargetType | null>(),
     targetId: varchar('target_id', { length: 128 }),
@@ -169,7 +169,7 @@ export const auditLog = pgTable(
       onDelete: 'set null',
     }),
     severity: text('severity').$type<Severity>().notNull(),
-    metadata: jsonb('metadata'),
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -199,7 +199,7 @@ export const scheduledTasks = pgTable(
       onDelete: 'cascade',
     }),
     kind: text('kind').$type<TaskKind>().notNull(),
-    payload: jsonb('payload'),
+    payload: jsonb('payload').notNull().default(sql`'{}'::jsonb`),
     runAt: timestamp('run_at', { withTimezone: true }).notNull(),
     status: text('status').$type<TaskStatus>().notNull().default('pending'),
     attemptCount: integer('attempt_count').notNull().default(0),

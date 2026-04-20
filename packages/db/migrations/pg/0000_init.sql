@@ -18,13 +18,13 @@ CREATE TABLE "audit_log" (
 	"id" varchar(26) PRIMARY KEY NOT NULL,
 	"guild_id" varchar(20) NOT NULL,
 	"actor_type" text NOT NULL,
-	"actor_id" varchar(128) NOT NULL,
+	"actor_id" varchar(128),
 	"action" varchar(256) NOT NULL,
 	"target_type" text,
 	"target_id" varchar(128),
 	"module_id" varchar(128),
 	"severity" text NOT NULL,
-	"metadata" jsonb,
+	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "audit_actor_type_check" CHECK (actor_type IN ('user', 'system', 'module')),
 	CONSTRAINT "audit_target_type_check" CHECK (target_type IS NULL OR target_type IN ('user', 'channel', 'role', 'message')),
@@ -120,7 +120,7 @@ CREATE TABLE "scheduled_tasks" (
 	"module_id" varchar(128) NOT NULL,
 	"guild_id" varchar(20),
 	"kind" text NOT NULL,
-	"payload" jsonb,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"run_at" timestamp with time zone NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
 	"attempt_count" integer DEFAULT 0 NOT NULL,
@@ -128,7 +128,7 @@ CREATE TABLE "scheduled_tasks" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "tasks_kind_check" CHECK (kind IN ('one_shot', 'recurring')),
-	CONSTRAINT "tasks_status_check" CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled'))
+	CONSTRAINT "tasks_status_check" CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled'))
 );
 --> statement-breakpoint
 ALTER TABLE "ai_invocations" ADD CONSTRAINT "ai_invocations_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
