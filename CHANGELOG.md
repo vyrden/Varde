@@ -108,6 +108,37 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
   - Tests : 10 unitaires UIService + 14 unitaires loader +
     4 d'intégration ctx (composition, mémoïsation, stubs,
     bout en bout loader+ctx+events+audit+scheduler).
+- `@varde/contracts` : ajout de `ModuleCommand`, `ModuleCommandHandler`,
+  `ModuleCommandMap`, `CommandInteractionInput`. Options
+  d'interaction restreintes aux types Discord stables V1. Champ
+  optionnel `commands` ajouté à `ModuleDefinition`.
+- `@varde/bot` : dispatch Discord, registre de slash commands,
+  DiscordService concret, shutdown coordinator.
+  - `mapDiscordEvent(input)` traduit les 14 événements Discord V1
+    en `CoreEvent` via un payload extrait (pas de dépendance
+    directe à discord.js).
+  - `createCommandRegistry()` + `routeCommandInteraction(input,
+    options)` : résolution par nom (conflit entre modules rejeté),
+    check `defaultPermission` via `CommandPermissionsPort`,
+    validation du retour par `isUIMessage`.
+  - `createDiscordService({ sender, rateLimit?, ... })` : implémentation
+    du contrat via port `ChannelSender` + rate limit sliding window
+    par instance. Erreurs en aval encapsulées en
+    `DependencyFailureError`.
+  - `createDispatcher({ eventBus, commandRegistry, ui, permissions? })` :
+    cœur testable exposant `dispatchEvent` / `dispatchCommand` ;
+    indépendant de discord.js.
+  - `attachDiscordClient(client, dispatcher, logger)` : wiring concret
+    d'un Client discord.js vers le dispatcher pour les 14 événements
+    + `interactionCreate`, avec `detach()` pour retirer proprement
+    les listeners au shutdown.
+  - `createShutdownCoordinator({ logger })` + `bindSignals(coordinator)` :
+    étapes LIFO idempotentes, continuation sur exception.
+  - Ajout : discord.js 14.26.3.
+  - Tests : 37 unitaires (14 mapper, 10 commands, 6 DiscordService,
+    4 dispatcher, 3 shutdown). `attachDiscordClient` non testé en
+    CI — nécessite Client discord.js réel, couverture manuelle
+    prévue au PR 1.7 / jalon 1 closure.
 
 ### Jalon 0 — fondations (2026-04-20)
 
