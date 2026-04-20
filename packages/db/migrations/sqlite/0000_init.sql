@@ -11,7 +11,7 @@ CREATE TABLE `ai_invocations` (
 	`cost_estimate` text DEFAULT '0' NOT NULL,
 	`success` integer NOT NULL,
 	`error` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`module_id`) REFERENCES `modules_registry`(`id`) ON UPDATE no action ON DELETE set null
 );
@@ -28,7 +28,7 @@ CREATE TABLE `audit_log` (
 	`module_id` text,
 	`severity` text NOT NULL,
 	`metadata` text DEFAULT '{}' NOT NULL,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`module_id`) REFERENCES `modules_registry`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "audit_actor_type_check" CHECK(actor_type IN ('user', 'system', 'module')),
@@ -45,7 +45,7 @@ CREATE TABLE `guild_config` (
 	`config` text DEFAULT '{}' NOT NULL,
 	`version` integer DEFAULT 1 NOT NULL,
 	`updated_by` text,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -65,10 +65,10 @@ CREATE TABLE `guilds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`locale` text DEFAULT 'en' NOT NULL,
-	`joined_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`joined_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`left_at` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `idx_guilds_left_at` ON `guilds` (`left_at`);--> statement-breakpoint
@@ -79,8 +79,8 @@ CREATE TABLE `keystore` (
 	`ciphertext` blob NOT NULL,
 	`iv` blob NOT NULL,
 	`auth_tag` blob NOT NULL,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	PRIMARY KEY(`guild_id`, `module_id`, `key`),
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`module_id`) REFERENCES `modules_registry`(`id`) ON UPDATE no action ON DELETE cascade
@@ -91,7 +91,7 @@ CREATE TABLE `modules_registry` (
 	`version` text NOT NULL,
 	`manifest` text NOT NULL,
 	`schema_version` integer NOT NULL,
-	`loaded_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+	`loaded_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `idx_modules_schema_version` ON `modules_registry` (`schema_version`);--> statement-breakpoint
@@ -104,7 +104,7 @@ CREATE TABLE `onboarding_sessions` (
 	`answers` text DEFAULT '{}' NOT NULL,
 	`plan` text,
 	`applied_actions` text DEFAULT '[]' NOT NULL,
-	`started_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`started_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	`completed_at` text,
 	`expires_at` text NOT NULL,
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
@@ -119,7 +119,7 @@ CREATE TABLE `permission_bindings` (
 	`permission_id` text NOT NULL,
 	`role_id` text NOT NULL,
 	`granted_by` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	PRIMARY KEY(`guild_id`, `permission_id`, `role_id`),
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`permission_id`) REFERENCES `permissions_registry`(`id`) ON UPDATE no action ON DELETE cascade
@@ -132,7 +132,7 @@ CREATE TABLE `permissions_registry` (
 	`description` text NOT NULL,
 	`category` text NOT NULL,
 	`default_level` text NOT NULL,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`module_id`) REFERENCES `modules_registry`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "permissions_default_level_check" CHECK(default_level IN ('admin', 'moderator', 'member', 'nobody'))
 );
@@ -149,8 +149,8 @@ CREATE TABLE `scheduled_tasks` (
 	`status` text DEFAULT 'pending' NOT NULL,
 	`attempt_count` integer DEFAULT 0 NOT NULL,
 	`last_error` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`created_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	`updated_at` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`module_id`) REFERENCES `modules_registry`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`guild_id`) REFERENCES `guilds`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "tasks_kind_check" CHECK(kind IN ('one_shot', 'recurring')),

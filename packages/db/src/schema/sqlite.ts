@@ -42,7 +42,7 @@ export type OnboardingStatus = (typeof onboardingStatuses)[number];
 export type OnboardingMode = (typeof onboardingModes)[number];
 
 const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
-const nowIso = sql`CURRENT_TIMESTAMP`;
+const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
 export const guilds = sqliteTable(
   'guilds',
