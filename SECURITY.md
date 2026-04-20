@@ -72,7 +72,7 @@ Ne sont pas couverts :
   leurs auteurs respectifs.
 - Les problèmes sur les instances auto-hébergées dus à une mauvaise
   configuration de l'administrateur (clés exposées, permissions
-  incorrectes) : voir la documentation d'exploitation.
+  incorrectes).
 - Les problèmes sur Discord lui-même.
 
 ## Pratiques de sécurité du projet
@@ -86,10 +86,6 @@ Le projet applique les pratiques suivantes :
 - Dépendances de sécurité haute ou critique mises à jour sous 7 jours.
 - Builds reproductibles documentés.
 - Images Docker signées (à terme, avec cosign ou équivalent).
-
-Détails techniques dans [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md)
-section sécurité et [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
-section sécurité.
 
 ## Safe harbor
 

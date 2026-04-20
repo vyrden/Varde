@@ -34,10 +34,9 @@ Dans le `biome.json` du package (ou à la racine du monorepo) :
 }
 ```
 
-Les règles critiques listées dans [../CONVENTIONS.md](../../docs/CONVENTIONS.md)
-section "Règles de lint critiques" sont déjà activées (`noExplicitAny`,
-`noNonNullAssertion`, `noUnusedVariables`, `noUnusedImports`, `useConst`,
-`noConsole` avec tolérance `error` et `warn`). Ajouter les surcharges
+Les règles critiques (`noExplicitAny`, `noNonNullAssertion`,
+`noUnusedVariables`, `noUnusedImports`, `useConst`, `noConsole` avec
+tolérance `error` et `warn`) sont déjà activées. Ajouter les surcharges
 spécifiques au package si nécessaire.
 
 ### Vitest

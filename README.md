@@ -59,8 +59,6 @@ chargés dynamiquement, qui contribuent leurs commandes Discord, pages
 dashboard, hooks d'onboarding et logiques métier via des points d'extension
 explicites.
 
-Détails dans [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
-
 ## Installation
 
 À venir. Cible : `docker compose up` sur une machine avec Docker.
@@ -72,9 +70,7 @@ pilotée depuis le dashboard.
 ## Contribuer
 
 Lire [`CONTRIBUTING.md`](./CONTRIBUTING.md) pour le setup local, le
-workflow de PR, et les standards attendus. Les conventions détaillées
-sont dans [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md), le contrat
-d'extension dans [`docs/PLUGIN-API.md`](./docs/PLUGIN-API.md).
+workflow de PR, et les standards attendus.
 
 Les modules tiers sont bienvenus tant qu'ils respectent le contrat
 d'extension et les conventions UI. Ils se développent dans des repos

@@ -6,11 +6,9 @@ contribuer efficacement et sans friction.
 ## Avant de commencer
 
 - Lire le [`README.md`](./README.md) pour comprendre la mission et le
-  périmètre.
-- Lire les principes non-négociables dans [`CLAUDE.md`](./CLAUDE.md). Les
-  PR qui les enfreignent ne sont pas mergées.
-- Parcourir [`docs/SCOPE.md`](./docs/SCOPE.md) pour éviter de proposer
-  du travail hors scope.
+  périmètre V1.
+- Pour une contribution significative, ouvrir d'abord une issue pour
+  valider l'orientation avant d'investir du temps.
 
 ## Types de contributions
 
@@ -24,15 +22,15 @@ contribuer efficacement et sans friction.
   sont maintenus par l'équipe du projet.
 - **Améliorations de documentation** : toujours bienvenues. Les petites
   corrections peuvent passer directement en PR.
-- **Traductions** : bienvenues. Voir la section i18n dans
-  [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md).
+- **Traductions** : bienvenues. Les fichiers de traduction vivent dans
+  chaque module sous `src/locales/`.
 
 ## Setup local
 
 ### Prérequis
 
 - Node.js 24 LTS.
-- pnpm 9 ou plus récent.
+- pnpm 10 ou plus récent.
 - Docker et Docker Compose.
 - Un compte Discord et une application Discord de test (pour obtenir un
   token de bot et des identifiants OAuth2).
@@ -42,15 +40,15 @@ contribuer efficacement et sans friction.
 ```sh
 git clone <repo-url>
 cd varde
-./scripts/setup-hooks.sh
+git config core.hooksPath .githooks && chmod +x .githooks/*
 pnpm install
 cp .env.example .env.local
 ```
 
-`setup-hooks.sh` configure git pour utiliser les hooks versionnés dans
-`.githooks/` (validation de conventions de commit, règle d'invisibilité).
-À lancer une fois après clone, puis à nouveau si un hook est ajouté ou
-modifié.
+Les deux commandes `git config core.hooksPath .githooks` et
+`chmod +x .githooks/*` activent les hooks versionnés dans `.githooks/`
+(validation de conventions de commit). À exécuter une fois après
+clone ; à relancer si un nouveau hook est ajouté.
 
 Éditer `.env.local` pour renseigner les secrets (token Discord, client id /
 secret OAuth2, secret de session, etc.). Les variables obligatoires sont
@@ -174,12 +172,15 @@ pnpm typecheck          # tsc --noEmit
 
 ### Commits
 
-Format conventionnel (voir [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md)
-section Git) :
+Format conventionnel :
 
 ```
 <type>(<scope>): <sujet>
 ```
+
+Types autorisés : `feat`, `fix`, `refactor`, `docs`, `chore`, `test`,
+`perf`, `style`, `build`, `ci`. Sujet court (≤ 72 caractères),
+impératif, sans point final.
 
 Exemple : `feat(moderation): ajout d'un filtre anti-links paramétrable`.
 
@@ -212,7 +213,6 @@ du projet. Pas de démarche administrative, juste un engagement explicite.
 
 ### Code
 
-Voir [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) pour le détail complet.
 Points saillants :
 
 - TypeScript strict, pas de `any`.
@@ -223,7 +223,7 @@ Points saillants :
 
 ### Tests
 
-Voir [`docs/TESTING.md`](./docs/TESTING.md). Résumé :
+Résumé :
 
 - Un bug corrigé = un test de régression.
 - Une feature = des tests couvrant les cas nominaux et les cas limites.
@@ -233,7 +233,6 @@ Voir [`docs/TESTING.md`](./docs/TESTING.md). Résumé :
 
 - API publique modifiée = doc mise à jour.
 - Changement comportemental = `CHANGELOG.md` mis à jour.
-- Décision d'architecture = ADR créé dans `docs/adr/`.
 
 ## Process de revue
 
@@ -267,5 +266,6 @@ attaquer les idées, pas les personnes.
 ## Licence des contributions
 
 En soumettant une contribution, vous acceptez qu'elle soit distribuée sous
-la licence du projet (à définir : MIT ou Apache 2.0). Le trailer
-`Signed-off-by` sur vos commits matérialise cet accord via le DCO.
+la licence du projet (Apache 2.0, voir [`LICENSE`](./LICENSE)). Le
+trailer `Signed-off-by` sur vos commits matérialise cet accord via le
+DCO.

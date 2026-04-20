@@ -24,11 +24,8 @@
 
 ## Checklist revue
 
-Dérivée de [docs/CONVENTIONS.md](../docs/CONVENTIONS.md) section
-"Checklist revue de PR".
-
 - [ ] Titre et description corrects.
-- [ ] Principes non-négociables respectés (voir `CLAUDE.md`).
+- [ ] Principes non-négociables du projet respectés.
 - [ ] Types stricts, pas de `any` ni de `as` injustifiés.
 - [ ] Erreurs gérées, pas de promesse orpheline.
 - [ ] Logs sans fuites de secrets.

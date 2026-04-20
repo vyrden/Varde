@@ -43,7 +43,7 @@ body:
     attributes:
       label: Scope V1
       description: |
-        La feature est-elle compatible avec le scope V1 (voir `docs/SCOPE.md`) ?
+        La feature est-elle compatible avec le scope V1 du projet ?
       options:
         - Compatible avec le scope V1 actuel
         - Hors scope V1, viendra en module additionnel

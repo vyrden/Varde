@@ -6,13 +6,13 @@
 # quelque chose est non conforme, ne modifie rien automatiquement.
 # Auto-fix manuel : `pnpm lint --write` et `pnpm format` avant commit.
 #
-# Ce hook est versionné dans .githooks/. Pour l'activer sur une machine
-# locale, lancer scripts/setup-hooks.sh une fois après clone.
+# Ce hook est versionné dans .githooks/. Pour l'activer localement :
+#   git config core.hooksPath .githooks
+#   chmod +x .githooks/*
 #
 # Tolérant en phase de bootstrap : si pnpm ou la config Biome ne sont
-# pas encore installés (premières PR du jalon 0), le hook sort en
-# succès sans vérification. Les checks deviennent obligatoires dès que
-# l'outillage est en place.
+# pas encore installés, le hook sort en succès sans vérification. Les
+# checks deviennent obligatoires dès que l'outillage est en place.
 
 set -euo pipefail
 
