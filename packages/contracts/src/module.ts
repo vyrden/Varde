@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod';
 
-import type { ModuleContext, ModuleQuery } from './context.js';
-import type { GuildId } from './ids.js';
+import type { ModuleContext, ModuleQuery, UIMessage } from './context.js';
+import type { ChannelId, GuildId, PermissionId, UserId } from './ids.js';
 import { type ManifestStatic, manifestStaticSchema, validateEmitPrefix } from './manifest.js';
 
 /**
@@ -28,6 +28,43 @@ export type ModuleGuildLifecycleHandler = (
 /** Registre de queries exposées par le module, clé = identifiant de query. */
 export type ModuleQueryMap = Readonly<Record<string, ModuleQuery>>;
 
+/**
+ * Entrée d'une interaction de commande reçue par le handler d'un
+ * module. Les options sont volontairement contraintes aux types
+ * Discord natifs stables (string | number | boolean). Les types plus
+ * riches (channel, user, role) seront ajoutés si nécessaire post-V1.
+ */
+export interface CommandInteractionInput {
+  readonly commandName: string;
+  readonly guildId: GuildId;
+  readonly channelId: ChannelId;
+  readonly userId: UserId;
+  readonly options: Readonly<Record<string, string | number | boolean>>;
+}
+
+/** Handler de commande : reçoit l'interaction, retourne un UIMessage. */
+export type ModuleCommandHandler = (
+  input: CommandInteractionInput,
+) => Promise<UIMessage> | UIMessage;
+
+/**
+ * Déclaration d'une slash command par un module.
+ *
+ * `defaultPermission` est la permission applicative requise pour
+ * exécuter la commande ; si elle est déclarée, le bot vérifie
+ * `can(actor, permission, ...)` avant d'invoquer le handler. `null`
+ * explicite = ouverte à tous les utilisateurs.
+ */
+export interface ModuleCommand {
+  readonly name: string;
+  readonly description: string;
+  readonly defaultPermission?: PermissionId | null;
+  readonly handler: ModuleCommandHandler;
+}
+
+/** Registre de commandes déclarées par un module, clé = nom de commande. */
+export type ModuleCommandMap = Readonly<Record<string, ModuleCommand>>;
+
 /** Définition complète d'un module, retournée par `defineModule()`. */
 export interface ModuleDefinition {
   readonly manifest: ManifestStatic;
@@ -36,6 +73,7 @@ export interface ModuleDefinition {
   readonly onDisable?: ModuleGuildLifecycleHandler;
   readonly onUnload?: ModuleLifecycleHandler;
   readonly queries?: ModuleQueryMap;
+  readonly commands?: ModuleCommandMap;
   readonly configSchema?: ZodType<unknown>;
   readonly configDefaults?: Readonly<Record<string, unknown>>;
 }
