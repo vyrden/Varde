@@ -11,11 +11,16 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "echo 'no tests yet' && exit 0"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit"
+  },
+  "dependencies": {
+    "ulid": "3.0.2"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "@varde/config": "workspace:*",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
   }
 }
