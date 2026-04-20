@@ -15,6 +15,11 @@ export {
   deepMerge,
   type SetConfigOptions,
 } from './config.js';
+export {
+  type CreateCtxFactoryOptions,
+  type CtxBundle,
+  createCtxFactory,
+} from './ctx.js';
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
@@ -25,6 +30,7 @@ export {
   type CreatePluginLoaderOptions,
   type CtxFactory,
   createPluginLoader,
+  type ModuleRef,
   type PluginLoader,
 } from './loader.js';
 export { type CreateLoggerOptions, createLogger, type LogLevel } from './logger.js';

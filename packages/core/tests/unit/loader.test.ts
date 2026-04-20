@@ -15,9 +15,9 @@ import { createLogger } from '../../src/logger.js';
 const silentLogger = () =>
   createLogger({ destination: { write: () => undefined }, level: 'fatal' });
 
-const stubCtx = (moduleId: ModuleId): ModuleContext =>
+const stubCtx = (ref: { id: ModuleId; version: string }): ModuleContext =>
   ({
-    module: { id: moduleId, version: '1.0.0' },
+    module: { id: ref.id, version: ref.version },
   }) as unknown as ModuleContext;
 
 const makeManifest = (

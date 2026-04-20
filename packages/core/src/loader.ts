@@ -42,8 +42,14 @@ import { satisfies as semverSatisfies } from 'semver';
  * plus du `moduleId`.
  */
 
+/** Référence légère d'un module (id + version figés au manifeste). */
+export interface ModuleRef {
+  readonly id: ModuleId;
+  readonly version: string;
+}
+
 /** Signature du constructeur de ctx. */
-export type CtxFactory = (moduleId: ModuleId, guildId?: GuildId) => ModuleContext;
+export type CtxFactory = (ref: ModuleRef, guildId?: GuildId) => ModuleContext;
 
 /** Options de construction. */
 export interface CreatePluginLoaderOptions {
@@ -70,6 +76,11 @@ export interface PluginLoader {
   readonly isEnabled: (moduleId: ModuleId, guildId: GuildId) => boolean;
   readonly get: (moduleId: ModuleId) => ModuleDefinition | undefined;
 }
+
+const refOf = (definition: ModuleDefinition): ModuleRef => ({
+  id: definition.manifest.id,
+  version: definition.manifest.version,
+});
 
 const toModuleError = (moduleId: ModuleId, phase: string, error: unknown): ModuleError => {
   const cause = error instanceof Error ? error : new Error(String(error));
@@ -205,7 +216,7 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
           record.loaded = true;
           continue;
         }
-        const ctx = ctxFactory(id);
+        const ctx = ctxFactory(refOf(record.definition));
         try {
           await record.definition.onLoad(ctx);
           record.loaded = true;
@@ -228,7 +239,7 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
       }
       if (record.enabledGuilds.has(guildId)) return;
       if (record.definition.onEnable) {
-        const ctx = ctxFactory(moduleId, guildId);
+        const ctx = ctxFactory(refOf(record.definition), guildId);
         try {
           await record.definition.onEnable(ctx, guildId);
         } catch (error) {
@@ -245,7 +256,7 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
       const record = requireRecord(moduleId);
       if (!record.enabledGuilds.has(guildId)) return;
       if (record.definition.onDisable) {
-        const ctx = ctxFactory(moduleId, guildId);
+        const ctx = ctxFactory(refOf(record.definition), guildId);
         try {
           await record.definition.onDisable(ctx, guildId);
         } catch (error) {
@@ -269,7 +280,7 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
         for (const guildId of guilds) {
           try {
             if (record.definition.onDisable) {
-              const ctx = ctxFactory(id, guildId);
+              const ctx = ctxFactory(refOf(record.definition), guildId);
               await record.definition.onDisable(ctx, guildId);
             }
           } catch (error) {
@@ -288,7 +299,7 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
         if (!record?.loaded) continue;
         if (record.definition.onUnload) {
           try {
-            const ctx = ctxFactory(id);
+            const ctx = ctxFactory(refOf(record.definition));
             await record.definition.onUnload(ctx);
           } catch (error) {
             logger.warn('onUnload en échec', {
