@@ -1,3 +1,12 @@
+export {
+  type ConfigChangedListener,
+  type ConfigObject,
+  type CoreConfigService,
+  type CreateConfigServiceOptions,
+  createConfigService,
+  deepMerge,
+  type SetConfigOptions,
+} from './config.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
   type CreateKeystoreServiceOptions,
