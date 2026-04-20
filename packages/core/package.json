@@ -18,6 +18,7 @@
   "dependencies": {
     "@varde/contracts": "workspace:*",
     "@varde/db": "workspace:*",
+    "cron-parser": "5.5.0",
     "drizzle-orm": "0.45.2",
     "pino": "10.3.1"
   },

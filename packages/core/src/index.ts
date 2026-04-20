@@ -29,3 +29,8 @@ export {
   type MemberContextResolver,
   type PermissionContext,
 } from './permissions.js';
+export {
+  type CoreSchedulerService,
+  type CreateSchedulerServiceOptions,
+  createSchedulerService,
+} from './scheduler.js';
