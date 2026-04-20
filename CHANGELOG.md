@@ -48,6 +48,29 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
   - Tests : 7 unitaires + 16 d'intégration (SQLite en mémoire et
     Postgres via Testcontainers), couvrent cascades, RESTRICT, CHECK,
     unicité, rollback.
+- `@varde/core` : services socles sans dépendance asynchrone externe.
+  - `createLogger` (Pino 10) produisant un `Logger` contract avec
+    rédaction de chemins JSON sensibles, bindings hérités par
+    `child()`, destination injectable pour les tests.
+  - `createI18n` minimal : lookup locale primaire, fallback, clé
+    brute en dernier recours, interpolation `{placeholder}`.
+  - `createKeystoreService` (AES-256-GCM) scopé par module, avec
+    rotation paresseuse de clé maître (`previousMasterKey` → lecture
+    fallback + ré-encryption immédiate sous la nouvelle clé).
+  - `createConfigService` : lecture/écriture atomique d'un snapshot
+    JSON par guild, version monotone, fusion profonde du patch,
+    callback `onChanged` typé `ConfigChangedEvent`. Rollback
+    transactionnel via `withTransaction`.
+  - `createAuditService` : log append-only (ULID, createdAt
+    automatiques, module_id dérivé du scope), query filtré +
+    `purge({ guildId, olderThan })` pour la tâche de rétention.
+  - `createPermissionService` : résolution `can`/`canInGuild`
+    (system → toujours, module → préfixe owned, user → bindings via
+    MemberContextResolver, bypass owner/Administrator), cache
+    permission ↔ rôles par guild avec `invalidate`,
+    `registerPermissions` en upsert.
+  - Tests : 10 unitaires (logger, i18n) + 40 d'intégration SQLite
+    (keystore, config, audit, permissions).
 
 ### Jalon 0 — fondations (2026-04-20)
 
