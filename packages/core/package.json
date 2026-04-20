@@ -20,10 +20,12 @@
     "@varde/db": "workspace:*",
     "cron-parser": "5.5.0",
     "drizzle-orm": "0.45.2",
-    "pino": "10.3.1"
+    "pino": "10.3.1",
+    "semver": "7.7.4"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "@types/semver": "7.7.1",
     "@varde/config": "workspace:*",
     "better-sqlite3": "12.9.0",
     "typescript": "6.0.3",

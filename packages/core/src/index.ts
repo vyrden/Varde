@@ -21,6 +21,12 @@ export {
   type CreateKeystoreServiceOptions,
   createKeystoreService,
 } from './keystore.js';
+export {
+  type CreatePluginLoaderOptions,
+  type CtxFactory,
+  createPluginLoader,
+  type PluginLoader,
+} from './loader.js';
 export { type CreateLoggerOptions, createLogger, type LogLevel } from './logger.js';
 export {
   type CorePermissionService,
