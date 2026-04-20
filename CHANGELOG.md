@@ -71,6 +71,17 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
     `registerPermissions` en upsert.
   - Tests : 10 unitaires (logger, i18n) + 40 d'intégration SQLite
     (keystore, config, audit, permissions).
+- `@varde/core` : bus d'événements et scheduler.
+  - `createEventBus` in-process, typé par l'union `CoreEvent`,
+    handlers isolés (erreurs loguées sans casser le dispatch).
+  - `createSchedulerService` (backend DB-polling, mode dégradé
+    ADR 0003) : `in` / `at` / `cron` / `cancel`, boucle
+    `start`/`stop` avec tick configurable, `runOnce` et `register`
+    exposés pour le cycle de vie et les tests. Cron via
+    `cron-parser`. Upsert idempotent sur `jobKey`. Re-scheduling
+    automatique des recurrences après exécution. `lastError`
+    persisté pour diagnostic.
+  - Tests : 7 unitaires EventBus + 13 d'intégration SQLite Scheduler.
 
 ### Jalon 0 — fondations (2026-04-20)
 
