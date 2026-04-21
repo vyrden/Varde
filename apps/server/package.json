@@ -1,37 +1,30 @@
 {
-  "name": "@varde/api",
+  "name": "@varde/server",
   "private": true,
   "version": "0.0.0",
-  "description": "API HTTP Fastify consommée par le dashboard.",
+  "description": "Entrée monolith : bot Discord + API HTTP dans un même process Node (ADR 0004).",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run",
-    "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@fastify/cors": "11.2.0",
+    "@varde/api": "workspace:*",
+    "@varde/bot": "workspace:*",
     "@varde/contracts": "workspace:*",
     "@varde/core": "workspace:*",
-    "fastify": "5.8.5",
-    "pino": "10.3.1"
+    "@varde/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "@varde/config": "workspace:*",
+    "better-sqlite3": "12.9.0",
     "typescript": "6.0.3",
     "vitest": "4.1.4"
   }
