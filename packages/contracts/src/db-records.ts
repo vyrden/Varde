@@ -115,36 +115,78 @@ export interface ScheduledTaskRecord {
   readonly updatedAt: Iso8601DateTime;
 }
 
-/** Statut d'une session d'onboarding. */
-export type OnboardingSessionStatus = 'in_progress' | 'completed' | 'aborted' | 'rolled_back';
+/**
+ * Statut d'une session d'onboarding (ADR 0007, modèle builder).
+ * Transitions valides :
+ *   draft → previewing → applying → applied
+ *                                  ↘  failed (undo auto sur erreur)
+ *   applied → rolled_back (dans la fenêtre de 30 min)
+ *   applied → expired (après 30 min, gel)
+ */
+export type OnboardingSessionStatus =
+  | 'draft'
+  | 'previewing'
+  | 'applying'
+  | 'applied'
+  | 'rolled_back'
+  | 'expired'
+  | 'failed';
 
-/** Mode d'onboarding : serveur neuf, existant, rejeu. */
-export type OnboardingSessionMode = 'fresh' | 'existing' | 'replay';
+/** Origine du draft d'une session : zéro, preset hand-curated, ou IA. */
+export type OnboardingPresetSource = 'blank' | 'preset' | 'ai';
 
-/** Session d'onboarding en cours ou terminée. */
+/** Statut d'une action individuelle au sein d'une session. */
+export type OnboardingActionStatus = 'pending' | 'applied' | 'undone' | 'failed';
+
+/** Session d'onboarding en cours, appliquée ou terminée. */
 export interface OnboardingSessionRecord {
   readonly id: Ulid;
   readonly guildId: GuildId;
   readonly startedBy: UserId;
   readonly status: OnboardingSessionStatus;
-  readonly mode: OnboardingSessionMode;
-  readonly answers: Readonly<Record<string, unknown>>;
-  readonly plan: Readonly<Record<string, unknown>> | null;
-  readonly appliedActions: readonly Readonly<Record<string, unknown>>[];
+  readonly presetSource: OnboardingPresetSource;
+  readonly presetId: string | null;
+  readonly aiInvocationId: Ulid | null;
+  readonly draft: Readonly<Record<string, unknown>>;
   readonly startedAt: Iso8601DateTime;
-  readonly completedAt: Iso8601DateTime | null;
-  readonly expiresAt: Iso8601DateTime;
+  readonly updatedAt: Iso8601DateTime;
+  readonly appliedAt: Iso8601DateTime | null;
+  readonly expiresAt: Iso8601DateTime | null;
 }
 
-/** Trace d'une invocation IA (prompt brut non stocké, hash uniquement). */
+/**
+ * Ligne de journal pour une action exécutée dans une session
+ * d'onboarding. Permet le rollback granulaire et l'audit par ligne.
+ */
+export interface OnboardingActionLogRecord {
+  readonly id: Ulid;
+  readonly sessionId: Ulid;
+  readonly sequence: number;
+  readonly actionType: string;
+  readonly actionPayload: Readonly<Record<string, unknown>>;
+  readonly status: OnboardingActionStatus;
+  readonly externalId: string | null;
+  readonly result: Readonly<Record<string, unknown>> | null;
+  readonly error: string | null;
+  readonly appliedAt: Iso8601DateTime | null;
+  readonly undoneAt: Iso8601DateTime | null;
+}
+
+/**
+ * Trace d'une invocation IA (prompt brut non stocké, hash uniquement).
+ * `actorId` permet le rate-limit per-user (R4). `promptVersion` trace
+ * quelle version de template a été utilisée (R5).
+ */
 export interface AIInvocationRecord {
   readonly id: Ulid;
   readonly guildId: GuildId;
   readonly moduleId: ModuleId | null;
+  readonly actorId: UserId | null;
   readonly purpose: string;
   readonly provider: string;
   readonly model: string;
   readonly promptHash: string;
+  readonly promptVersion: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly costEstimate: number;

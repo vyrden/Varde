@@ -1,0 +1,198 @@
+import { z } from 'zod';
+
+import type { GuildId, ModuleId, UserId } from './ids.js';
+import type { Ulid } from './ulid.js';
+
+/**
+ * Contrats du moteur d'onboarding (ADR 0007).
+ *
+ * Surface publique partagée par :
+ * - `@varde/core` (executor, registre d'actions)
+ * - `@varde/api` (routes builder)
+ * - les modules tiers qui contribuent des actions custom via
+ *   `ctx.onboarding.registerAction(def)` (V1 : uniquement le module
+ *   témoin `onboarding-test`).
+ *
+ * Les shapes DB miroir sont dans `db-records.ts`. Ce fichier expose
+ * le contrat runtime (definitions d'actions, results, draft).
+ */
+
+// ─── Draft builder ─────────────────────────────────────────────────
+
+const permissionPresetIds = [
+  'moderator-full',
+  'moderator-minimal',
+  'member-default',
+  'member-restricted',
+] as const;
+export type PermissionPresetId = (typeof permissionPresetIds)[number];
+
+const channelTypes = ['text', 'voice', 'forum'] as const;
+export type DraftChannelType = (typeof channelTypes)[number];
+
+/** Rôle à créer, tel que défini dans le draft du builder. */
+export const draftRoleSchema = z.object({
+  localId: z.string().min(1),
+  nameFr: z.string().min(1).max(100).optional(),
+  nameEn: z.string().min(1).max(100).optional(),
+  name: z.string().min(1).max(100),
+  color: z.number().int().min(0).max(0xffffff).default(0),
+  permissionPreset: z.enum(permissionPresetIds).default('member-default'),
+  hoist: z.boolean().default(false),
+  mentionable: z.boolean().default(false),
+});
+export type DraftRole = z.infer<typeof draftRoleSchema>;
+
+/** Catégorie du draft, parente d'un groupe de salons. */
+export const draftCategorySchema = z.object({
+  localId: z.string().min(1),
+  name: z.string().min(1).max(100),
+  position: z.number().int().min(0).default(0),
+});
+export type DraftCategory = z.infer<typeof draftCategorySchema>;
+
+/** Salon du draft, appartient optionnellement à une catégorie. */
+export const draftChannelSchema = z.object({
+  localId: z.string().min(1),
+  categoryLocalId: z.string().min(1).nullable(),
+  name: z.string().min(1).max(100),
+  type: z.enum(channelTypes).default('text'),
+  topic: z.string().max(1024).optional(),
+  slowmodeSeconds: z.number().int().min(0).max(21_600).default(0),
+  readableBy: z
+    .array(z.string().min(1))
+    .default([])
+    .describe('localIds de rôles autorisés à lire ; vide = tout le monde'),
+  writableBy: z
+    .array(z.string().min(1))
+    .default([])
+    .describe('localIds de rôles autorisés à écrire ; vide = tout le monde'),
+});
+export type DraftChannel = z.infer<typeof draftChannelSchema>;
+
+/** Config à appliquer sur un module après création des salons/rôles. */
+export const draftModuleConfigSchema = z.object({
+  moduleId: z.string().min(1),
+  enabled: z.boolean().default(true),
+  config: z.record(z.string(), z.unknown()).default({}),
+});
+export type DraftModuleConfig = z.infer<typeof draftModuleConfigSchema>;
+
+/**
+ * État interne d'une session onboarding côté builder. Ce qu'un
+ * preset produit, ce qu'un patch modifie, ce qu'un preview
+ * transforme en liste d'actions.
+ */
+export const onboardingDraftSchema = z.object({
+  locale: z.enum(['fr', 'en']).default('fr'),
+  roles: z.array(draftRoleSchema).default([]),
+  categories: z.array(draftCategorySchema).default([]),
+  channels: z.array(draftChannelSchema).default([]),
+  modules: z.array(draftModuleConfigSchema).default([]),
+});
+export type OnboardingDraft = z.infer<typeof onboardingDraftSchema>;
+
+// ─── Actions : contrat d'extension ────────────────────────────────
+
+/**
+ * Contexte fourni aux actions pendant leur `apply` / `undo`. Le core
+ * concret l'implémentera dans `@varde/core` — ce contrat garantit que
+ * les modules tiers voient la même surface.
+ */
+export interface OnboardingActionContext {
+  readonly guildId: GuildId;
+  readonly actorId: UserId;
+  readonly logger: {
+    readonly info: (message: string, meta?: Record<string, unknown>) => void;
+    readonly warn: (message: string, meta?: Record<string, unknown>) => void;
+    readonly error: (message: string, error?: Error, meta?: Record<string, unknown>) => void;
+  };
+  /**
+   * Accès sélectif aux services Discord (création rôle / salon /
+   * catégorie, patch permissions). L'implémentation concrète passe
+   * par `@varde/bot` / discord.js.
+   */
+  readonly discord: {
+    readonly createRole: (payload: DiscordCreateRolePayload) => Promise<DiscordCreateResult>;
+    readonly deleteRole: (roleId: string) => Promise<void>;
+    readonly createCategory: (
+      payload: DiscordCreateCategoryPayload,
+    ) => Promise<DiscordCreateResult>;
+    readonly deleteCategory: (channelId: string) => Promise<void>;
+    readonly createChannel: (payload: DiscordCreateChannelPayload) => Promise<DiscordCreateResult>;
+    readonly deleteChannel: (channelId: string) => Promise<void>;
+  };
+  /** Raccourci vers le ConfigService pour `patchModuleConfig`. */
+  readonly configPatch: (patch: Readonly<Record<string, unknown>>) => Promise<void>;
+}
+
+export interface DiscordCreateRolePayload {
+  readonly name: string;
+  readonly color?: number;
+  readonly hoist?: boolean;
+  readonly mentionable?: boolean;
+  readonly permissions?: bigint;
+}
+export interface DiscordCreateCategoryPayload {
+  readonly name: string;
+  readonly position?: number;
+}
+export interface DiscordCreateChannelPayload {
+  readonly name: string;
+  readonly type: DraftChannelType;
+  readonly parentId?: string;
+  readonly topic?: string;
+  readonly slowmodeSeconds?: number;
+  readonly permissionOverwrites?: readonly DiscordPermissionOverwrite[];
+}
+export interface DiscordPermissionOverwrite {
+  readonly roleId: string;
+  readonly allow?: bigint;
+  readonly deny?: bigint;
+}
+/** Retour d'une action qui crée un objet Discord. `id` = snowflake. */
+export interface DiscordCreateResult {
+  readonly id: string;
+}
+
+/**
+ * Définition d'une action composable. Chaque implémentation est
+ * idempotente, possède un `undo` (même trivial), et déclare sa
+ * capacité à être défaite (R8).
+ */
+export interface OnboardingActionDefinition<Payload, Result> {
+  readonly type: string;
+  readonly schema: z.ZodType<Payload>;
+  readonly apply: (ctx: OnboardingActionContext, payload: Payload) => Promise<Result>;
+  readonly undo: (
+    ctx: OnboardingActionContext,
+    payload: Payload,
+    previousResult: Result,
+  ) => Promise<void>;
+  readonly canUndo: boolean | ((result: Result) => boolean);
+}
+
+/** Paire (type, payload) attendue par l'executor pour une action. */
+export interface OnboardingActionRequest {
+  readonly type: string;
+  readonly payload: unknown;
+}
+
+// ─── Re-exports pour ergonomie ────────────────────────────────────
+
+export type {
+  OnboardingActionStatus,
+  OnboardingPresetSource,
+  OnboardingSessionStatus,
+} from './db-records.js';
+
+// Ré-expose les ids dérivés (le core construit un `SessionId`
+// opaque à partir d'un `Ulid`).
+export type OnboardingSessionId = Ulid & { readonly __onboardingSessionId: true };
+export type OnboardingActionLogId = Ulid & { readonly __onboardingActionLogId: true };
+
+/** Une référence légère vers un module qui contribue une action. */
+export interface ActionContributor {
+  readonly moduleId: ModuleId;
+  readonly version: string;
+}

@@ -10,7 +10,17 @@ import {
   withTransaction,
 } from '../../src/index.js';
 
-const { guilds, guildConfig, modulesRegistry, guildModules, auditLog, scheduledTasks } = pgSchema;
+const {
+  guilds,
+  guildConfig,
+  modulesRegistry,
+  guildModules,
+  auditLog,
+  scheduledTasks,
+  onboardingSessions,
+  onboardingActionsLog,
+  aiInvocations,
+} = pgSchema;
 
 const rootMessage = (error: unknown): string => {
   if (!(error instanceof Error)) {
@@ -23,6 +33,7 @@ const rootMessage = (error: unknown): string => {
 const tablesInResetOrder = [
   'keystore',
   'ai_invocations',
+  'onboarding_actions_log',
   'onboarding_sessions',
   'scheduled_tasks',
   'permission_bindings',
@@ -70,7 +81,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     }
   });
 
-  it('crée les 11 tables attendues par l ADR 0001', async () => {
+  it('crée les 12 tables attendues (ADR 0001 + onboarding_actions_log d ADR 0007)', async () => {
     const rows = await client.db.execute<{ table_name: string }>(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%' ORDER BY table_name`,
     );
@@ -82,6 +93,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'guilds',
       'keystore',
       'modules_registry',
+      'onboarding_actions_log',
       'onboarding_sessions',
       'permission_bindings',
       'permissions_registry',
@@ -89,12 +101,22 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     ]);
   });
 
-  it('pose l index partiel idx_onboarding_expires avec sa clause WHERE', async () => {
+  it('pose l index partiel idx_onboarding_expires avec WHERE status=applied (ADR 0007)', async () => {
     const rows = await client.db.execute<{ indexdef: string }>(
       sql`SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_onboarding_expires'`,
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.indexdef).toMatch(/WHERE.*status.*=.*'in_progress'/);
+    expect(rows[0]?.indexdef).toMatch(/WHERE.*status.*=.*'applied'/);
+  });
+
+  it('pose l index partiel unique idx_onboarding_active_per_guild (R3)', async () => {
+    const rows = await client.db.execute<{ indexdef: string }>(
+      sql`SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_onboarding_active_per_guild'`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.indexdef).toMatch(/UNIQUE INDEX/);
+    // PG reformule `IN (...)` en `ANY (ARRAY[...])` au niveau du plan.
+    expect(rows[0]?.indexdef).toMatch(/WHERE.*status.*'draft'.*'previewing'.*'applying'/);
   });
 
   it('cascade guilds → guild_config, guild_modules, audit_log sur DELETE', async () => {
@@ -201,5 +223,141 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     ).rejects.toThrow('rollback expected');
     const configs = await client.db.select().from(guildConfig);
     expect(configs).toHaveLength(0);
+  });
+
+  // ── Onboarding (ADR 0007) ───────────────────────────────────────────
+
+  it('onboarding : cascade DELETE session → actions_log', async () => {
+    await client.db.insert(guilds).values({ id: '666', name: 'Zeta' });
+    await client.db.insert(onboardingSessions).values({
+      id: '01HZ0000000000000000000ONB',
+      guildId: '666',
+      startedBy: 'user-42',
+      status: 'draft',
+      presetSource: 'blank',
+    });
+    await client.db.insert(onboardingActionsLog).values({
+      id: '01HZ0000000000000000000ACT',
+      sessionId: '01HZ0000000000000000000ONB',
+      sequence: 0,
+      actionType: 'createRole',
+      actionPayload: { name: 'Modérateur' },
+      status: 'pending',
+    });
+    await client.db.delete(onboardingSessions);
+    const rows = await client.db.select().from(onboardingActionsLog);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('onboarding : refuse une 2e session active pour la même guild (R3)', async () => {
+    await client.db.insert(guilds).values({ id: '777', name: 'Eta' });
+    await client.db.insert(onboardingSessions).values({
+      id: '01HZ0000000000000000000S01',
+      guildId: '777',
+      startedBy: 'user-42',
+      status: 'draft',
+      presetSource: 'blank',
+    });
+    const error = await client.db
+      .insert(onboardingSessions)
+      .values({
+        id: '01HZ0000000000000000000S02',
+        guildId: '777',
+        startedBy: 'user-42',
+        status: 'previewing',
+        presetSource: 'preset',
+      })
+      .catch((e: unknown) => e);
+    expect(rootMessage(error)).toMatch(/duplicate key|idx_onboarding_active_per_guild/i);
+  });
+
+  it('onboarding : autorise une nouvelle session après rollback de la précédente', async () => {
+    await client.db.insert(guilds).values({ id: '888', name: 'Theta' });
+    await client.db.insert(onboardingSessions).values({
+      id: '01HZ0000000000000000000S11',
+      guildId: '888',
+      startedBy: 'user-42',
+      status: 'draft',
+      presetSource: 'blank',
+    });
+    await client.db
+      .update(onboardingSessions)
+      .set({ status: 'rolled_back' })
+      .where(sql`${onboardingSessions.id} = '01HZ0000000000000000000S11'`);
+    await expect(
+      client.db.insert(onboardingSessions).values({
+        id: '01HZ0000000000000000000S12',
+        guildId: '888',
+        startedBy: 'user-42',
+        status: 'draft',
+        presetSource: 'blank',
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('onboarding : CHECK rejette un status hors enum', async () => {
+    await client.db.insert(guilds).values({ id: '999', name: 'Iota' });
+    const error = await client.db
+      .insert(onboardingSessions)
+      .values({
+        id: '01HZ0000000000000000000S21',
+        guildId: '999',
+        startedBy: 'user-42',
+        // biome-ignore lint/suspicious/noExplicitAny: test d intention, status invalide
+        status: 'unknown' as any,
+        presetSource: 'blank',
+      })
+      .catch((e: unknown) => e);
+    expect(rootMessage(error)).toMatch(/onboarding_status_check/i);
+  });
+
+  it('onboarding_actions_log : unicité de (session_id, sequence)', async () => {
+    await client.db.insert(guilds).values({ id: 'AAA', name: 'Kappa' });
+    await client.db.insert(onboardingSessions).values({
+      id: '01HZ0000000000000000000S31',
+      guildId: 'AAA',
+      startedBy: 'user-42',
+      status: 'applying',
+      presetSource: 'blank',
+    });
+    await client.db.insert(onboardingActionsLog).values({
+      id: '01HZ0000000000000000000A1A',
+      sessionId: '01HZ0000000000000000000S31',
+      sequence: 0,
+      actionType: 'createRole',
+      actionPayload: {},
+      status: 'applied',
+    });
+    const error = await client.db
+      .insert(onboardingActionsLog)
+      .values({
+        id: '01HZ0000000000000000000A1B',
+        sessionId: '01HZ0000000000000000000S31',
+        sequence: 0,
+        actionType: 'createChannel',
+        actionPayload: {},
+        status: 'pending',
+      })
+      .catch((e: unknown) => e);
+    expect(rootMessage(error)).toMatch(/duplicate key|idx_onboarding_actions_session_sequence/i);
+  });
+
+  it('ai_invocations : colonnes actor_id et prompt_version présentes (R4/R5)', async () => {
+    await client.db.insert(guilds).values({ id: 'BBB', name: 'Lambda' });
+    await client.db.insert(aiInvocations).values({
+      id: '01HZ0000000000000000000AI1',
+      guildId: 'BBB',
+      actorId: 'user-42',
+      purpose: 'generatePreset',
+      provider: 'stub',
+      model: 'rule-based',
+      promptHash: 'hash',
+      promptVersion: 'v1',
+      success: true,
+    });
+    const rows = await client.db.select().from(aiInvocations);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.actorId).toBe('user-42');
+    expect(rows[0]?.promptVersion).toBe('v1');
   });
 });

@@ -29,8 +29,17 @@ const severities = ['info', 'warn', 'error'] as const;
 const permissionLevels = ['admin', 'moderator', 'member', 'nobody'] as const;
 const taskKinds = ['one_shot', 'recurring'] as const;
 const taskStatuses = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const;
-const onboardingStatuses = ['in_progress', 'completed', 'aborted', 'rolled_back'] as const;
-const onboardingModes = ['fresh', 'existing', 'replay'] as const;
+const onboardingStatuses = [
+  'draft',
+  'previewing',
+  'applying',
+  'applied',
+  'rolled_back',
+  'expired',
+  'failed',
+] as const;
+const onboardingPresetSources = ['blank', 'preset', 'ai'] as const;
+const onboardingActionStatuses = ['pending', 'applied', 'undone', 'failed'] as const;
 
 export type ActorType = (typeof actorTypes)[number];
 export type TargetType = (typeof targetTypes)[number];
@@ -39,7 +48,8 @@ export type PermissionLevel = (typeof permissionLevels)[number];
 export type TaskKind = (typeof taskKinds)[number];
 export type TaskStatus = (typeof taskStatuses)[number];
 export type OnboardingStatus = (typeof onboardingStatuses)[number];
-export type OnboardingMode = (typeof onboardingModes)[number];
+export type OnboardingPresetSource = (typeof onboardingPresetSources)[number];
+export type OnboardingActionStatus = (typeof onboardingActionStatuses)[number];
 
 const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
 const nowIso = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
@@ -207,6 +217,15 @@ export const scheduledTasks = sqliteTable(
   ],
 );
 
+/**
+ * Miroir SQLite de `onboardingSessions` PG. Le partial unique
+ * index PG qui force une session active par guild est émulé via
+ * un `uniqueIndex` complet côté SQLite — on filtre en applicatif
+ * sur les lignes `status IN ('draft', 'previewing', 'applying')`
+ * avant insertion (l'index sera strict sur la paire
+ * `(guild_id, status)` combinée à l'unicité d'une ligne active
+ * implémentée par service-level check et partial index PG).
+ */
 export const onboardingSessions = sqliteTable(
   'onboarding_sessions',
   {
@@ -216,25 +235,54 @@ export const onboardingSessions = sqliteTable(
       .references(() => guilds.id, { onDelete: 'cascade' }),
     startedBy: text('started_by').notNull(),
     status: text('status').$type<OnboardingStatus>().notNull(),
-    mode: text('mode').$type<OnboardingMode>().notNull(),
-    answers: text('answers', { mode: 'json' })
+    presetSource: text('preset_source').$type<OnboardingPresetSource>().notNull(),
+    presetId: text('preset_id'),
+    aiInvocationId: text('ai_invocation_id'),
+    draft: text('draft', { mode: 'json' })
       .$type<Readonly<Record<string, unknown>>>()
       .notNull()
       .default(sql`'{}'`),
-    plan: text('plan', { mode: 'json' }).$type<Readonly<Record<string, unknown>>>(),
-    appliedActions: text('applied_actions', { mode: 'json' })
-      .$type<readonly Readonly<Record<string, unknown>>[]>()
-      .notNull()
-      .default(sql`'[]'`),
     startedAt: text('started_at').notNull().default(nowIso),
-    completedAt: text('completed_at'),
-    expiresAt: text('expires_at').notNull(),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+    appliedAt: text('applied_at'),
+    expiresAt: text('expires_at'),
   },
   (t) => [
     index('idx_onboarding_guild_status').on(t.guildId, t.status),
     index('idx_onboarding_expires').on(t.expiresAt),
     check('onboarding_status_check', sql.raw(`status IN (${inList(onboardingStatuses)})`)),
-    check('onboarding_mode_check', sql.raw(`mode IN (${inList(onboardingModes)})`)),
+    check(
+      'onboarding_preset_source_check',
+      sql.raw(`preset_source IN (${inList(onboardingPresetSources)})`),
+    ),
+  ],
+);
+
+export const onboardingActionsLog = sqliteTable(
+  'onboarding_actions_log',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => onboardingSessions.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    actionType: text('action_type').notNull(),
+    actionPayload: text('action_payload', { mode: 'json' })
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    status: text('status').$type<OnboardingActionStatus>().notNull(),
+    externalId: text('external_id'),
+    result: text('result', { mode: 'json' }).$type<Readonly<Record<string, unknown>>>(),
+    error: text('error'),
+    appliedAt: text('applied_at'),
+    undoneAt: text('undone_at'),
+  },
+  (t) => [
+    uniqueIndex('idx_onboarding_actions_session_sequence').on(t.sessionId, t.sequence),
+    check(
+      'onboarding_action_status_check',
+      sql.raw(`status IN (${inList(onboardingActionStatuses)})`),
+    ),
   ],
 );
 
@@ -248,10 +296,12 @@ export const aiInvocations = sqliteTable(
     moduleId: text('module_id').references(() => modulesRegistry.id, {
       onDelete: 'set null',
     }),
+    actorId: text('actor_id'),
     purpose: text('purpose').notNull(),
     provider: text('provider').notNull(),
     model: text('model').notNull(),
     promptHash: text('prompt_hash').notNull(),
+    promptVersion: text('prompt_version').notNull().default('v1'),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),
     costEstimate: text('cost_estimate').notNull().default('0'),
@@ -259,7 +309,10 @@ export const aiInvocations = sqliteTable(
     error: text('error'),
     createdAt: text('created_at').notNull().default(nowIso),
   },
-  (t) => [index('idx_ai_guild_created').on(t.guildId, t.createdAt)],
+  (t) => [
+    index('idx_ai_guild_created').on(t.guildId, t.createdAt),
+    index('idx_ai_actor_purpose_created').on(t.actorId, t.purpose, t.createdAt),
+  ],
 );
 
 export const keystore = sqliteTable(
@@ -291,6 +344,7 @@ export const sqliteSchema = {
   auditLog,
   scheduledTasks,
   onboardingSessions,
+  onboardingActionsLog,
   aiInvocations,
   keystore,
 } as const;
