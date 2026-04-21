@@ -16,7 +16,8 @@
     "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
-    "@varde/contracts": "workspace:*"
+    "@varde/contracts": "workspace:*",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

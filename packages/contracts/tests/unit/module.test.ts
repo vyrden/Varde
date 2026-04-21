@@ -102,3 +102,109 @@ describe('defineModule', () => {
     expect(module.configDefaults?.threshold).toBe(5);
   });
 });
+
+describe('defineModule — configUi', () => {
+  it('accepte un configUi bien formé et cohérent avec configSchema', () => {
+    const module = defineModule({
+      manifest: baseManifest,
+      configSchema: z.object({
+        welcomeDelayMs: z.number().int().min(0),
+      }),
+      configUi: {
+        fields: [
+          {
+            path: 'welcomeDelayMs',
+            label: 'Délai d accueil (ms)',
+            widget: 'number',
+          },
+        ],
+      },
+    });
+    expect(module.configUi?.fields).toHaveLength(1);
+  });
+
+  it('accepte un configUi sans configSchema (rendu sans validation Zod)', () => {
+    const module = defineModule({
+      manifest: baseManifest,
+      configUi: {
+        fields: [{ path: 'any', label: 'Any', widget: 'text' }],
+      },
+    });
+    expect(module.configUi?.fields[0]?.path).toBe('any');
+  });
+
+  it('rejette un configUi mal formé (widget inconnu)', () => {
+    expect(() =>
+      defineModule({
+        manifest: baseManifest,
+        configUi: {
+          fields: [
+            {
+              path: 'x',
+              label: 'X',
+              // biome-ignore lint/suspicious/noExplicitAny: test délibéré d'une valeur invalide
+              widget: 'unknown-widget' as any,
+            },
+          ],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('rejette un path configUi absent de configSchema (niveau racine)', () => {
+    expect(() =>
+      defineModule({
+        manifest: baseManifest,
+        configSchema: z.object({ welcomeDelayMs: z.number() }),
+        configUi: {
+          fields: [{ path: 'missing', label: 'Missing', widget: 'text' }],
+        },
+      }),
+    ).toThrow(/path "missing" ne correspond/);
+  });
+
+  it('résout les paths imbriqués à travers les ZodObject', () => {
+    const module = defineModule({
+      manifest: baseManifest,
+      configSchema: z.object({
+        thresholds: z.object({
+          spam: z.number().int(),
+        }),
+      }),
+      configUi: {
+        fields: [
+          {
+            path: 'thresholds.spam',
+            label: 'Seuil spam',
+            widget: 'number',
+          },
+        ],
+      },
+    });
+    expect(module.configUi?.fields[0]?.path).toBe('thresholds.spam');
+  });
+
+  it('rejette un path imbriqué dont une étape intermédiaire manque', () => {
+    expect(() =>
+      defineModule({
+        manifest: baseManifest,
+        configSchema: z.object({
+          thresholds: z.object({ spam: z.number() }),
+        }),
+        configUi: {
+          fields: [{ path: 'thresholds.notThere', label: 'X', widget: 'number' }],
+        },
+      }),
+    ).toThrow(/thresholds\.notThere/);
+  });
+
+  it('accepte un path quand configSchema est absent (check best-effort ignoré)', () => {
+    const module = defineModule({
+      manifest: baseManifest,
+      configUi: {
+        fields: [{ path: 'whatever.nested', label: 'X', widget: 'text' }],
+      },
+    });
+    expect(module.configUi?.fields).toHaveLength(1);
+  });
+});

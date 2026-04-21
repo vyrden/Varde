@@ -1,6 +1,7 @@
 import { manifestStaticSchema } from '@varde/contracts';
 import { describe, expect, it } from 'vitest';
 
+import { resolveConfig } from '../../src/config.js';
 import { helloWorld } from '../../src/index.js';
 import { locales } from '../../src/locales.js';
 import { manifest } from '../../src/manifest.js';
@@ -40,6 +41,36 @@ describe('helloWorld — définition runtime', () => {
     expect(typeof helloWorld.onUnload).toBe('function');
     expect(helloWorld.onEnable).toBeUndefined();
     expect(helloWorld.onDisable).toBeUndefined();
+  });
+});
+
+describe('helloWorld — config déclarative', () => {
+  it('expose configSchema et configUi', () => {
+    expect(helloWorld.configSchema).toBeDefined();
+    expect(helloWorld.configUi?.fields).toHaveLength(1);
+    expect(helloWorld.configUi?.fields[0]).toMatchObject({
+      path: 'welcomeDelayMs',
+      widget: 'number',
+    });
+  });
+
+  it('resolveConfig applique le défaut 300 quand le raw est null', () => {
+    expect(resolveConfig(null).welcomeDelayMs).toBe(300);
+  });
+
+  it('resolveConfig applique le défaut quand le sous-objet module est vide', () => {
+    expect(resolveConfig({ modules: {} }).welcomeDelayMs).toBe(300);
+    expect(resolveConfig({ modules: { 'hello-world': {} } }).welcomeDelayMs).toBe(300);
+  });
+
+  it('resolveConfig extrait la valeur du bon sous-objet', () => {
+    const raw = { modules: { 'hello-world': { welcomeDelayMs: 1500 } } };
+    expect(resolveConfig(raw).welcomeDelayMs).toBe(1500);
+  });
+
+  it('resolveConfig rejette une valeur hors bornes via le schéma Zod', () => {
+    const raw = { modules: { 'hello-world': { welcomeDelayMs: -1 } } };
+    expect(() => resolveConfig(raw)).toThrow();
   });
 });
 

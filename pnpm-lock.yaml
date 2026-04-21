@@ -116,6 +116,9 @@ importers:
       '@varde/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: 24.12.2

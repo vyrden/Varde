@@ -171,4 +171,30 @@ describe('hello-world — e2e avec TestHarness', () => {
     const rows = await harness.client.db.select().from(sqliteSchema.auditLog).all();
     expect(rows[0]?.targetId).toBe('55');
   });
+
+  it('consomme la config welcomeDelayMs et l audite en metadata', async () => {
+    await harness.config.ensureGuild(GUILD);
+    await harness.config.setWith(
+      GUILD,
+      { modules: { 'hello-world': { welcomeDelayMs: 1_000 } } },
+      { scope: 'modules.hello-world' },
+    );
+
+    await harness.emitDiscord(memberJoinInput);
+
+    const [greeted] = await harness.client.db.select().from(sqliteSchema.auditLog).all();
+    expect((greeted?.metadata as { delayMs?: number }).delayMs).toBe(1_000);
+
+    // À 400 ms, la tâche n'est pas encore due (delay = 1000).
+    harness.advanceTime(400);
+    expect(await harness.runScheduled(HELLO)).toBe(0);
+
+    // À 1_100 ms cumulés, la tâche s'exécute.
+    harness.advanceTime(700);
+    expect(await harness.runScheduled(HELLO)).toBe(1);
+
+    const rows = await harness.client.db.select().from(sqliteSchema.auditLog).all();
+    const sent = rows.find((r) => r.action === 'hello-world.welcome.sent');
+    expect(sent).toBeDefined();
+  });
 });
