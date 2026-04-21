@@ -6,16 +6,23 @@ copilote de l'admin.
 
 ## Statut
 
-Projet en conception avancée. Jalon 1 (core minimum viable) terminé
-(2026-04-21) : le noyau sait charger un module, le brancher sur un
-événement Discord et lui faire exercer toute l'API publique (audit,
-scheduler, config, permissions, i18n, UI). Un module témoin
-`hello-world` valide le critère de sortie dans les tests d'intégration
-de bout en bout.
+Projet en conception avancée.
+
+- Jalon 1 (core minimum viable) terminé (2026-04-21) : le noyau sait
+  charger un module, le brancher sur un événement Discord et lui
+  faire exercer toute l'API publique (audit, scheduler, config,
+  permissions, i18n, UI). Un module témoin `hello-world` valide le
+  critère de sortie dans les tests d'intégration de bout en bout.
+- Jalon 2 (dashboard minimum viable) terminé (2026-04-21) : un admin
+  logué via Discord OAuth2 peut lister ses serveurs, piloter la
+  config d'un module depuis un formulaire généré, et parcourir le
+  journal d'audit. Single-origin bot + API via `apps/server`
+  (ADR 0004), session partagée par cookie JWT HS256 (ADR 0006).
 
 Paquets livrés à ce jour :
 
-- `@varde/contracts` — types et schémas partagés, `defineModule()`.
+- `@varde/contracts` — types et schémas partagés, `defineModule()`,
+  `ConfigUi` et `ConfigFieldSpec` pour les métadonnées de rendu.
 - `@varde/db` — schéma Postgres/SQLite des 11 tables du core, client
   Drizzle, migrations.
 - `@varde/core` — logger, i18n, keystore (AES-256-GCM), config, audit,
@@ -23,13 +30,26 @@ Paquets livrés à ce jour :
   loader, ctx factory, UIService.
 - `@varde/bot` — mapper discord.js → `CoreEvent`, command registry,
   DiscordService avec rate limit, dispatcher, shutdown coordinator.
+- `@varde/api` — serveur Fastify : `/health`, `/me`, `/guilds`,
+  `/guilds/:id/modules` (+ config GET/PUT), `/guilds/:id/audit`
+  (filtres + cursor). JWT authenticator via `jose`, middleware
+  `requireGuildAdmin` (MANAGE_GUILD via Discord).
+- `@varde/server` — point d'entrée composé qui instancie core + API
+  Fastify + client discord.js en un seul process (ADR 0004).
+- `@varde/ui` — design system Tailwind 4 CSS-first : primitives
+  (Button, Input, Label, Card, Badge, Header, Sidebar, EmptyState,
+  PageTitle) partagées par le dashboard.
+- `@varde/dashboard` — app Next.js 16 / React 19 / Auth.js v5 :
+  liste des serveurs, page guild, formulaire de config
+  (`ConfigForm`) dérivé de `configUi` + validation Ajv client
+  (ADR 0005), page de journal d'audit.
 - `@varde/testing` — `createTestHarness` pour les tests d'intégration
   de modules (SQLite in-memory, faux temps injectable).
 - `modules/hello-world` — module témoin de l'API.
 
-Reste à livrer avant V1.0.0 : dashboard + API (jalon 2), onboarding
-adaptatif (jalon 3), modules officiels moderation/welcome/roles/logs
-(jalons suivants). Pas encore de release tagguée.
+Reste à livrer avant V1.0.0 : onboarding adaptatif (jalon 3), modules
+officiels moderation/welcome/roles/logs (jalons suivants). Pas encore
+de release tagguée.
 
 ## Pourquoi un bot de plus
 
@@ -100,8 +120,11 @@ pnpm build
 ```
 
 La configuration applicative par serveur est stockée en base (pas de
-fichier de config par serveur) et sera pilotée depuis le dashboard
-(jalon 2).
+fichier de config par serveur) et se pilote depuis le dashboard web
+(`apps/dashboard`), qui lit et écrit via l'API Fastify
+(`apps/api`). Un module expose un `configSchema` (Zod) pour la
+validation et un `configUi` (sidecar, ADR 0005) pour le rendu du
+formulaire côté admin.
 
 ## Contribuer
 

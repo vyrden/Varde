@@ -1,5 +1,34 @@
-import { pino } from 'pino';
-
-const logger = pino({ name: 'varde-api' });
-
-logger.info('not implemented');
+export {
+  type CreateDiscordClientOptions,
+  createDiscordClient,
+  type DiscordClient,
+  type DiscordGuild,
+  type FetchLike,
+  hasManageGuild,
+  PERMISSION_MANAGE_GUILD,
+} from './discord-client.js';
+export {
+  type CreateJwtAuthenticatorOptions,
+  createJwtAuthenticator,
+} from './jwt-authenticator.js';
+export { requireGuildAdmin } from './middleware/require-guild-admin.js';
+export {
+  type AuditPageDto,
+  type RegisterAuditRoutesOptions,
+  registerAuditRoutes,
+} from './routes/audit.js';
+export {
+  type AdminGuildDto,
+  type RegisterGuildsRoutesOptions,
+  registerGuildsRoutes,
+} from './routes/guilds.js';
+export {
+  type RegisterModulesRoutesOptions,
+  registerModulesRoutes,
+} from './routes/modules.js';
+export {
+  type Authenticator,
+  type CreateApiServerOptions,
+  createApiServer,
+  type SessionData,
+} from './server.js';

@@ -7,6 +7,78 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Jalon 2 — dashboard minimum viable (2026-04-21)
+
+Clos. Critère de sortie ROADMAP vérifié : un admin logué via Discord
+OAuth2 peut modifier un paramètre d'un module (`hello-world` →
+`welcomeDelayMs`) depuis le dashboard et voir la valeur persistée
+dans `guild_config`, propagée via `config.changed` in-process
+(ADR 0004). Pipeline CI vert, 367 tests monorepo.
+
+Surface livrée :
+
+- `@varde/ui` (nouveau) : design system Tailwind 4 CSS-first,
+  primitives packagées consommables par `apps/dashboard` et à
+  terme par modules tiers. Button, Input, Label, Card (+ Header /
+  Title / Description / Content / Footer), Badge (variants
+  default/secondary/outline/success/warning/destructive), Header,
+  Sidebar, EmptyState, PageTitle, helper `cn`.
+- `packages/contracts` : nouveau `ConfigUi` / `ConfigFieldSpec`
+  sidecar du `ModuleDefinition` (ADR 0005). Widgets V1 : text,
+  textarea, number, toggle, select. Meta-validator de
+  `defineModule()` qui vérifie la cohérence path ↔ `configSchema`
+  pour les Zod `object` imbriqués.
+- `apps/server` (nouveau) : point d'entrée qui compose
+  `@varde/core` + `@varde/api` Fastify + client discord.js en un
+  seul process, partage l'EventBus in-process (ADR 0004). Shutdown
+  coordinator unique.
+- `@varde/api` (nouveau) : serveur Fastify avec authenticator JWT
+  (`jose`, HS256, cookie `varde.session` partagé avec Auth.js,
+  ADR 0006), middleware `requireGuildAdmin` (check `MANAGE_GUILD`
+  via Discord `/users/@me/guilds`, cache TTL court). Routes :
+  `GET /health`, `GET /me`, `GET /guilds`,
+  `GET /guilds/:id/modules`, `GET|PUT /guilds/:id/modules/:moduleId/config`,
+  `GET /guilds/:id/audit` (filtres `action` / `actorType` /
+  `severity` / `since` / `until`, pagination cursor via ULID,
+  `limit` borné [1, 100]). Tests : 52 (unitaires + intégration).
+- `modules/hello-world` : expose son `configUi` sur
+  `welcomeDelayMs` (widget `number`, bornes 0–60000 héritées du
+  `configSchema`) pour la démonstration critique du jalon.
+- `apps/dashboard` (nouveau app complet) : Next.js 16 + React 19 +
+  Auth.js v5.
+  - Auth.js configuré en stratégie JWT avec `encode` / `decode`
+    sur-chargés via `jose`, cookie `varde.session`, scopes Discord
+    `identify` + `guilds` (ADR 0006).
+  - Server actions + forward cookie via `next/headers` — le
+    navigateur ne parle jamais directement à l'API (pas de CORS).
+  - Page `/` : liste des serveurs admin (intersection
+    `user admin` ∩ `bot présent`).
+  - Page `/guilds/[guildId]` : liste des modules avec badge
+    enabled/disabled et lien vers la config.
+  - Page `/guilds/[guildId]/modules/[moduleId]` : `ConfigForm`
+    générique qui walk `configUi.fields` triés par `order`,
+    supporte les paths pointés (config imbriquée), pré-valide
+    côté client contre le JSON Schema via Ajv 8.18.0
+    (`configSchema` retourné par l'API via `z.toJSONSchema()`),
+    mappe les issues par champ en cas d'échec serveur (400
+    `invalid_config`).
+  - Page `/guilds/[guildId]/audit` : journal avec filtres
+    (action, actorType, severity, fenêtre temporelle), URL
+    reflète l'état (bookmarkable), pagination « Charger la
+    suite » via cursor préservant les filtres actifs.
+  - 26 tests (DashboardHeader, ServerList, ModuleList,
+    ConfigForm × 8, AuditTable × 4, AuditFilters × 3).
+- ADR ajoutés : 0004 (monolithe bot + API dans un seul process),
+  0005 (`configUi` en sidecar de `ModuleDefinition`), 0006 (session
+  partagée dashboard ↔ API via cookie JWT HS256).
+- Hygiène de dépendances :
+  - Override `pnpm.esbuild@<0.25.0 → >=0.25.0` pour fermer
+    GHSA-67mh-4wv8-2f99 tiré transitivement par
+    `@esbuild-kit/core-utils`.
+  - Workflows CI (`ci.yml`, `secrets-scan.yml`) durcis avec
+    `permissions: contents: read` au niveau workflow
+    (CWE-275 CodeQL).
+
 ### Jalon 1 — core minimum viable (2026-04-21)
 
 Clos. Critère de sortie ROADMAP vérifié dans les tests

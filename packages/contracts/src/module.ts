@@ -1,4 +1,4 @@
-import type { ZodType } from 'zod';
+import { type ZodObject, type ZodType, z } from 'zod';
 
 import type { ModuleContext, ModuleQuery, UIMessage } from './context.js';
 import type { ChannelId, GuildId, PermissionId, UserId } from './ids.js';
@@ -72,6 +72,75 @@ export interface ModuleCommand {
 /** Registre de commandes déclarées par un module, clé = nom de commande. */
 export type ModuleCommandMap = Readonly<Record<string, ModuleCommand>>;
 
+/**
+ * Widget de rendu d'un champ de config côté dashboard. V1 reste volontairement
+ * restreint aux types Discord-compatibles directement éditables. Les
+ * widgets plus riches (channel picker, role picker, user picker, code
+ * editor, file upload) seront ajoutés post-V1 avec un catalogue étendu.
+ */
+export type ConfigFieldWidget = 'text' | 'textarea' | 'number' | 'toggle' | 'select';
+
+/** Option d'un widget `select`. */
+export interface ConfigFieldOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/**
+ * Spécification de rendu d'un champ de config. Le dashboard
+ * introspecte `configUi.fields` pour générer un formulaire ;
+ * la validation reste portée par `configSchema` (Zod).
+ *
+ * `path` est une notation à points dans l'objet config (par exemple
+ * `welcomeDelayMs` ou `moderation.thresholds.spam`). Le
+ * meta-validator `defineModule()` vérifie que chaque path pointe bien
+ * sur une clé du `configSchema` (uniquement pour les Zod `object`
+ * imbriqués — les schémas union ou tuple restent best-effort V1).
+ */
+export interface ConfigFieldSpec {
+  readonly path: string;
+  readonly label: string;
+  readonly widget: ConfigFieldWidget;
+  readonly description?: string;
+  readonly placeholder?: string;
+  readonly options?: readonly ConfigFieldOption[];
+  readonly group?: string;
+  readonly order?: number;
+}
+
+/**
+ * Métadonnées UI de la config d'un module : le dashboard consomme
+ * `fields` pour rendre le formulaire, `configSchema` pour valider les
+ * valeurs envoyées. Les deux se compensent : un champ peut changer de
+ * widget sans impact sur la validation, et un champ schema sans
+ * équivalent `configUi` n'est simplement pas rendu (pour garder des
+ * champs internes invisibles côté admin).
+ */
+export interface ConfigUi {
+  readonly fields: readonly ConfigFieldSpec[];
+}
+
+const configFieldOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+});
+
+const configFieldSpecSchema = z.object({
+  path: z.string().min(1),
+  label: z.string().min(1),
+  widget: z.enum(['text', 'textarea', 'number', 'toggle', 'select']),
+  description: z.string().optional(),
+  placeholder: z.string().optional(),
+  options: z.array(configFieldOptionSchema).optional(),
+  group: z.string().optional(),
+  order: z.number().int().optional(),
+});
+
+/** Schéma Zod du `ConfigUi`, utilisé par `defineModule()`. */
+export const configUiSchema = z.object({
+  fields: z.array(configFieldSpecSchema),
+});
+
 /** Définition complète d'un module, retournée par `defineModule()`. */
 export interface ModuleDefinition {
   readonly manifest: ManifestStatic;
@@ -83,24 +152,55 @@ export interface ModuleDefinition {
   readonly commands?: ModuleCommandMap;
   readonly configSchema?: ZodType<unknown>;
   readonly configDefaults?: Readonly<Record<string, unknown>>;
+  readonly configUi?: ConfigUi;
 }
+
+/**
+ * Descend dans un ZodObject via un chemin en notation pointée. Pour
+ * V1 on ne descend qu'à travers les `ZodObject` ; une union ou un
+ * tuple sur le chemin stoppe la descente (retourne `null` — considéré
+ * best-effort, pas d'erreur).
+ */
+const getZodAtPath = (schema: ZodType<unknown>, path: string): ZodType<unknown> | null => {
+  const parts = path.split('.');
+  let current: ZodType<unknown> = schema;
+  for (const part of parts) {
+    const asObject = current as ZodObject<Record<string, ZodType<unknown>>> | ZodType<unknown>;
+    if (!('shape' in asObject) || typeof asObject.shape !== 'object' || asObject.shape === null) {
+      return null;
+    }
+    const shape = asObject.shape as Record<string, ZodType<unknown>>;
+    const next = shape[part];
+    if (!next) {
+      return null;
+    }
+    current = next;
+  }
+  return current;
+};
 
 /**
  * Valide et gèle la définition d'un module. À appeler dans
  * `index.ts` du module : le résultat sera consommé par le plugin
- * loader. `defineModule` applique trois garde-fous :
+ * loader. `defineModule` applique quatre garde-fous :
  *
  * 1. Le manifeste statique doit parser sous `manifestStaticSchema`.
  * 2. Chaque événement listé dans `manifest.events.emit` doit être
  *    préfixé par l'id du module (règle structurante).
- * 3. L'objet retourné est `Object.freeze()` pour protéger contre les
+ * 3. Si `configUi` est fourni, il doit parser sous `configUiSchema`.
+ *    Si `configSchema` est également fourni, chaque `path` de
+ *    `configUi.fields` doit exister dans `configSchema` (parcours
+ *    best-effort à travers les `ZodObject` imbriqués). Un path
+ *    absent jette avec le nom du module et le path fautif.
+ * 4. L'objet retourné est `Object.freeze()` pour protéger contre les
  *    mutations accidentelles post-chargement.
  *
  * Le type de retour est préservé (generic) pour que l'inférence des
  * queries et du schéma de config remonte jusqu'aux consommateurs.
  *
- * @throws ZodError si le manifeste n'est pas conforme au meta-schema.
- * @throws Error si un événement émis ne respecte pas le préfixe.
+ * @throws ZodError si le manifeste ou `configUi` ne parse pas.
+ * @throws Error si un événement émis ne respecte pas le préfixe, ou
+ *   si `configUi.fields[n].path` ne résout pas dans `configSchema`.
  */
 export function defineModule<T extends ModuleDefinition>(definition: T): T {
   manifestStaticSchema.parse(definition.manifest);
@@ -109,6 +209,19 @@ export function defineModule<T extends ModuleDefinition>(definition: T): T {
     throw new Error(
       `defineModule : émissions en dehors du préfixe du module (${definition.manifest.id}) : ${emitCheck.offenders.join(', ')}`,
     );
+  }
+  if (definition.configUi) {
+    configUiSchema.parse(definition.configUi);
+    if (definition.configSchema) {
+      for (const field of definition.configUi.fields) {
+        const resolved = getZodAtPath(definition.configSchema, field.path);
+        if (resolved === null) {
+          throw new Error(
+            `defineModule : configUi.fields path "${field.path}" ne correspond à aucune clé de configSchema pour le module "${definition.manifest.id}"`,
+          );
+        }
+      }
+    }
   }
   return Object.freeze(definition) as T;
 }

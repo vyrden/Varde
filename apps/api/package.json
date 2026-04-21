@@ -2,23 +2,42 @@
   "name": "@varde/api",
   "private": true,
   "version": "0.0.0",
-  "description": "API HTTP consommée par le dashboard.",
+  "description": "API HTTP Fastify consommée par le dashboard.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "echo 'no tests yet' && exit 0"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
-    "pino": "10.3.1"
+    "@fastify/cookie": "11.0.2",
+    "@fastify/cors": "11.2.0",
+    "@varde/contracts": "workspace:*",
+    "@varde/core": "workspace:*",
+    "@varde/db": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.8.5",
+    "jose": "6.2.2",
+    "pino": "10.3.1",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
     "@varde/config": "workspace:*",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
   }
 }

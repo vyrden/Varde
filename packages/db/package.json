@@ -15,8 +15,8 @@
     "test:integration": "vitest run tests/integration",
     "db:generate:pg": "drizzle-kit generate --config=drizzle.pg.config.ts",
     "db:generate:sqlite": "drizzle-kit generate --config=drizzle.sqlite.config.ts",
-    "db:migrate:pg": "tsx scripts/migrate.ts pg",
-    "db:migrate:sqlite": "tsx scripts/migrate.ts sqlite"
+    "db:migrate:pg": "tsx --env-file-if-exists=../../.env.local scripts/migrate.ts pg",
+    "db:migrate:sqlite": "tsx --env-file-if-exists=../../.env.local scripts/migrate.ts sqlite"
   },
   "dependencies": {
     "@varde/contracts": "workspace:*",

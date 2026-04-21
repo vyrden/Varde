@@ -52,6 +52,12 @@ export interface AuditQueryOptions {
   readonly since?: Date | Iso8601DateTime;
   readonly until?: Date | Iso8601DateTime;
   readonly limit?: number;
+  /**
+   * Pagination : renvoie uniquement les lignes strictement antérieures
+   * à l'ULID fourni (plus anciennes). Exploite l'ordre monotone des
+   * ULID, naturellement aligné avec l'ordre `createdAt desc` du query.
+   */
+  readonly cursor?: Ulid;
 }
 
 /** Options de purge par rétention. */
@@ -176,13 +182,14 @@ const selectRows = async <D extends DbDriver>(
       filters.severity ? eq(auditLog.severity, filters.severity) : undefined,
       sinceIso ? gte(auditLog.createdAt, new Date(sinceIso)) : undefined,
       untilIso ? lt(auditLog.createdAt, new Date(untilIso)) : undefined,
+      filters.cursor ? lt(auditLog.id, filters.cursor) : undefined,
     ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
     const rows = await pg.db
       .select()
       .from(auditLog)
       .where(clauses.length > 0 ? and(...clauses) : undefined)
-      .orderBy(desc(auditLog.createdAt))
+      .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
       .limit(limit);
 
     return rows.map((r) => ({
@@ -209,13 +216,14 @@ const selectRows = async <D extends DbDriver>(
     filters.severity ? eq(auditLog.severity, filters.severity) : undefined,
     sinceIso ? gte(auditLog.createdAt, sinceIso) : undefined,
     untilIso ? lt(auditLog.createdAt, untilIso) : undefined,
+    filters.cursor ? lt(auditLog.id, filters.cursor) : undefined,
   ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
   const rows = sqlite.db
     .select()
     .from(auditLog)
     .where(clauses.length > 0 ? and(...clauses) : undefined)
-    .orderBy(desc(auditLog.createdAt))
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
     .limit(limit)
     .all();
 

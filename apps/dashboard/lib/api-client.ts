@@ -1,0 +1,150 @@
+import type { ConfigUi } from '@varde/contracts';
+import { cookies } from 'next/headers';
+
+/**
+ * Client léger vers `@varde/api` côté server components. L'URL de
+ * base vient de `VARDE_API_URL` (défaut `http://localhost:4000` en
+ * dev monolith). Le cookie de session `varde.session` est forwardé
+ * depuis les headers de la requête entrante — l'API l'interprète via
+ * `createJwtAuthenticator` avec le même secret HS256 (ADR 0006).
+ *
+ * Les fonctions qui lisent des données sont des server components
+ * helpers (utilisent `cookies()` de `next/headers`). `saveModuleConfig`
+ * est déclarée ici mais appelée côté client via un server action ou
+ * une route handler — en V1 on utilise `fetch` direct depuis un
+ * composant client, ce qui nécessite que le cookie soit déjà transmis
+ * par le navigateur. Voir [`ConfigForm`](../components/ConfigForm.tsx).
+ */
+
+const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
+const SESSION_COOKIE = 'varde.session';
+
+export interface AdminGuildDto {
+  readonly id: string;
+  readonly name: string;
+  readonly iconUrl: string | null;
+}
+
+export interface ModuleListItemDto {
+  readonly id: string;
+  readonly version: string;
+  readonly name: string;
+  readonly description: string;
+  readonly enabled: boolean;
+}
+
+export interface ModuleConfigDto {
+  readonly config: Readonly<Record<string, unknown>>;
+  readonly configUi: ConfigUi | null;
+  readonly configSchema: unknown;
+}
+
+export type AuditActorType = 'user' | 'system' | 'module';
+export type AuditSeverity = 'info' | 'warn' | 'error';
+
+export interface AuditLogItemDto {
+  readonly id: string;
+  readonly guildId: string;
+  readonly actorType: AuditActorType;
+  readonly actorId: string | null;
+  readonly action: string;
+  readonly targetType: string | null;
+  readonly targetId: string | null;
+  readonly moduleId: string | null;
+  readonly severity: AuditSeverity;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly createdAt: string;
+}
+
+export interface AuditPageDto {
+  readonly items: readonly AuditLogItemDto[];
+  readonly nextCursor?: string;
+}
+
+export interface AuditFilters {
+  readonly action?: string;
+  readonly actorType?: AuditActorType;
+  readonly severity?: AuditSeverity;
+  readonly since?: string;
+  readonly until?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+}
+
+export interface ZodIssueLite {
+  readonly path: ReadonlyArray<string | number>;
+  readonly message: string;
+}
+
+const buildCookieHeader = async (): Promise<string> => {
+  const cookieStore = await cookies();
+  const session = cookieStore.get(SESSION_COOKIE);
+  return session ? `${SESSION_COOKIE}=${session.value}` : '';
+};
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+  }
+}
+
+async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
+    headers: {
+      accept: 'application/json',
+      cookie: await buildCookieHeader(),
+    },
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, `API ${path} a répondu ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+/** Liste des guilds administrables par l'utilisateur logué. */
+export async function fetchAdminGuilds(): Promise<readonly AdminGuildDto[]> {
+  return apiGet<readonly AdminGuildDto[]>('/guilds');
+}
+
+/** Liste des modules chargés côté core pour une guild (enabled/disabled). */
+export async function fetchModules(guildId: string): Promise<readonly ModuleListItemDto[]> {
+  return apiGet<readonly ModuleListItemDto[]>(`/guilds/${encodeURIComponent(guildId)}/modules`);
+}
+
+/**
+ * Une page d'audit log pour une guild. Les filtres sont tous optionnels ;
+ * `cursor` (ULID de la dernière ligne vue) permet de charger la page
+ * suivante. L'API borne `limit` à [1, 100] (défaut 50).
+ */
+export async function fetchAudit(
+  guildId: string,
+  filters: AuditFilters = {},
+): Promise<AuditPageDto> {
+  const params = new URLSearchParams();
+  if (filters.action) params.set('action', filters.action);
+  if (filters.actorType) params.set('actorType', filters.actorType);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.since) params.set('since', filters.since);
+  if (filters.until) params.set('until', filters.until);
+  if (filters.cursor) params.set('cursor', filters.cursor);
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+  const query = params.toString();
+  const suffix = query.length > 0 ? `?${query}` : '';
+  return apiGet<AuditPageDto>(`/guilds/${encodeURIComponent(guildId)}/audit${suffix}`);
+}
+
+/** Config actuelle d'un module + métadonnées de rendu (`configUi`). */
+export async function fetchModuleConfig(
+  guildId: string,
+  moduleId: string,
+): Promise<ModuleConfigDto> {
+  return apiGet<ModuleConfigDto>(
+    `/guilds/${encodeURIComponent(guildId)}/modules/${encodeURIComponent(moduleId)}/config`,
+  );
+}
