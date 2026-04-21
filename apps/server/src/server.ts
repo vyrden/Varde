@@ -12,7 +12,7 @@ import {
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { EventBus, Logger } from '@varde/contracts';
+import type { ActionId, EventBus, Logger } from '@varde/contracts';
 import {
   type CoreAuditService,
   type CoreConfigService,
@@ -119,7 +119,16 @@ export async function createServer<D extends DbDriver>(
   }
 
   const eventBus = createEventBus({ logger });
-  const config = createConfigService({ client });
+  // Chaîne ConfigService → EventBus. À partir de là toute écriture
+  // `setWith` déclenche `config.changed` sur le bus in-process — les
+  // abonnés (audit ci-dessous, modules, etc.) réagissent sans que la
+  // route d écriture ait à s en préoccuper.
+  const config = createConfigService({
+    client,
+    onChanged: async (event) => {
+      await eventBus.emit(event);
+    },
+  });
   const permissions = createPermissionService({
     client,
     resolveMemberContext: async () => null,
@@ -169,8 +178,30 @@ export async function createServer<D extends DbDriver>(
 
   const audit = createAuditService({ client });
 
+  // Subscriber global : toute `config.changed` émise sur le bus
+  // devient une entrée `core.config.updated` dans l audit log. On
+  // évite ainsi l audit inline par route (dette PR 2.10) et on
+  // capture automatiquement les futures écritures config, y compris
+  // celles initiées par un module ou l onboarding (jalon 3).
+  eventBus.on('config.changed', async (event) => {
+    await audit.log({
+      guildId: event.guildId,
+      action: 'core.config.updated' as ActionId,
+      actor:
+        event.updatedBy !== null && event.updatedBy !== undefined
+          ? { type: 'user', id: event.updatedBy }
+          : { type: 'system' },
+      severity: 'info',
+      metadata: {
+        scope: event.scope,
+        versionBefore: event.versionBefore,
+        versionAfter: event.versionAfter,
+      },
+    });
+  });
+
   registerGuildsRoutes(api, { client, discord });
-  registerModulesRoutes(api, { loader, config, audit, discord });
+  registerModulesRoutes(api, { loader, config, discord });
   registerAuditRoutes(api, { audit, discord });
 
   const start = async (): Promise<{ readonly address: string }> => {

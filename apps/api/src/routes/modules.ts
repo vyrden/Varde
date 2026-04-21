@@ -1,5 +1,5 @@
-import type { ActionId, GuildId, ModuleId, UserId } from '@varde/contracts';
-import type { CoreAuditService, CoreConfigService, PluginLoader } from '@varde/core';
+import type { GuildId, ModuleId, UserId } from '@varde/contracts';
+import type { CoreConfigService, PluginLoader } from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { type ZodType, z } from 'zod';
 
@@ -25,10 +25,11 @@ import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
  *   contre le `configSchema` du module, puis persiste via
  *   `ConfigService.setWith` avec scope `modules.<moduleId>` et
  *   `updatedBy: session.userId`. L'événement `config.changed` est
- *   émis automatiquement par le ConfigService — les modules abonnés
- *   (hello-world) voient la nouvelle valeur au prochain accès, sans
- *   redémarrage (ADR 0004 : bot et API partagent la même EventBus
- *   in-process).
+ *   émis par le ConfigService ; un subscriber global au niveau de
+ *   `apps/server` écrit l'entrée `core.config.updated` dans l'audit
+ *   log. La route elle-même n'écrit plus d'audit — source unique de
+ *   vérité, capture automatiquement tout `setWith` futur (onboarding
+ *   jalon 3, modules, etc.).
  *
  * Toutes les routes nécessitent MANAGE_GUILD via
  * `requireGuildAdmin` (401 anonyme, 400 sans access_token, 403 sans
@@ -52,11 +53,8 @@ interface ModuleConfigDto {
 export interface RegisterModulesRoutesOptions {
   readonly loader: PluginLoader;
   readonly config: CoreConfigService;
-  readonly audit: CoreAuditService;
   readonly discord: DiscordClient;
 }
-
-const CONFIG_UPDATED_ACTION = 'core.config.updated' as ActionId;
 
 const extractModuleConfig = (
   snapshot: unknown,
@@ -167,22 +165,6 @@ export function registerModulesRoutes(
       { modules: { [moduleId]: validated } },
       { scope: `modules.${moduleId}`, updatedBy: session.userId as UserId },
     );
-
-    // Trace de l'édition dans l'audit log. Le ConfigService émet
-    // `config.changed` sur l'EventBus mais personne ne l'écoute pour
-    // écrire l'audit en V1 (brancher un subscriber global est prévu
-    // post-jalon 2). En attendant, on écrit ici pour que la page
-    // audit dashboard soit utile dès la clôture du jalon 2.
-    await options.audit.log({
-      guildId: guildId as GuildId,
-      action: CONFIG_UPDATED_ACTION,
-      actor: { type: 'user', id: session.userId as UserId },
-      severity: 'info',
-      metadata: {
-        scope: `modules.${moduleId}`,
-        moduleId,
-      },
-    });
 
     void reply.status(204).send();
   });
