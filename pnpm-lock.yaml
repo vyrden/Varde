@@ -194,6 +194,9 @@ importers:
       '@varde/module-hello-world':
         specifier: workspace:*
         version: link:../../modules/hello-world
+      '@varde/presets':
+        specifier: workspace:*
+        version: link:../../packages/presets
       discord.js:
         specifier: 14.26.3
         version: 14.26.3

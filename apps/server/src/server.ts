@@ -6,14 +6,17 @@ import {
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  type OnboardingActionContextFactory,
   registerAuditRoutes,
   registerGuildsRoutes,
   registerModulesRoutes,
+  registerOnboardingRoutes,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { ActionId, EventBus, Logger } from '@varde/contracts';
+import type { ActionId, EventBus, Logger, UserId } from '@varde/contracts';
 import {
+  CORE_ACTIONS,
   type CoreAuditService,
   type CoreConfigService,
   type CorePermissionService,
@@ -23,11 +26,14 @@ import {
   createCtxFactory,
   createEventBus,
   createLogger,
+  createOnboardingExecutor,
   createPermissionService,
   createPluginLoader,
+  type OnboardingExecutor,
   type PluginLoader,
 } from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient, type DbDriver } from '@varde/db';
+import { PRESET_CATALOG } from '@varde/presets';
 
 type ApiServer = Awaited<ReturnType<typeof createApiServer>>;
 
@@ -94,6 +100,7 @@ export interface ServerHandle<D extends DbDriver> {
   readonly config: CoreConfigService;
   readonly audit: CoreAuditService;
   readonly permissions: CorePermissionService;
+  readonly onboardingExecutor: OnboardingExecutor;
   readonly eventBus: EventBus;
   readonly client: DbClient<D>;
   readonly ctxBundle: CtxBundle;
@@ -200,9 +207,75 @@ export async function createServer<D extends DbDriver>(
     });
   });
 
+  // Onboarding (jalon 3) : executor + routes builder. Le
+  // `actionContextFactory` en V1 est un bridge "demo" qui simule
+  // Discord — il génère des snowflakes faux et log les opérations.
+  // Permet de tester le flow UI bout en bout avant que le bridge
+  // discord.js réel soit posé (PR 3.13). Tant qu'on ne touche pas
+  // Discord, rollback et apply sont totalement safe en prod.
+  const onboardingExecutor = createOnboardingExecutor({ client, logger });
+  for (const action of CORE_ACTIONS) {
+    onboardingExecutor.registerAction(
+      action as Parameters<typeof onboardingExecutor.registerAction>[0],
+    );
+  }
+
+  const demoActionContextFactory: OnboardingActionContextFactory = ({ guildId, actorId }) => {
+    let counter = 0;
+    const nextId = (): string => {
+      counter += 1;
+      return `demo-${Date.now()}-${counter}`;
+    };
+    const demoLogger = logger.child({ component: 'onboarding.demo', guildId, actorId });
+    return {
+      guildId,
+      actorId,
+      logger: demoLogger,
+      discord: {
+        createRole: async (payload) => {
+          const id = nextId();
+          demoLogger.info('demo createRole', { id, name: payload.name });
+          return { id };
+        },
+        deleteRole: async (roleId) => {
+          demoLogger.info('demo deleteRole', { roleId });
+        },
+        createCategory: async (payload) => {
+          const id = nextId();
+          demoLogger.info('demo createCategory', { id, name: payload.name });
+          return { id };
+        },
+        deleteCategory: async (channelId) => {
+          demoLogger.info('demo deleteCategory', { channelId });
+        },
+        createChannel: async (payload) => {
+          const id = nextId();
+          demoLogger.info('demo createChannel', { id, name: payload.name, type: payload.type });
+          return { id };
+        },
+        deleteChannel: async (channelId) => {
+          demoLogger.info('demo deleteChannel', { channelId });
+        },
+      },
+      configPatch: async (patch) => {
+        await config.setWith(guildId, patch, {
+          scope: 'onboarding',
+          updatedBy: actorId as UserId,
+        });
+      },
+    };
+  };
+
   registerGuildsRoutes(api, { client, discord });
   registerModulesRoutes(api, { loader, config, discord });
   registerAuditRoutes(api, { audit, discord });
+  registerOnboardingRoutes(api, {
+    client,
+    discord,
+    executor: onboardingExecutor,
+    actionContextFactory: demoActionContextFactory,
+    presetCatalog: PRESET_CATALOG,
+  });
 
   const start = async (): Promise<{ readonly address: string }> => {
     const address = await api.listen({
@@ -227,6 +300,7 @@ export async function createServer<D extends DbDriver>(
     config,
     audit,
     permissions,
+    onboardingExecutor,
     eventBus,
     client,
     ctxBundle,

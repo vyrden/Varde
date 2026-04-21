@@ -21,6 +21,7 @@
     "@varde/core": "workspace:*",
     "@varde/db": "workspace:*",
     "@varde/module-hello-world": "workspace:*",
+    "@varde/presets": "workspace:*",
     "discord.js": "14.26.3"
   },
   "devDependencies": {
