@@ -56,6 +56,8 @@ export interface CreateCtxFactoryOptions<D extends DbDriver> {
   readonly defaultLocale?: string;
   readonly locales?: Readonly<Record<string, I18nMessages>>;
   readonly schedulerTickMs?: number;
+  /** Horloge injectable partagée par tous les schedulers instanciés (tests). */
+  readonly schedulerNow?: () => Date;
 }
 
 export interface CtxBundle {
@@ -96,6 +98,7 @@ export function createCtxFactory<D extends DbDriver>(
     defaultLocale = 'en',
     locales = {},
     schedulerTickMs,
+    schedulerNow,
   } = options;
 
   const ui = createUIService();
@@ -121,6 +124,7 @@ export function createCtxFactory<D extends DbDriver>(
       moduleId,
       logger: loggerFor(moduleId),
       ...(schedulerTickMs !== undefined ? { tickIntervalMs: schedulerTickMs } : {}),
+      ...(schedulerNow ? { now: schedulerNow } : {}),
     });
     schedulers.set(moduleId, instance);
     return instance;
