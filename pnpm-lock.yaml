@@ -185,6 +185,9 @@ importers:
       '@varde/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@varde/module-hello-world':
+        specifier: workspace:*
+        version: link:../../modules/hello-world
     devDependencies:
       '@types/node':
         specifier: 24.12.2

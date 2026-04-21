@@ -9,7 +9,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node --env-file=../../.env.local dist/bin.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run"
@@ -19,7 +19,8 @@
     "@varde/bot": "workspace:*",
     "@varde/contracts": "workspace:*",
     "@varde/core": "workspace:*",
-    "@varde/db": "workspace:*"
+    "@varde/db": "workspace:*",
+    "@varde/module-hello-world": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
