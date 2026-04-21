@@ -7,6 +7,7 @@ import {
   createJwtAuthenticator,
   type DiscordClient,
   registerGuildsRoutes,
+  registerModulesRoutes,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
@@ -163,6 +164,7 @@ export async function createServer<D extends DbDriver>(
   });
 
   registerGuildsRoutes(api, { client, discord });
+  registerModulesRoutes(api, { loader, config, discord });
 
   const start = async (): Promise<{ readonly address: string }> => {
     const address = await api.listen({

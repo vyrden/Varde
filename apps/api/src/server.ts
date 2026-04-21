@@ -93,6 +93,7 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
       statusCode?: number;
       httpStatus?: number;
       code?: string;
+      details?: unknown;
     };
     // Les AppError de @varde/contracts portent `httpStatus`. Fastify
     // et les HTTP errors classiques posent `statusCode`. On regarde
@@ -108,10 +109,14 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
       error: err.message,
       statusCode,
     });
-    void reply.status(statusCode).send({
+    const body: { error: string; message: string; details?: unknown } = {
       error: err.code ?? err.name ?? 'internal_error',
       message: err.message,
-    });
+    };
+    if (err.details !== undefined) {
+      body.details = err.details;
+    }
+    void reply.status(statusCode).send(body);
   });
 
   if (exposeHealth) {

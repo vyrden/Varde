@@ -11,11 +11,16 @@ export {
   type CreateJwtAuthenticatorOptions,
   createJwtAuthenticator,
 } from './jwt-authenticator.js';
+export { requireGuildAdmin } from './middleware/require-guild-admin.js';
 export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,
 } from './routes/guilds.js';
+export {
+  type RegisterModulesRoutesOptions,
+  registerModulesRoutes,
+} from './routes/modules.js';
 export {
   type Authenticator,
   type CreateApiServerOptions,
