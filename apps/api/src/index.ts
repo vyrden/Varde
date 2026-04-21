@@ -13,6 +13,11 @@ export {
 } from './jwt-authenticator.js';
 export { requireGuildAdmin } from './middleware/require-guild-admin.js';
 export {
+  type AuditPageDto,
+  type RegisterAuditRoutesOptions,
+  registerAuditRoutes,
+} from './routes/audit.js';
+export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,

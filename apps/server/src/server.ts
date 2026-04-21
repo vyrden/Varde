@@ -6,6 +6,7 @@ import {
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  registerAuditRoutes,
   registerGuildsRoutes,
   registerModulesRoutes,
 } from '@varde/api';
@@ -13,9 +14,11 @@ import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
 import type { EventBus, Logger } from '@varde/contracts';
 import {
+  type CoreAuditService,
   type CoreConfigService,
   type CorePermissionService,
   type CtxBundle,
+  createAuditService,
   createConfigService,
   createCtxFactory,
   createEventBus,
@@ -89,6 +92,7 @@ export interface ServerHandle<D extends DbDriver> {
   readonly loader: PluginLoader;
   readonly commandRegistry: CommandRegistry;
   readonly config: CoreConfigService;
+  readonly audit: CoreAuditService;
   readonly permissions: CorePermissionService;
   readonly eventBus: EventBus;
   readonly client: DbClient<D>;
@@ -163,8 +167,11 @@ export async function createServer<D extends DbDriver>(
     ...(options.api.corsOrigin !== undefined ? { corsOrigin: options.api.corsOrigin } : {}),
   });
 
+  const audit = createAuditService({ client });
+
   registerGuildsRoutes(api, { client, discord });
   registerModulesRoutes(api, { loader, config, discord });
+  registerAuditRoutes(api, { audit, discord });
 
   const start = async (): Promise<{ readonly address: string }> => {
     const address = await api.listen({
@@ -187,6 +194,7 @@ export async function createServer<D extends DbDriver>(
     loader,
     commandRegistry,
     config,
+    audit,
     permissions,
     eventBus,
     client,
