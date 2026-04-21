@@ -130,7 +130,7 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
     indépendant de discord.js.
   - `attachDiscordClient(client, dispatcher, logger)` : wiring concret
     d'un Client discord.js vers le dispatcher pour les 14 événements
-    + `interactionCreate`, avec `detach()` pour retirer proprement
+    et `interactionCreate`, avec `detach()` pour retirer proprement
     les listeners au shutdown.
   - `createShutdownCoordinator({ logger })` + `bindSignals(coordinator)` :
     étapes LIFO idempotentes, continuation sur exception.
@@ -139,6 +139,24 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
     4 dispatcher, 3 shutdown). `attachDiscordClient` non testé en
     CI — nécessite Client discord.js réel, couverture manuelle
     prévue au PR 1.7 / jalon 1 closure.
+- `@varde/contracts` : signature `ModuleCommandHandler = (input, ctx)`.
+  Le handler reçoit désormais le `ctx` scopé au module pour utiliser
+  `ctx.ui`, `ctx.i18n`, `ctx.audit`, etc. directement. `CommandRegistry`
+  indexe un `ModuleRef` (id + version) ; `routeCommandInteraction`
+  prend un `ctxFactory` et construit le ctx à chaque interaction.
+- `@varde/testing` (nouveau paquet) : `createTestHarness({ guilds?,
+  startTime?, locales?, ... })` monte un core + bot en mémoire
+  (SQLite `:memory:`) pour les tests d'intégration de modules.
+  Expose `loadModule`, `enable`/`disable`, `emitDiscord`/`emitCore`,
+  `runCommand`, `advanceTime`/`runScheduled`, `setMemberContext`,
+  `getCtx`/`getScheduler`, `close`. Le faux temps est partagé par
+  tous les schedulers via `schedulerNow` sur `createCtxFactory`.
+- `@varde/module-hello-world` (nouveau module témoin) : manifeste
+  statique, `/ping` (permission `hello-world.ping`), abonnement à
+  `guild.memberJoin` qui écrit un audit + planifie une tâche
+  welcome + écrit un second audit à l'exécution. Locales fr/en,
+  cleanup des souscriptions EventBus via `onUnload`. Critère de
+  sortie du jalon 1 satisfait dans les tests (7 e2e + 9 unitaires).
 
 ### Jalon 0 — fondations (2026-04-20)
 
