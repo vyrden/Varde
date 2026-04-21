@@ -7,7 +7,16 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-### Jalon 1 — core minimum viable (en cours)
+### Jalon 1 — core minimum viable (2026-04-21)
+
+Clos. Critère de sortie ROADMAP vérifié dans les tests
+d'intégration : un module charge via `@varde/core` plugin loader,
+écoute un événement Discord publié sur l'EventBus, audite l'action,
+vérifie une permission, planifie une tâche, répond à une commande
+via `ctx.ui` — tout via les API publiques. `pnpm install && pnpm
+check && pnpm test && pnpm build` verts en local et en CI.
+
+Surface livrée :
 
 - `@varde/contracts` : surface typée initiale.
   - Branded types Discord (`GuildId`, `UserId`, `ChannelId`, `RoleId`,
