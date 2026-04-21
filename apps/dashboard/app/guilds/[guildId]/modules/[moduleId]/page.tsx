@@ -78,6 +78,7 @@ export default async function ModuleConfigPage({
             moduleName={module.name}
             ui={moduleConfig.configUi}
             initialValues={moduleConfig.config}
+            schema={moduleConfig.configSchema}
           />
         ) : (
           <EmptyState

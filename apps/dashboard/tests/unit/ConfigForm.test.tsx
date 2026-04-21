@@ -160,6 +160,68 @@ describe('ConfigForm', () => {
     });
   });
 
+  it('bloque le submit et affiche les issues quand la validation client échoue (min)', async () => {
+    saveModuleConfig.mockResolvedValue({ ok: true });
+    const schema = {
+      type: 'object',
+      properties: {
+        welcomeDelayMs: { type: 'integer', minimum: 0, maximum: 60000 },
+      },
+    };
+    render(
+      <ConfigForm
+        guildId="g1"
+        moduleId="hello-world"
+        moduleName="Hello World"
+        ui={helloWorldUi}
+        initialValues={{ welcomeDelayMs: 300 }}
+        schema={schema}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
+      target: { value: '-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          (text) => text.toLowerCase().includes('>=') || text.toLowerCase().includes('minimum'),
+        ),
+      ).toBeDefined(),
+    );
+    expect(saveModuleConfig).not.toHaveBeenCalled();
+  });
+
+  it('laisse passer le submit quand la validation client est OK', async () => {
+    saveModuleConfig.mockResolvedValue({ ok: true });
+    const schema = {
+      type: 'object',
+      properties: {
+        welcomeDelayMs: { type: 'integer', minimum: 0, maximum: 60000 },
+      },
+    };
+    render(
+      <ConfigForm
+        guildId="g1"
+        moduleId="hello-world"
+        moduleName="Hello World"
+        ui={helloWorldUi}
+        initialValues={{ welcomeDelayMs: 300 }}
+        schema={schema}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
+      target: { value: '1200' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+    await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
+    expect(saveModuleConfig).toHaveBeenCalledWith('g1', 'hello-world', {
+      welcomeDelayMs: 1200,
+    });
+  });
+
   it('supporte les paths pointés (nested object)', async () => {
     saveModuleConfig.mockResolvedValue({ ok: true });
     const ui: ConfigUi = {

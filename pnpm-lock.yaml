@@ -115,6 +115,9 @@ importers:
       '@varde/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      ajv:
+        specifier: 8.18.0
+        version: 8.18.0
       jose:
         specifier: 6.2.2
         version: 6.2.2

@@ -5,6 +5,7 @@ import { Button, cn, Input, Label } from '@varde/ui';
 import { type FormEvent, type ReactElement, useState } from 'react';
 
 import { type SaveModuleConfigResult, saveModuleConfig } from '../lib/actions';
+import { validateAgainstSchema } from '../lib/client-validation';
 
 export interface ConfigFormProps {
   readonly guildId: string;
@@ -12,6 +13,7 @@ export interface ConfigFormProps {
   readonly moduleName: string;
   readonly ui: ConfigUi;
   readonly initialValues: Readonly<Record<string, unknown>>;
+  readonly schema?: unknown;
 }
 
 type FieldState = string | boolean;
@@ -106,6 +108,7 @@ export function ConfigForm({
   moduleName,
   ui,
   initialValues,
+  schema,
 }: ConfigFormProps): ReactElement {
   const fields = sortedFields(ui.fields);
   const [state, setState] = useState<FormState>(() => {
@@ -132,6 +135,16 @@ export function ConfigForm({
     setResult(null);
     try {
       const payload = buildPayload(fields, state);
+      const clientCheck = validateAgainstSchema(schema, payload);
+      if (!clientCheck.ok) {
+        setResult({
+          ok: false,
+          status: 400,
+          code: 'invalid_config_client',
+          details: clientCheck.issues,
+        });
+        return;
+      }
       const next = await saveModuleConfig(guildId, moduleId, payload);
       setResult(next);
     } finally {
