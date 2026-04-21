@@ -109,6 +109,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@varde/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@varde/ui':
         specifier: workspace:*
         version: link:../../packages/ui
