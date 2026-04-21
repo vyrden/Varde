@@ -9,6 +9,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Principe de moindre privilège : la CI ne fait que du read-only sur
+# le repo (checkout + install + tests). Pas d'écriture de commit,
+# pas de PR, pas de release. `contents: read` suffit.
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Lint, typecheck, test, build
