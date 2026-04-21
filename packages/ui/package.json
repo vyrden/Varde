@@ -2,24 +2,42 @@
   "name": "@varde/ui",
   "private": true,
   "version": "0.0.0",
-  "description": "Design system : tokens, composants shadcn, thème.",
+  "description": "Design system : tokens Tailwind 4, primitives, composants projet.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./theme.css": "./src/theme.css"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "echo 'no tests yet' && exit 0"
+    "test": "vitest run"
   },
   "peerDependencies": {
     "react": "^19.0.0"
   },
+  "dependencies": {
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "tailwind-merge": "3.5.0"
+  },
   "devDependencies": {
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.2",
     "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
     "@varde/config": "workspace:*",
+    "happy-dom": "20.9.0",
     "react": "19.2.5",
-    "typescript": "6.0.3"
+    "react-dom": "19.2.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
   }
 }
