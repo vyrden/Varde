@@ -1,5 +1,8 @@
+import { type AIProvider, createAIService, generatePresetInputSchema } from '@varde/ai';
 import {
   type GuildId,
+  type KeystoreService,
+  type Logger,
   newUlid,
   type OnboardingActionContext,
   type OnboardingDraft,
@@ -9,12 +12,13 @@ import {
   type Ulid,
   type UserId,
 } from '@varde/contracts';
-import { deepMerge, type OnboardingExecutor } from '@varde/core';
+import { type CoreConfigService, deepMerge, type OnboardingExecutor } from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
-import type { PresetDefinition } from '@varde/presets';
+import { type PresetDefinition, presetDefinitionSchema } from '@varde/presets';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { buildAiProviderForGuild } from '../ai-provider-builder.js';
 import type { DiscordClient } from '../discord-client.js';
 import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
 import { emptyDraft, presetToDraft, serializeDraftToActions } from '../onboarding-draft.js';
@@ -82,6 +86,18 @@ export interface RegisterOnboardingRoutesOptions<D extends DbDriver> {
   readonly presetCatalog?: readonly PresetDefinition[];
   /** Fenêtre de rollback après apply en ms. Défaut : 30 minutes. */
   readonly rollbackWindowMs?: number;
+  /**
+   * Services IA optionnels. Requis pour activer la route
+   * `POST /onboarding/ai/generate-preset` et le support
+   * `source: 'ai'` côté POST /onboarding. Omis = endpoints IA
+   * désactivés.
+   */
+  readonly ai?: {
+    readonly config: CoreConfigService;
+    readonly keystore: KeystoreService;
+    readonly logger: Logger;
+    readonly fetchImpl?: typeof globalThis.fetch;
+  };
 }
 
 // ─── Types DTO ─────────────────────────────────────────────────────
@@ -142,7 +158,16 @@ const toDto = (record: OnboardingSessionRecord): OnboardingSessionDto => {
 const createBodySchema = z.discriminatedUnion('source', [
   z.object({ source: z.literal('blank') }),
   z.object({ source: z.literal('preset'), presetId: z.string().min(1) }),
+  z.object({
+    source: z.literal('ai'),
+    preset: presetDefinitionSchema,
+    aiInvocationId: z.string().min(1).max(26).optional(),
+  }),
 ]);
+
+const generatePresetBodySchema = generatePresetInputSchema.extend({
+  purpose: z.string().max(128).default('onboarding.generatePreset'),
+});
 
 const parseSessionId = (raw: string): Ulid => {
   const parsed = parseUlid(raw);
@@ -198,9 +223,10 @@ export function registerOnboardingRoutes<D extends DbDriver>(
 
       let draft: OnboardingDraft;
       let presetId: string | null = null;
+      let aiInvocationId: Ulid | null = null;
       if (parsed.data.source === 'blank') {
         draft = emptyDraft();
-      } else {
+      } else if (parsed.data.source === 'preset') {
         const preset = presetById.get(parsed.data.presetId);
         if (!preset) {
           throw httpError(
@@ -211,6 +237,14 @@ export function registerOnboardingRoutes<D extends DbDriver>(
         }
         draft = presetToDraft(preset);
         presetId = preset.id;
+      } else {
+        // source === 'ai' : le dashboard nous transmet un preset déjà
+        // proposé par l'IA (route /onboarding/ai/generate-preset). On
+        // le convertit en draft éditable côté builder, et on trace
+        // l'invocation qui l'a produit pour audit.
+        draft = presetToDraft(parsed.data.preset);
+        presetId = parsed.data.preset.id;
+        aiInvocationId = (parsed.data.aiInvocationId ?? null) as Ulid | null;
       }
 
       const inserted = await insertSession(client, {
@@ -220,11 +254,77 @@ export function registerOnboardingRoutes<D extends DbDriver>(
         presetSource: parsed.data.source,
         presetId,
         draft,
+        aiInvocationId,
       });
       void reply.status(201);
       return toDto(inserted);
     },
   );
+
+  // POST /guilds/:guildId/onboarding/ai/generate-preset — générer
+  // une proposition IA via l'AIService. La sortie est un
+  // `PresetProposal` (preset + rationale + confidence) accompagné
+  // de l'`invocationId` ULID — le dashboard le renvoie en retour
+  // dans le body de POST /onboarding { source: 'ai' } pour lier la
+  // session à l'invocation (audit / rejeu).
+  if (options.ai !== undefined) {
+    const aiOptions = options.ai;
+    app.post<{ Params: { guildId: string }; Body: unknown }>(
+      '/guilds/:guildId/onboarding/ai/generate-preset',
+      async (request) => {
+        const { guildId } = request.params;
+        const session = await requireGuildAdmin(app, request, guildId, discord);
+
+        const parsed = generatePresetBodySchema.safeParse(request.body ?? {});
+        if (!parsed.success) {
+          throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+        }
+
+        let provider: AIProvider;
+        try {
+          provider = await buildAiProviderForGuild({
+            config: aiOptions.config,
+            keystore: aiOptions.keystore,
+            guildId: guildId as GuildId,
+            ...(aiOptions.fetchImpl ? { fetchImpl: aiOptions.fetchImpl } : {}),
+          });
+        } catch (err) {
+          throw httpError(
+            502,
+            'ai_provider_build_failed',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+
+        const aiService = createAIService({
+          provider,
+          client,
+          logger: aiOptions.logger,
+        });
+
+        const { proposal, invocationId } = await aiService.generatePreset(
+          {
+            guildId: guildId as GuildId,
+            actorId: session.userId as UserId,
+            purpose: parsed.data.purpose,
+          },
+          {
+            description: parsed.data.description,
+            locale: parsed.data.locale,
+            hints: parsed.data.hints,
+          },
+        );
+
+        return {
+          preset: proposal.preset,
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          invocationId,
+          provider: { id: provider.id, model: provider.model },
+        };
+      },
+    );
+  }
 
   // GET /guilds/:guildId/onboarding/current — session courante
   // (draft | previewing | applying | applied dans la fenêtre).

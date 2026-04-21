@@ -69,7 +69,8 @@ describe('createAIService — nominal via stub', () => {
       hints: [],
     });
 
-    expect(result.preset.id).toBe('community-tech-small');
+    expect(result.proposal.preset.id).toBe('community-tech-small');
+    expect(result.invocationId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(countInvocations(client)).toBe(1);
 
     const [row] = client.db.select().from(sqliteSchema.aiInvocations).all();
@@ -91,7 +92,8 @@ describe('createAIService — nominal via stub', () => {
       { kind: 'role', contextDraft: {} },
     );
 
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.suggestions.length).toBeGreaterThan(0);
+    expect(result.invocationId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     expect(countInvocations(client)).toBe(1);
   });
 

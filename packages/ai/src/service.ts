@@ -56,15 +56,30 @@ export interface CreateAIServiceOptions<D extends DbDriver> {
   readonly promptVersion?: string;
 }
 
+/**
+ * Résultat d'une invocation IA tracée. `invocationId` correspond à
+ * la ligne `ai_invocations` écrite par le service — utile pour la
+ * liaison avec une session d'onboarding (`onboarding_sessions.ai_invocation_id`).
+ */
+export interface TracedPresetProposal {
+  readonly proposal: PresetProposal;
+  readonly invocationId: Ulid;
+}
+
+export interface TracedSuggestions {
+  readonly suggestions: readonly Suggestion[];
+  readonly invocationId: Ulid;
+}
+
 export interface AIService {
   readonly generatePreset: (
     ctx: AIInvocationContext,
     input: GeneratePresetInput,
-  ) => Promise<PresetProposal>;
+  ) => Promise<TracedPresetProposal>;
   readonly suggestCompletion: (
     ctx: AIInvocationContext,
     input: SuggestCompletionInput,
-  ) => Promise<readonly Suggestion[]>;
+  ) => Promise<TracedSuggestions>;
   readonly testConnection: () => Promise<ProviderInfo>;
 }
 
@@ -177,7 +192,7 @@ export function createAIService<D extends DbDriver>(options: CreateAIServiceOpti
     input: unknown,
     label: string,
     work: () => Promise<R>,
-  ): Promise<R> => {
+  ): Promise<{ readonly result: R; readonly invocationId: Ulid }> => {
     const id = newUlid() as Ulid;
     const promptHash = hashInput(input);
     try {
@@ -197,7 +212,7 @@ export function createAIService<D extends DbDriver>(options: CreateAIServiceOpti
         success: true,
         error: null,
       });
-      return result;
+      return { result, invocationId: id };
     } catch (err) {
       const typed = toProviderError(err, 'unknown');
       log.warn('invocation IA en échec', {
@@ -245,9 +260,10 @@ export function createAIService<D extends DbDriver>(options: CreateAIServiceOpti
           parsed.error,
         );
       }
-      return runAndLog(ctx, parsed.data, 'generatePreset', () =>
+      const { result, invocationId } = await runAndLog(ctx, parsed.data, 'generatePreset', () =>
         provider.generatePreset(parsed.data),
       );
+      return { proposal: result, invocationId };
     },
 
     async suggestCompletion(ctx, input) {
@@ -259,9 +275,10 @@ export function createAIService<D extends DbDriver>(options: CreateAIServiceOpti
           parsed.error,
         );
       }
-      return runAndLog(ctx, parsed.data, 'suggestCompletion', () =>
+      const { result, invocationId } = await runAndLog(ctx, parsed.data, 'suggestCompletion', () =>
         provider.suggestCompletion(parsed.data),
       );
+      return { suggestions: result, invocationId };
     },
 
     async testConnection() {

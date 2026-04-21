@@ -90,6 +90,21 @@ export interface OnboardingPreviewDto {
   readonly actions: readonly OnboardingActionPreviewDto[];
 }
 
+/**
+ * Shape retournée par `POST /onboarding/ai/generate-preset` (PR 3.10).
+ * `preset` est un PresetDefinition complet produit par l'IA,
+ * re-vérifié Zod côté API avant retour. `invocationId` référence la
+ * ligne `ai_invocations` — le dashboard le renvoie dans le body de
+ * POST /onboarding { source: 'ai' } pour lier la session.
+ */
+export interface GeneratedPresetDto {
+  readonly preset: Readonly<Record<string, unknown>>;
+  readonly rationale: string;
+  readonly confidence: number;
+  readonly invocationId: string;
+  readonly provider: { readonly id: string; readonly model: string };
+}
+
 const buildCookieHeader = async (): Promise<string> => {
   const cookieStore = await cookies();
   const session = cookieStore.get(SESSION_COOKIE);

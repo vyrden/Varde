@@ -56,6 +56,8 @@ export interface NewOnboardingSession {
   readonly presetSource: OnboardingPresetSource;
   readonly presetId: string | null;
   readonly draft: OnboardingDraft;
+  /** Si `source === 'ai'`, lie la session à l'invocation qui l'a proposée. */
+  readonly aiInvocationId?: Ulid | null;
 }
 
 export interface OnboardingSessionPatch {
@@ -223,6 +225,7 @@ export const insertSession = async <D extends DbDriver>(
   record: NewOnboardingSession,
 ): Promise<OnboardingSessionRecord> => {
   const now = new Date();
+  const aiInvocationId = record.aiInvocationId ?? null;
   if (client.driver === 'pg') {
     const { onboardingSessions } = pgSchema;
     const pg = client as DbClient<'pg'>;
@@ -233,6 +236,7 @@ export const insertSession = async <D extends DbDriver>(
       status: 'draft' as OnboardingSessionStatus,
       presetSource: record.presetSource,
       presetId: record.presetId,
+      aiInvocationId,
       draft: record.draft as Readonly<Record<string, unknown>>,
       startedAt: now,
       updatedAt: now,
@@ -249,6 +253,7 @@ export const insertSession = async <D extends DbDriver>(
         status: 'draft' as OnboardingSessionStatus,
         presetSource: record.presetSource,
         presetId: record.presetId,
+        aiInvocationId,
         draft: record.draft as Readonly<Record<string, unknown>>,
         startedAt: toCanonicalDate(now),
         updatedAt: toCanonicalDate(now),
@@ -262,7 +267,7 @@ export const insertSession = async <D extends DbDriver>(
     status: 'draft',
     presetSource: record.presetSource,
     presetId: record.presetId,
-    aiInvocationId: null,
+    aiInvocationId,
     draft: record.draft as Readonly<Record<string, unknown>>,
     startedAt: toCanonicalDate(now) as Iso8601DateTime,
     updatedAt: toCanonicalDate(now) as Iso8601DateTime,

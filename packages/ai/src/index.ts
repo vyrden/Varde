@@ -22,7 +22,13 @@ export {
   PROMPT_VERSIONS,
   type PromptPair,
 } from './prompts.js';
-export { type AIService, type CreateAIServiceOptions, createAIService } from './service.js';
+export {
+  type AIService,
+  type CreateAIServiceOptions,
+  createAIService,
+  type TracedPresetProposal,
+  type TracedSuggestions,
+} from './service.js';
 export { createStubProvider, STUB_KEYWORD_RULES, STUB_PRESET_COUNT } from './stub.js';
 export {
   type AIInvocationContext,

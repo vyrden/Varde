@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
-import type { OnboardingPreviewDto, OnboardingSessionDto } from './onboarding-client.js';
+import type {
+  GeneratedPresetDto,
+  OnboardingPreviewDto,
+  OnboardingSessionDto,
+} from './onboarding-client.js';
 
 /**
  * Server actions pour les routes `/onboarding/*` côté dashboard. Même
@@ -72,6 +76,65 @@ export async function startOnboardingWithPreset(
       cookie: await buildCookieHeader(),
     },
     body: JSON.stringify({ source: 'preset', presetId }),
+  });
+  if (response.status === 201) {
+    const data = (await response.json()) as OnboardingSessionDto;
+    invalidate(guildId);
+    return { ok: true, data };
+  }
+  const err = await parseErrorBody(response);
+  return { ok: false, status: response.status, ...err };
+}
+
+/**
+ * Appelle `/onboarding/ai/generate-preset` : génère une proposition
+ * IA sans créer de session. L'admin décide ensuite s'il l'utilise
+ * (via `startOnboardingWithAiProposal`) ou s'il la régénère avec
+ * une description différente.
+ */
+export async function generatePresetWithAi(
+  guildId: string,
+  input: { description: string; locale: 'fr' | 'en'; hints: string[] },
+): Fetcher<GeneratedPresetDto> {
+  const response = await fetch(
+    `${API_URL}/guilds/${encodeURIComponent(guildId)}/onboarding/ai/generate-preset`,
+    {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        cookie: await buildCookieHeader(),
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  if (response.ok) {
+    const data = (await response.json()) as GeneratedPresetDto;
+    return { ok: true, data };
+  }
+  const err = await parseErrorBody(response);
+  return { ok: false, status: response.status, ...err };
+}
+
+/**
+ * Crée une session onboarding à partir d'une proposition IA validée
+ * par l'admin. Stocke `aiInvocationId` sur la session pour l'audit.
+ */
+export async function startOnboardingWithAiProposal(
+  guildId: string,
+  preset: Readonly<Record<string, unknown>>,
+  aiInvocationId: string,
+): Fetcher<OnboardingSessionDto> {
+  const response = await fetch(`${API_URL}/guilds/${encodeURIComponent(guildId)}/onboarding`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      cookie: await buildCookieHeader(),
+    },
+    body: JSON.stringify({ source: 'ai', preset, aiInvocationId }),
   });
   if (response.status === 201) {
     const data = (await response.json()) as OnboardingSessionDto;

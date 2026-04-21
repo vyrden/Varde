@@ -327,6 +327,7 @@ export async function createServer<D extends DbDriver>(
     executor: onboardingExecutor,
     actionContextFactory: demoActionContextFactory,
     presetCatalog: PRESET_CATALOG,
+    ai: { config, keystore: aiKeystore, logger },
   });
 
   const start = async (): Promise<{ readonly address: string }> => {
