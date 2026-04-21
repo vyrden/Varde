@@ -1,0 +1,444 @@
+import {
+  type GuildId,
+  newUlid,
+  type OnboardingActionContext,
+  type OnboardingDraft,
+  type OnboardingSessionRecord,
+  onboardingDraftSchema,
+  parseUlid,
+  type Ulid,
+  type UserId,
+} from '@varde/contracts';
+import { deepMerge, type OnboardingExecutor } from '@varde/core';
+import type { DbClient, DbDriver } from '@varde/db';
+import type { PresetDefinition } from '@varde/presets';
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+
+import type { DiscordClient } from '../discord-client.js';
+import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
+import { emptyDraft, presetToDraft, serializeDraftToActions } from '../onboarding-draft.js';
+import {
+  findActiveSessionByGuild,
+  findSessionById,
+  insertSession,
+  updateSession,
+} from '../onboarding-repo.js';
+
+/**
+ * Routes builder d'onboarding (ADR 0007, PR 3.4). Six endpoints qui
+ * couvrent le cycle de vie côté dashboard :
+ *
+ * - `POST /guilds/:guildId/onboarding` — crée une session (draft).
+ *   `source: 'blank'` part d'un draft vide, `source: 'preset'` avec
+ *   un `presetId` matérialise le preset en draft éditable. 409 si une
+ *   session active (`draft | previewing | applying`) existe déjà
+ *   pour la guild (R3).
+ *
+ * - `GET /guilds/:guildId/onboarding/current` — retourne la session
+ *   active ou 404. Le dashboard s'en sert pour reprendre un build en
+ *   cours au rechargement de la page.
+ *
+ * - `PATCH /guilds/:guildId/onboarding/:sessionId/draft` — applique
+ *   un patch partiel au draft via `deepMerge`. Valide le draft final
+ *   contre `onboardingDraftSchema`. Refuse (409) si status autre que
+ *   `draft`.
+ *
+ * - `POST /guilds/:guildId/onboarding/:sessionId/preview` — sérialise
+ *   le draft en `OnboardingActionRequest[]` et bascule en
+ *   `previewing`. Idempotent : on peut retrigger un preview tant
+ *   qu'on n'a pas appliqué.
+ *
+ * - `POST /guilds/:guildId/onboarding/:sessionId/apply` — appelle
+ *   `executor.applyActions`. Succès → status `applied`, `appliedAt`,
+ *   `expiresAt = now + rollbackWindowMs`. Échec → status `failed` ;
+ *   l'executor a déjà rollbacké les actions déjà appliquées.
+ *
+ * - `POST /guilds/:guildId/onboarding/:sessionId/rollback` — appelle
+ *   `executor.undoSession`. Refusé (409) si status != `applied` ou
+ *   si la fenêtre `expiresAt` est dépassée. Succès → `rolled_back`.
+ *
+ * Toutes les routes exigent MANAGE_GUILD via `requireGuildAdmin`. Le
+ * contexte d'action (services Discord concrets + configPatch) est
+ * fourni par `actionContextFactory` pour garder les routes
+ * agnostiques du bot (tests : mocks ; prod : bridge discord.js).
+ */
+
+const DEFAULT_ROLLBACK_WINDOW_MS = 30 * 60 * 1000;
+
+/** Factory d'`OnboardingActionContext` injectée au registre des routes. */
+export type OnboardingActionContextFactory = (args: {
+  readonly guildId: GuildId;
+  readonly actorId: UserId;
+}) => OnboardingActionContext;
+
+export interface RegisterOnboardingRoutesOptions<D extends DbDriver> {
+  readonly client: DbClient<D>;
+  readonly discord: DiscordClient;
+  readonly executor: OnboardingExecutor;
+  readonly actionContextFactory: OnboardingActionContextFactory;
+  /** Catalogue des presets disponibles. Omettre désactive `source: 'preset'`. */
+  readonly presetCatalog?: readonly PresetDefinition[];
+  /** Fenêtre de rollback après apply en ms. Défaut : 30 minutes. */
+  readonly rollbackWindowMs?: number;
+}
+
+// ─── Types DTO ─────────────────────────────────────────────────────
+
+export interface OnboardingSessionDto {
+  readonly id: string;
+  readonly guildId: string;
+  readonly status: OnboardingSessionRecord['status'];
+  readonly presetSource: OnboardingSessionRecord['presetSource'];
+  readonly presetId: string | null;
+  readonly draft: OnboardingDraft;
+  readonly startedAt: string;
+  readonly updatedAt: string;
+  readonly appliedAt: string | null;
+  readonly expiresAt: string | null;
+}
+
+export interface PreviewDto {
+  readonly actions: ReturnType<typeof serializeDraftToActions>;
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+const httpError = (
+  statusCode: number,
+  code: string,
+  message: string,
+  details?: unknown,
+): Error & { statusCode: number; code: string; details?: unknown } => {
+  const err = new Error(message) as Error & {
+    statusCode: number;
+    code: string;
+    details?: unknown;
+  };
+  err.statusCode = statusCode;
+  err.code = code;
+  if (details !== undefined) err.details = details;
+  return err;
+};
+
+const toDto = (record: OnboardingSessionRecord): OnboardingSessionDto => {
+  const parsed = onboardingDraftSchema.safeParse(record.draft);
+  const draft: OnboardingDraft = parsed.success ? parsed.data : emptyDraft();
+  return {
+    id: record.id,
+    guildId: record.guildId,
+    status: record.status,
+    presetSource: record.presetSource,
+    presetId: record.presetId,
+    draft,
+    startedAt: record.startedAt,
+    updatedAt: record.updatedAt,
+    appliedAt: record.appliedAt,
+    expiresAt: record.expiresAt,
+  };
+};
+
+const createBodySchema = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('blank') }),
+  z.object({ source: z.literal('preset'), presetId: z.string().min(1) }),
+]);
+
+const parseSessionId = (raw: string): Ulid => {
+  const parsed = parseUlid(raw);
+  if (!parsed) {
+    throw httpError(400, 'invalid_session_id', `sessionId "${raw}" n'est pas un ULID valide.`);
+  }
+  return parsed;
+};
+
+const ensureSessionBelongsToGuild = (session: OnboardingSessionRecord, guildId: string): void => {
+  if (session.guildId !== guildId) {
+    throw httpError(404, 'session_not_found', 'Session inconnue pour cette guild.');
+  }
+};
+
+const isSessionActive = (status: OnboardingSessionRecord['status']): boolean =>
+  status === 'draft' || status === 'previewing' || status === 'applying';
+
+// ─── Enregistrement ────────────────────────────────────────────────
+
+export function registerOnboardingRoutes<D extends DbDriver>(
+  app: FastifyInstance,
+  options: RegisterOnboardingRoutesOptions<D>,
+): void {
+  const { client, discord, executor, actionContextFactory } = options;
+  const rollbackWindowMs = options.rollbackWindowMs ?? DEFAULT_ROLLBACK_WINDOW_MS;
+  const presetById = new Map<string, PresetDefinition>();
+  for (const preset of options.presetCatalog ?? []) {
+    presetById.set(preset.id, preset);
+  }
+
+  // POST /guilds/:guildId/onboarding — création de session
+  app.post<{ Params: { guildId: string }; Body: unknown }>(
+    '/guilds/:guildId/onboarding',
+    async (request, reply) => {
+      const { guildId } = request.params;
+      const session = await requireGuildAdmin(app, request, guildId, discord);
+
+      const parsed = createBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+      }
+
+      const existing = await findActiveSessionByGuild(client, guildId as GuildId);
+      if (existing) {
+        throw httpError(
+          409,
+          'onboarding_already_active',
+          'Une session d onboarding active existe déjà pour cette guild.',
+          { sessionId: existing.id, status: existing.status },
+        );
+      }
+
+      let draft: OnboardingDraft;
+      let presetId: string | null = null;
+      if (parsed.data.source === 'blank') {
+        draft = emptyDraft();
+      } else {
+        const preset = presetById.get(parsed.data.presetId);
+        if (!preset) {
+          throw httpError(
+            404,
+            'preset_not_found',
+            `Preset "${parsed.data.presetId}" inconnu du catalogue.`,
+          );
+        }
+        draft = presetToDraft(preset);
+        presetId = preset.id;
+      }
+
+      const inserted = await insertSession(client, {
+        id: newUlid() as Ulid,
+        guildId: guildId as GuildId,
+        startedBy: session.userId as UserId,
+        presetSource: parsed.data.source,
+        presetId,
+        draft,
+      });
+      void reply.status(201);
+      return toDto(inserted);
+    },
+  );
+
+  // GET /guilds/:guildId/onboarding/current — session active
+  app.get<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/onboarding/current',
+    async (request) => {
+      const { guildId } = request.params;
+      await requireGuildAdmin(app, request, guildId, discord);
+
+      const session = await findActiveSessionByGuild(client, guildId as GuildId);
+      if (!session) {
+        throw httpError(
+          404,
+          'no_active_session',
+          'Aucune session d onboarding active pour cette guild.',
+        );
+      }
+      return toDto(session);
+    },
+  );
+
+  // PATCH /guilds/:guildId/onboarding/:sessionId/draft — patch draft
+  app.patch<{ Params: { guildId: string; sessionId: string }; Body: unknown }>(
+    '/guilds/:guildId/onboarding/:sessionId/draft',
+    async (request) => {
+      const { guildId, sessionId: rawSessionId } = request.params;
+      await requireGuildAdmin(app, request, guildId, discord);
+      const sessionId = parseSessionId(rawSessionId);
+
+      const session = await findSessionById(client, sessionId);
+      if (!session) {
+        throw httpError(404, 'session_not_found', 'Session inconnue.');
+      }
+      ensureSessionBelongsToGuild(session, guildId);
+      if (session.status !== 'draft') {
+        throw httpError(
+          409,
+          'session_not_editable',
+          `Session en status "${session.status}", patch draft refusé.`,
+        );
+      }
+
+      const body = (request.body ?? {}) as Readonly<Record<string, unknown>>;
+      const merged = deepMerge(session.draft, body);
+      const validated = onboardingDraftSchema.safeParse(merged);
+      if (!validated.success) {
+        throw httpError(
+          400,
+          'invalid_draft',
+          'Le draft résultant ne passe pas la validation.',
+          validated.error.issues,
+        );
+      }
+
+      await updateSession(client, sessionId, { draft: validated.data });
+      const fresh = await findSessionById(client, sessionId);
+      if (!fresh) {
+        throw httpError(500, 'session_vanished', 'Session introuvable après patch.');
+      }
+      return toDto(fresh);
+    },
+  );
+
+  // POST /guilds/:guildId/onboarding/:sessionId/preview
+  app.post<{ Params: { guildId: string; sessionId: string } }>(
+    '/guilds/:guildId/onboarding/:sessionId/preview',
+    async (request): Promise<PreviewDto> => {
+      const { guildId, sessionId: rawSessionId } = request.params;
+      await requireGuildAdmin(app, request, guildId, discord);
+      const sessionId = parseSessionId(rawSessionId);
+
+      const session = await findSessionById(client, sessionId);
+      if (!session) {
+        throw httpError(404, 'session_not_found', 'Session inconnue.');
+      }
+      ensureSessionBelongsToGuild(session, guildId);
+      if (session.status !== 'draft' && session.status !== 'previewing') {
+        throw httpError(
+          409,
+          'session_not_previewable',
+          `Preview refusé en status "${session.status}".`,
+        );
+      }
+
+      const parsed = onboardingDraftSchema.safeParse(session.draft);
+      if (!parsed.success) {
+        throw httpError(
+          422,
+          'invalid_draft_state',
+          'Le draft stocké ne passe pas la validation.',
+          parsed.error.issues,
+        );
+      }
+      const actions = serializeDraftToActions(parsed.data);
+
+      if (session.status !== 'previewing') {
+        await updateSession(client, sessionId, { status: 'previewing' });
+      }
+      return { actions };
+    },
+  );
+
+  // POST /guilds/:guildId/onboarding/:sessionId/apply
+  app.post<{ Params: { guildId: string; sessionId: string } }>(
+    '/guilds/:guildId/onboarding/:sessionId/apply',
+    async (request) => {
+      const { guildId, sessionId: rawSessionId } = request.params;
+      const adminSession = await requireGuildAdmin(app, request, guildId, discord);
+      const sessionId = parseSessionId(rawSessionId);
+
+      const session = await findSessionById(client, sessionId);
+      if (!session) {
+        throw httpError(404, 'session_not_found', 'Session inconnue.');
+      }
+      ensureSessionBelongsToGuild(session, guildId);
+      if (!isSessionActive(session.status)) {
+        throw httpError(
+          409,
+          'session_not_applicable',
+          `Apply refusé en status "${session.status}".`,
+        );
+      }
+
+      const parsed = onboardingDraftSchema.safeParse(session.draft);
+      if (!parsed.success) {
+        throw httpError(
+          422,
+          'invalid_draft_state',
+          'Le draft stocké ne passe pas la validation.',
+          parsed.error.issues,
+        );
+      }
+      const actions = serializeDraftToActions(parsed.data);
+
+      await updateSession(client, sessionId, { status: 'applying' });
+
+      const ctx = actionContextFactory({
+        guildId: guildId as GuildId,
+        actorId: adminSession.userId as UserId,
+      });
+      const result = await executor.applyActions(
+        sessionId as Ulid & { readonly __onboardingSessionId: true },
+        actions,
+        ctx,
+      );
+
+      if (result.ok) {
+        const now = new Date();
+        await updateSession(client, sessionId, {
+          status: 'applied',
+          appliedAt: now,
+          expiresAt: new Date(now.getTime() + rollbackWindowMs),
+        });
+      } else {
+        await updateSession(client, sessionId, { status: 'failed' });
+      }
+
+      return {
+        ok: result.ok,
+        appliedCount: result.appliedCount,
+        externalIds: result.externalIds,
+        ...(result.failedAt !== undefined ? { failedAt: result.failedAt } : {}),
+        ...(result.error !== undefined ? { error: result.error } : {}),
+      };
+    },
+  );
+
+  // POST /guilds/:guildId/onboarding/:sessionId/rollback
+  app.post<{ Params: { guildId: string; sessionId: string } }>(
+    '/guilds/:guildId/onboarding/:sessionId/rollback',
+    async (request) => {
+      const { guildId, sessionId: rawSessionId } = request.params;
+      const adminSession = await requireGuildAdmin(app, request, guildId, discord);
+      const sessionId = parseSessionId(rawSessionId);
+
+      const session = await findSessionById(client, sessionId);
+      if (!session) {
+        throw httpError(404, 'session_not_found', 'Session inconnue.');
+      }
+      ensureSessionBelongsToGuild(session, guildId);
+      if (session.status !== 'applied') {
+        throw httpError(
+          409,
+          'session_not_rollbackable',
+          `Rollback refusé en status "${session.status}".`,
+        );
+      }
+      const expiresAt = session.expiresAt ? Date.parse(session.expiresAt) : 0;
+      if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+        await updateSession(client, sessionId, { status: 'expired' });
+        throw httpError(
+          409,
+          'rollback_window_expired',
+          'Fenêtre de rollback dépassée, session gelée.',
+        );
+      }
+
+      const ctx = actionContextFactory({
+        guildId: guildId as GuildId,
+        actorId: adminSession.userId as UserId,
+      });
+      const result = await executor.undoSession(
+        sessionId as Ulid & { readonly __onboardingSessionId: true },
+        ctx,
+      );
+
+      if (result.ok) {
+        await updateSession(client, sessionId, { status: 'rolled_back' });
+      }
+
+      return {
+        ok: result.ok,
+        undoneCount: result.undoneCount,
+        skippedCount: result.skippedCount,
+        ...(result.error !== undefined ? { error: result.error } : {}),
+      };
+    },
+  );
+}

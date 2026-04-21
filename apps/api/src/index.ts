@@ -27,6 +27,13 @@ export {
   registerModulesRoutes,
 } from './routes/modules.js';
 export {
+  type OnboardingActionContextFactory,
+  type OnboardingSessionDto,
+  type PreviewDto,
+  type RegisterOnboardingRoutesOptions,
+  registerOnboardingRoutes,
+} from './routes/onboarding.js';
+export {
   type Authenticator,
   type CreateApiServerOptions,
   createApiServer,

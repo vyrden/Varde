@@ -47,6 +47,9 @@ importers:
       '@varde/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@varde/presets':
+        specifier: workspace:*
+        version: link:../../packages/presets
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@12.9.0)(postgres@3.4.9)
