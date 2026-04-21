@@ -16,14 +16,14 @@ describe('ServerList', () => {
     expect(screen.getByText('Aucun serveur à afficher')).toBeDefined();
   });
 
-  it('rend une carte par guild avec un lien vers /servers/:id', () => {
+  it('rend une carte par guild avec un lien vers /guilds/:id', () => {
     render(
       <ServerList guilds={[guild('111', 'Alpha'), guild('222', 'Beta', 'https://cdn/icon.png')]} />,
     );
     const alpha = screen.getByRole('link', { name: /Alpha/i });
     const beta = screen.getByRole('link', { name: /Beta/i });
-    expect(alpha.getAttribute('href')).toBe('/servers/111');
-    expect(beta.getAttribute('href')).toBe('/servers/222');
+    expect(alpha.getAttribute('href')).toBe('/guilds/111');
+    expect(beta.getAttribute('href')).toBe('/guilds/222');
   });
 
   it('affiche les initiales quand iconUrl est null', () => {

@@ -10,8 +10,8 @@ export interface ServerListProps {
 
 /**
  * Grille des serveurs administrables. Chaque carte pointe vers la
- * page détails de la guild (`/servers/:guildId`) — cette page viendra
- * en PR 2.8 avec la liste des modules et le formulaire de config.
+ * page détails de la guild (`/guilds/:guildId`) qui liste ses modules
+ * et laisse éditer leur config.
  *
  * Retombe sur un `EmptyState` explicite quand l'intersection
  * `user admin` ∩ `bot présent` est vide, pour éviter une page vide
@@ -33,7 +33,7 @@ export function ServerList({ guilds }: ServerListProps): ReactElement {
       {guilds.map((guild) => (
         <Link
           key={guild.id}
-          href={`/servers/${guild.id}`}
+          href={`/guilds/${guild.id}`}
           className="block transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-ring rounded-lg"
         >
           <Card>
