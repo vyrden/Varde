@@ -122,7 +122,7 @@ puis mettre à jour `.env.local`.
 
 ```sh
 docker compose -f docker/docker-compose.dev.yml up -d
-pnpm db:migrate
+VARDE_DATABASE_URL=postgres://varde:varde@localhost:5432/varde pnpm db:migrate
 pnpm dev
 ```
 
@@ -132,26 +132,38 @@ et Redis en arrière-plan. Vérifier la santé avec
 services `healthy`). Purger les volumes avec `down -v` à la fin d'une
 session si besoin de repartir propre.
 
-`pnpm db:migrate` est disponible à partir du jalon 1 (schémas Drizzle).
-En l'absence, passer directement à `pnpm dev`.
+`pnpm db:migrate` applique les migrations Drizzle sur la DB ciblée par
+`VARDE_DATABASE_URL`. Pour SQLite, remplacer l'URL par un chemin de
+fichier (ex. `./varde.sqlite`) et ajuster la commande :
+`pnpm --filter @varde/db db:migrate:sqlite`.
 
 `pnpm dev` lance en parallèle le bot, l'API et le dashboard en mode
-watch.
+watch. En l'état du jalon 1, `apps/api` et `apps/dashboard` sont des
+squelettes qui loguent simplement « not implemented » — ils seront
+câblés au jalon 2.
 
 ### Tests
 
 ```sh
-pnpm test               # tests unitaires et d'intégration
-pnpm test:e2e           # tests Playwright (dashboard)
-pnpm lint               # Biome
-pnpm typecheck          # tsc --noEmit
+pnpm test           # tests unitaires et d'intégration sur tous les paquets
+pnpm test:unit      # uniquement les tests unitaires
+pnpm test:integration
+pnpm lint           # Biome (lint + format)
+pnpm typecheck      # tsc --noEmit
+pnpm check          # lint + typecheck + test en un passage
 ```
+
+Les tests d'intégration Postgres utilisent Testcontainers et
+nécessitent Docker accessible. Les autres tests tournent sur SQLite
+in-memory et n'ont pas de prérequis.
 
 ### Commandes utiles
 
-- `pnpm db:studio` : ouvre Drizzle Studio pour inspecter la base.
-- `pnpm db:reset` : reset complet de la base de dev.
-- `pnpm changeset` : crée un changeset pour la prochaine release.
+- `pnpm db:generate` : régénère les migrations SQL à partir des schémas
+  Drizzle TypeScript (`packages/db/src/schema/*.ts`).
+- `pnpm --filter @varde/db db:migrate:pg` / `db:migrate:sqlite` :
+  variantes explicites si `VARDE_DATABASE_URL` pointe sur un driver
+  particulier.
 
 ## Workflow de contribution
 
@@ -174,7 +186,7 @@ pnpm typecheck          # tsc --noEmit
 
 Format conventionnel :
 
-```
+```text
 <type>(<scope>): <sujet>
 ```
 
@@ -221,9 +233,7 @@ Points saillants :
 - Accessibilité WCAG AA sur le dashboard.
 - Pas de `console.log`, pas de secrets committés.
 
-### Tests
-
-Résumé :
+### Politique de tests
 
 - Un bug corrigé = un test de régression.
 - Une feature = des tests couvrant les cas nominaux et les cas limites.
