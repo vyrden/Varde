@@ -11,11 +11,24 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "echo 'no tests yet' && exit 0"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
+  },
+  "dependencies": {
+    "@varde/contracts": "workspace:*",
+    "@varde/db": "workspace:*",
+    "cron-parser": "5.5.0",
+    "drizzle-orm": "0.45.2",
+    "pino": "10.3.1",
+    "semver": "7.7.4"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "@types/semver": "7.7.1",
     "@varde/config": "workspace:*",
-    "typescript": "6.0.3"
+    "better-sqlite3": "12.9.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
   }
 }

@@ -1,0 +1,29 @@
+{
+  "name": "@varde/testing",
+  "private": true,
+  "version": "0.0.0",
+  "description": "TestHarness réutilisable : core + db + bot in-memory pour les tests d'intégration des modules.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@varde/bot": "workspace:*",
+    "@varde/contracts": "workspace:*",
+    "@varde/core": "workspace:*",
+    "@varde/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "better-sqlite3": "12.9.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  }
+}
