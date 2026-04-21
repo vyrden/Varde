@@ -1,6 +1,13 @@
 import { randomBytes } from 'node:crypto';
 
-import { type Authenticator, createApiServer } from '@varde/api';
+import {
+  type Authenticator,
+  createApiServer,
+  createDiscordClient,
+  createJwtAuthenticator,
+  type DiscordClient,
+  registerGuildsRoutes,
+} from '@varde/api';
 import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
 import type { EventBus, Logger } from '@varde/contracts';
@@ -43,8 +50,21 @@ export interface ServerApiOptions {
   readonly host?: string;
   readonly corsOrigin?: string;
   readonly version?: string;
-  /** Authenticator utilisé par l'API. Test : lit un header ; prod : décodera le cookie Auth.js en PR 2.4. */
-  readonly authenticator: Authenticator;
+  /**
+   * Authenticator à utiliser. Si omis et que `authSecret` est fourni,
+   * on construit automatiquement un JWT authenticator HS256 depuis
+   * le cookie. Au moins l'un des deux doit être passé.
+   */
+  readonly authenticator?: Authenticator;
+  /** Secret partagé avec Auth.js pour la signature HS256 du JWT. */
+  readonly authSecret?: string;
+  /** Nom du cookie JWT. Défaut géré par createJwtAuthenticator. */
+  readonly authCookieName?: string;
+  /**
+   * Client Discord injectable (tests). En prod par défaut, un client
+   * avec `globalThis.fetch` est construit automatiquement.
+   */
+  readonly discord?: DiscordClient;
 }
 
 export interface ServerKeystoreOptions {
@@ -122,12 +142,27 @@ export async function createServer<D extends DbDriver>(
     logger,
   });
 
+  const authenticator: Authenticator =
+    options.api.authenticator ??
+    (options.api.authSecret
+      ? createJwtAuthenticator({
+          secret: options.api.authSecret,
+          ...(options.api.authCookieName ? { cookieName: options.api.authCookieName } : {}),
+        })
+      : (() => {
+          throw new Error('createServer : api.authenticator ou api.authSecret est requis');
+        })());
+
+  const discord = options.api.discord ?? createDiscordClient();
+
   const api = await createApiServer({
     logger,
     version: options.api.version ?? coreVersion,
-    authenticator: options.api.authenticator,
+    authenticator,
     ...(options.api.corsOrigin !== undefined ? { corsOrigin: options.api.corsOrigin } : {}),
   });
+
+  registerGuildsRoutes(api, { client, discord });
 
   const start = async (): Promise<{ readonly address: string }> => {
     const address = await api.listen({

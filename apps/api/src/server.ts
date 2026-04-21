@@ -1,14 +1,18 @@
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import type { Logger } from '@varde/contracts';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
 /**
- * Surface minimale d'une session côté API. Étendue quand l'auth
- * Discord arrive en PR 2.4 (scopes, access_token, avatarUrl…).
+ * Surface d'une session côté API. `accessToken` est l'access_token
+ * OAuth2 Discord obtenu par le dashboard Auth.js au login et propagé
+ * dans le JWT de session ; l'API s'en sert pour appeler l'API
+ * Discord au nom du user (ex. `/users/@me/guilds`).
  */
 export interface SessionData {
   readonly userId: string;
   readonly username?: string;
+  readonly accessToken?: string;
 }
 
 /**
@@ -56,6 +60,12 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
     disableRequestLogging: true,
   });
 
+  // @fastify/cookie est requis par les authenticators qui lisent
+  // un cookie de session (la variante JWT de production). On l'enregistre
+  // systématiquement : coût négligeable, API cohérente pour tous les
+  // modes de déploiement.
+  await app.register(cookie);
+
   if (corsOrigin !== false) {
     await app.register(cors, { origin: corsOrigin, credentials: true });
   }
@@ -79,8 +89,15 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
   app.decorate('ensureSession', ensureSession);
 
   app.setErrorHandler((error, request, reply) => {
-    const err = error as Error & { statusCode?: number };
-    const statusCode = err.statusCode ?? 500;
+    const err = error as Error & {
+      statusCode?: number;
+      httpStatus?: number;
+      code?: string;
+    };
+    // Les AppError de @varde/contracts portent `httpStatus`. Fastify
+    // et les HTTP errors classiques posent `statusCode`. On regarde
+    // les deux, en privilégiant la forme Fastify.
+    const statusCode = err.statusCode ?? err.httpStatus ?? 500;
     if (statusCode === 401) {
       void reply.status(401).send({ error: 'unauthenticated' });
       return;
@@ -92,7 +109,7 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
       statusCode,
     });
     void reply.status(statusCode).send({
-      error: err.name || 'internal_error',
+      error: err.code ?? err.name ?? 'internal_error',
       message: err.message,
     });
   });
