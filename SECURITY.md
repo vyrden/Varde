@@ -24,7 +24,7 @@ Utiliser à la place l'un des canaux suivants, par ordre de préférence :
 1. **GitHub Security Advisories** : onglet "Security" du repo, bouton
    "Report a vulnerability". Canal privilégié car il crée un espace de
    discussion chiffré et traçable avec le mainteneur.
-2. **Email** : `<security-contact@domaine>`.
+2. **Email** : `github-repo.policy126@passmail.com`.
 
 Inclure dans le signalement :
 
