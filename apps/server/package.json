@@ -20,7 +20,8 @@
     "@varde/contracts": "workspace:*",
     "@varde/core": "workspace:*",
     "@varde/db": "workspace:*",
-    "@varde/module-hello-world": "workspace:*"
+    "@varde/module-hello-world": "workspace:*",
+    "discord.js": "14.26.3"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

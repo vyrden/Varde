@@ -188,6 +188,9 @@ importers:
       '@varde/module-hello-world':
         specifier: workspace:*
         version: link:../../modules/hello-world
+      discord.js:
+        specifier: 14.26.3
+        version: 14.26.3
     devDependencies:
       '@types/node':
         specifier: 24.12.2
