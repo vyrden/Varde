@@ -21,14 +21,14 @@ interface GuildPageProps {
 export default async function GuildPage({ params }: GuildPageProps): Promise<ReactElement> {
   const { guildId } = await params;
   const session = await auth();
-  if (!session?.user) redirect('/api/auth/signin');
+  if (!session?.user) redirect('/');
 
   let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>>;
   let modules: Awaited<ReturnType<typeof fetchModules>>;
   try {
     [guilds, modules] = await Promise.all([fetchAdminGuilds(), fetchModules(guildId)]);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) redirect('/api/auth/signin');
+    if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && error.status === 403) notFound();
     throw error;
   }
