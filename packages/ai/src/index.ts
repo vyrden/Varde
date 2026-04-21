@@ -13,6 +13,10 @@
 
 export { type CreateOllamaProviderOptions, createOllamaProvider } from './ollama.js';
 export {
+  type CreateOpenAICompatibleProviderOptions,
+  createOpenAICompatibleProvider,
+} from './openai-compat.js';
+export {
   buildGeneratePresetPrompt,
   buildSuggestCompletionPrompt,
   PROMPT_VERSIONS,
