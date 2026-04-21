@@ -20,6 +20,7 @@ import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
 import { emptyDraft, presetToDraft, serializeDraftToActions } from '../onboarding-draft.js';
 import {
   findActiveSessionByGuild,
+  findCurrentSessionByGuild,
   findSessionById,
   insertSession,
   updateSession,
@@ -225,14 +226,15 @@ export function registerOnboardingRoutes<D extends DbDriver>(
     },
   );
 
-  // GET /guilds/:guildId/onboarding/current — session active
+  // GET /guilds/:guildId/onboarding/current — session courante
+  // (draft | previewing | applying | applied dans la fenêtre).
   app.get<{ Params: { guildId: string } }>(
     '/guilds/:guildId/onboarding/current',
     async (request) => {
       const { guildId } = request.params;
       await requireGuildAdmin(app, request, guildId, discord);
 
-      const session = await findActiveSessionByGuild(client, guildId as GuildId);
+      const session = await findCurrentSessionByGuild(client, guildId as GuildId);
       if (!session) {
         throw httpError(
           404,

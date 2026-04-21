@@ -9,7 +9,7 @@ import type {
   UserId,
 } from '@varde/contracts';
 import { type DbClient, type DbDriver, pgSchema, sqliteSchema, toCanonicalDate } from '@varde/db';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 /**
  * Repo minimal pour la table `onboarding_sessions`. Les routes
@@ -32,6 +32,22 @@ import { and, eq, inArray } from 'drizzle-orm';
  */
 
 const ACTIVE_STATUSES: readonly OnboardingSessionStatus[] = ['draft', 'previewing', 'applying'];
+
+/**
+ * Statuts considérés "courants" côté UI : on inclut `applied` pour
+ * que la page `GET /onboarding/current` puisse afficher la session
+ * appliquée (vue rollback + compte à rebours). Le set reste plus
+ * étroit que `OnboardingSessionStatus` car les statuts terminaux
+ * (rolled_back, expired, failed) ne doivent pas coller l'admin sur
+ * un écran "Session terminée" ; un terminal → 404 → retour au
+ * PresetPicker pour démarrer une nouvelle session.
+ */
+const CURRENT_STATUSES: readonly OnboardingSessionStatus[] = [
+  'draft',
+  'previewing',
+  'applying',
+  'applied',
+];
 
 export interface NewOnboardingSession {
   readonly id: Ulid;
@@ -123,6 +139,52 @@ export const findActiveSessionByGuild = async <D extends DbDriver>(
         inArray(onboardingSessions.status, ACTIVE_STATUSES),
       ),
     )
+    .limit(1)
+    .all();
+  const row = rows[0];
+  return row ? rowToRecord(row) : null;
+};
+
+/**
+ * Session courante affichée par `GET /onboarding/current`. Comprend
+ * `applied` (fenêtre de rollback) en plus des statuts actifs, et
+ * retourne la plus récente par `startedAt` si plusieurs matchent
+ * (cas limite : une ancienne session `applied` cohabite avec un
+ * nouveau draft — on privilégie le nouveau).
+ */
+export const findCurrentSessionByGuild = async <D extends DbDriver>(
+  client: DbClient<D>,
+  guildId: GuildId,
+): Promise<OnboardingSessionRecord | null> => {
+  if (client.driver === 'pg') {
+    const { onboardingSessions } = pgSchema;
+    const pg = client as DbClient<'pg'>;
+    const rows = await pg.db
+      .select()
+      .from(onboardingSessions)
+      .where(
+        and(
+          eq(onboardingSessions.guildId, guildId),
+          inArray(onboardingSessions.status, CURRENT_STATUSES),
+        ),
+      )
+      .orderBy(desc(onboardingSessions.startedAt))
+      .limit(1);
+    const row = rows[0];
+    return row ? rowToRecord(row) : null;
+  }
+  const { onboardingSessions } = sqliteSchema;
+  const sqlite = client as DbClient<'sqlite'>;
+  const rows = sqlite.db
+    .select()
+    .from(onboardingSessions)
+    .where(
+      and(
+        eq(onboardingSessions.guildId, guildId),
+        inArray(onboardingSessions.status, CURRENT_STATUSES),
+      ),
+    )
+    .orderBy(desc(onboardingSessions.startedAt))
     .limit(1)
     .all();
   const row = rows[0];

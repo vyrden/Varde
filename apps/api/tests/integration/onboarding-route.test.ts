@@ -453,20 +453,30 @@ describe('routes /guilds/:guildId/onboarding', () => {
       expect(mock.createCategory).toHaveBeenCalledTimes(communityTechSmall.categories.length);
       expect(mock.createChannel).toHaveBeenCalledTimes(communityTechSmall.channels.length);
 
+      // GET /current expose toujours la session après apply pour
+      // que l UI puisse montrer l écran "Appliqué" avec rollback.
       const after = await app.inject({
         method: 'GET',
         url: `/guilds/${GUILD}/onboarding/current`,
         headers: authHeader,
       });
-      expect(after.statusCode).toBe(404);
+      expect(after.statusCode).toBe(200);
+      expect(after.json()).toMatchObject({ id: sessionId, status: 'applied' });
 
-      // On peut lire la session directement par ID.
       const direct = await app.inject({
         method: 'POST',
         url: `/guilds/${GUILD}/onboarding/${sessionId}/rollback`,
         headers: authHeader,
       });
       expect(direct.statusCode).toBe(200);
+
+      // Après rollback, GET /current retombe à 404 (terminal).
+      const afterRollback = await app.inject({
+        method: 'GET',
+        url: `/guilds/${GUILD}/onboarding/current`,
+        headers: authHeader,
+      });
+      expect(afterRollback.statusCode).toBe(404);
     } finally {
       await app.close();
     }
