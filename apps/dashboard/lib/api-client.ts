@@ -39,6 +39,38 @@ export interface ModuleConfigDto {
   readonly configSchema: unknown;
 }
 
+export type AuditActorType = 'user' | 'system' | 'module';
+export type AuditSeverity = 'info' | 'warn' | 'error';
+
+export interface AuditLogItemDto {
+  readonly id: string;
+  readonly guildId: string;
+  readonly actorType: AuditActorType;
+  readonly actorId: string | null;
+  readonly action: string;
+  readonly targetType: string | null;
+  readonly targetId: string | null;
+  readonly moduleId: string | null;
+  readonly severity: AuditSeverity;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly createdAt: string;
+}
+
+export interface AuditPageDto {
+  readonly items: readonly AuditLogItemDto[];
+  readonly nextCursor?: string;
+}
+
+export interface AuditFilters {
+  readonly action?: string;
+  readonly actorType?: AuditActorType;
+  readonly severity?: AuditSeverity;
+  readonly since?: string;
+  readonly until?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+}
+
 export interface ZodIssueLite {
   readonly path: ReadonlyArray<string | number>;
   readonly message: string;
@@ -83,6 +115,28 @@ export async function fetchAdminGuilds(): Promise<readonly AdminGuildDto[]> {
 /** Liste des modules chargés côté core pour une guild (enabled/disabled). */
 export async function fetchModules(guildId: string): Promise<readonly ModuleListItemDto[]> {
   return apiGet<readonly ModuleListItemDto[]>(`/guilds/${encodeURIComponent(guildId)}/modules`);
+}
+
+/**
+ * Une page d'audit log pour une guild. Les filtres sont tous optionnels ;
+ * `cursor` (ULID de la dernière ligne vue) permet de charger la page
+ * suivante. L'API borne `limit` à [1, 100] (défaut 50).
+ */
+export async function fetchAudit(
+  guildId: string,
+  filters: AuditFilters = {},
+): Promise<AuditPageDto> {
+  const params = new URLSearchParams();
+  if (filters.action) params.set('action', filters.action);
+  if (filters.actorType) params.set('actorType', filters.actorType);
+  if (filters.severity) params.set('severity', filters.severity);
+  if (filters.since) params.set('since', filters.since);
+  if (filters.until) params.set('until', filters.until);
+  if (filters.cursor) params.set('cursor', filters.cursor);
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+  const query = params.toString();
+  const suffix = query.length > 0 ? `?${query}` : '';
+  return apiGet<AuditPageDto>(`/guilds/${encodeURIComponent(guildId)}/audit${suffix}`);
 }
 
 /** Config actuelle d'un module + métadonnées de rendu (`configUi`). */

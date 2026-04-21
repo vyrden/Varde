@@ -52,6 +52,14 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
           title={guild.name}
           description="Modules chargés pour ce serveur. Cliquez sur un module pour en éditer la configuration."
         />
+        <div>
+          <Link
+            href={`/guilds/${guildId}/audit`}
+            className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
+          >
+            Voir le journal d'audit →
+          </Link>
+        </div>
         <ModuleList guildId={guildId} modules={modules} />
       </main>
     </div>
