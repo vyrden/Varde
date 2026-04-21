@@ -11,6 +11,13 @@
  *   aucun appel réseau, aucune dépendance environnement.
  */
 
+export { type CreateOllamaProviderOptions, createOllamaProvider } from './ollama.js';
+export {
+  buildGeneratePresetPrompt,
+  buildSuggestCompletionPrompt,
+  PROMPT_VERSIONS,
+  type PromptPair,
+} from './prompts.js';
 export { type AIService, type CreateAIServiceOptions, createAIService } from './service.js';
 export { createStubProvider, STUB_KEYWORD_RULES, STUB_PRESET_COUNT } from './stub.js';
 export {
