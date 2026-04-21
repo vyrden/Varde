@@ -115,6 +115,9 @@ importers:
       '@varde/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@varde/presets':
+        specifier: workspace:*
+        version: link:../../packages/presets
       '@varde/ui':
         specifier: workspace:*
         version: link:../../packages/ui

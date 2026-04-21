@@ -52,7 +52,13 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
           title={guild.name}
           description="Modules chargés pour ce serveur. Cliquez sur un module pour en éditer la configuration."
         />
-        <div>
+        <div className="flex flex-wrap gap-4">
+          <Link
+            href={`/guilds/${guildId}/onboarding`}
+            className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
+          >
+            Lancer l'onboarding →
+          </Link>
           <Link
             href={`/guilds/${guildId}/audit`}
             className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
