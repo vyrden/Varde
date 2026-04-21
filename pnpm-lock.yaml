@@ -248,6 +248,40 @@ importers:
         specifier: 4.1.4
         version: 4.1.4(@types/node@24.12.2)(esbuild@0.27.7)(happy-dom@20.9.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  packages/ai:
+    dependencies:
+      '@varde/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@varde/db':
+        specifier: workspace:*
+        version: link:../db
+      '@varde/presets':
+        specifier: workspace:*
+        version: link:../presets
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@12.9.0)(postgres@3.4.9)
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      '@varde/config':
+        specifier: workspace:*
+        version: link:../config
+      better-sqlite3:
+        specifier: 12.9.0
+        version: 12.9.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.4
+        version: 4.1.4(@types/node@24.12.2)(esbuild@0.27.7)(happy-dom@20.9.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/config: {}
 
   packages/contracts:
