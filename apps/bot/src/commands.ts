@@ -2,12 +2,13 @@ import {
   type CommandInteractionInput,
   type ModuleCommand,
   type ModuleCommandMap,
+  type ModuleContext,
   ModuleError,
   type ModuleId,
   type PermissionId,
   type UIMessage,
-  type UIService,
 } from '@varde/contracts';
+import type { ModuleRef } from '@varde/core';
 import { isUIMessage } from '@varde/core';
 
 /**
@@ -15,13 +16,15 @@ import { isUIMessage } from '@varde/core';
  *
  * Le registre est indexé par nom de commande (globalement unique V1 :
  * un conflit entre deux modules est refusé). Chaque entrée porte le
- * module d'origine et la définition de la commande. Le routage vérifie
- * la permission applicative déclarée puis invoque le handler et valide
- * que son retour est bien un `UIMessage` produit par la factory.
+ * `ModuleRef` (id + version) et la définition de la commande. Le
+ * routage construit le `ctx` du module via un `ctxFactory`, vérifie
+ * la permission applicative déclarée puis invoque le handler avec
+ * `(input, ctx)` et valide que son retour est bien un `UIMessage`
+ * produit par la factory (via `isUIMessage`).
  */
 
 interface RegisteredCommand {
-  readonly moduleId: ModuleId;
+  readonly moduleRef: ModuleRef;
   readonly command: ModuleCommand;
 }
 
@@ -32,7 +35,7 @@ export interface CommandRegistry {
    * déjà pris par un autre module. Idempotent pour le même moduleId :
    * ré-enregistrer remplace les commandes précédentes.
    */
-  readonly register: (moduleId: ModuleId, commands: ModuleCommandMap) => void;
+  readonly register: (ref: ModuleRef, commands: ModuleCommandMap) => void;
   /** Retire les commandes d'un module (au `onUnload` / `onDisable`). */
   readonly unregister: (moduleId: ModuleId) => void;
   /** Résout une commande par nom. */
@@ -53,24 +56,23 @@ export function createCommandRegistry(): CommandRegistry {
   };
 
   return {
-    register(moduleId, commands) {
-      // Remplace les commandes d'un éventuel enregistrement antérieur du même module.
-      clearModule(moduleId);
+    register(ref, commands) {
+      clearModule(ref.id);
       const names = new Set<string>();
       for (const [name, command] of Object.entries(commands)) {
         if (byName.has(name)) {
           const conflict = byName.get(name);
           throw new ModuleError(
-            `CommandRegistry : nom "${name}" déjà pris par le module "${conflict?.moduleId}"`,
-            moduleId,
-            { metadata: { name, conflict: conflict?.moduleId } },
+            `CommandRegistry : nom "${name}" déjà pris par le module "${conflict?.moduleRef.id}"`,
+            ref.id,
+            { metadata: { name, conflict: conflict?.moduleRef.id } },
           );
         }
-        byName.set(name, { moduleId, command });
+        byName.set(name, { moduleRef: ref, command });
         names.add(name);
       }
       if (names.size > 0) {
-        byModule.set(moduleId, names);
+        byModule.set(ref.id, names);
       }
     },
     unregister(moduleId) {
@@ -95,47 +97,54 @@ export interface CommandPermissionsPort {
   ) => Promise<boolean>;
 }
 
+/** Factory de ctx invoquée par le routage pour chaque interaction. */
+export type CommandCtxFactory = (ref: ModuleRef, input: CommandInteractionInput) => ModuleContext;
+
 /** Options de `routeCommandInteraction`. */
 export interface RouteCommandOptions {
   readonly registry: CommandRegistry;
-  readonly ui: UIService;
+  readonly ctxFactory: CommandCtxFactory;
   readonly permissions?: CommandPermissionsPort;
 }
 
 /**
  * Applique les règles de routage sur une interaction :
- * 1. Résout la commande dans le registre ; si inconnue, renvoie
- *    `ui.error(...)` sans lever.
- * 2. Si la commande déclare `defaultPermission`, interroge
- *    `permissions.canInGuild` ; refus → `ui.error(...)`.
- * 3. Invoque le handler, vérifie que le retour est un `UIMessage`
- *    issu de la factory via `isUIMessage`. Un retour invalide lève
- *    (le bot applique ce garde-fou en dev ; prod transformera en
- *    journalisation côté middleware, PR 1.6.d).
- *
- * Retourne toujours un `UIMessage` prêt à être renvoyé à Discord.
+ * 1. Résout la commande dans le registre ; si inconnue, construit un
+ *    UIService jetable pour répondre `ui.error(...)` sans impliquer
+ *    de module.
+ * 2. Construit le `ctx` du module via `ctxFactory(ref, input)`.
+ * 3. Si la commande déclare `defaultPermission`, interroge
+ *    `permissions.canInGuild` ; refus → `ctx.ui.error(...)`.
+ * 4. Invoque le handler avec `(input, ctx)`, vérifie que le retour
+ *    est un `UIMessage` frozen issu de `ctx.ui.*` via `isUIMessage`.
+ *    Un retour invalide lève `ModuleError`.
  */
 export async function routeCommandInteraction(
   input: CommandInteractionInput,
   options: RouteCommandOptions,
 ): Promise<UIMessage> {
-  const { registry, ui, permissions } = options;
+  const { registry, ctxFactory, permissions } = options;
   const hit = registry.resolve(input.commandName);
   if (!hit) {
-    return ui.error(`Commande "${input.commandName}" inconnue.`);
+    // Pas de module → message d'erreur minimal sans passer par un ctx.
+    return Object.freeze<UIMessage>({
+      kind: 'error',
+      payload: Object.freeze({ message: `Commande "${input.commandName}" inconnue.` }),
+    });
   }
+  const ctx = ctxFactory(hit.moduleRef, input);
   const required = hit.command.defaultPermission;
   if (required && permissions) {
     const ok = await permissions.canInGuild(input, required);
     if (!ok) {
-      return ui.error('Permission refusée.');
+      return ctx.ui.error('Permission refusée.');
     }
   }
-  const result = await hit.command.handler(input);
+  const result = await hit.command.handler(input, ctx);
   if (!isUIMessage(result)) {
     throw new ModuleError(
       `handler de "${input.commandName}" n'a pas retourné un UIMessage produit par ctx.ui.*`,
-      hit.moduleId,
+      hit.moduleRef.id,
       { metadata: { commandName: input.commandName } },
     );
   }

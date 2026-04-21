@@ -1,5 +1,6 @@
 export { attachDiscordClient } from './client-adapter.js';
 export {
+  type CommandCtxFactory,
   type CommandPermissionsPort,
   type CommandRegistry,
   createCommandRegistry,

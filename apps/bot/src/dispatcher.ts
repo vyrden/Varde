@@ -1,12 +1,7 @@
-import type {
-  CommandInteractionInput,
-  EventBus,
-  Logger,
-  UIMessage,
-  UIService,
-} from '@varde/contracts';
+import type { CommandInteractionInput, EventBus, Logger, UIMessage } from '@varde/contracts';
 
 import {
+  type CommandCtxFactory,
   type CommandPermissionsPort,
   type CommandRegistry,
   routeCommandInteraction,
@@ -21,26 +16,16 @@ import { type DiscordEventInput, mapDiscordEvent } from './mapper.js';
  * — la production branche ses handlers sur `Client.on(...)` ; les
  * tests appellent directement `dispatchEvent` et `dispatchCommand`.
  *
- * Cette séparation suit la directive "Intégration avec un mock
- * gateway minimal" du plan : aucun test ne monte un Client discord.js
- * réel, mais le chemin logique testé (mapping → bus → handlers →
- * routing) est le même qu'en prod.
- *
- * Gestion d'erreurs :
- * - `dispatchEvent` : toute exception pendant la traduction ou la
- *   publication est loguée en warn ; ne remonte pas pour ne pas
- *   casser le dispatch suivant.
- * - `dispatchCommand` : propage les ModuleError levées par le routing
- *   (ex. handler qui ne retourne pas un UIMessage) — c'est à
- *   l'appelant (wiring discord.js) de les transformer en
- *   journalisation + réponse d'erreur utilisateur.
+ * Le ctxFactory passé à la construction est invoqué à chaque
+ * interaction de commande pour fournir un ctx scopé (module, guild)
+ * au handler.
  */
 
 /** Options de construction. */
 export interface CreateDispatcherOptions {
   readonly eventBus: EventBus;
   readonly commandRegistry: CommandRegistry;
-  readonly ui: UIService;
+  readonly ctxFactory: CommandCtxFactory;
   readonly logger: Logger;
   readonly permissions?: CommandPermissionsPort;
 }
@@ -54,7 +39,7 @@ export interface BotDispatcher {
 }
 
 export function createDispatcher(options: CreateDispatcherOptions): BotDispatcher {
-  const { eventBus, commandRegistry, ui, permissions } = options;
+  const { eventBus, commandRegistry, ctxFactory, permissions } = options;
   const logger = options.logger.child({ component: 'dispatcher' });
 
   return {
@@ -74,7 +59,7 @@ export function createDispatcher(options: CreateDispatcherOptions): BotDispatche
     async dispatchCommand(input) {
       return routeCommandInteraction(input, {
         registry: commandRegistry,
-        ui,
+        ctxFactory,
         ...(permissions ? { permissions } : {}),
       });
     },

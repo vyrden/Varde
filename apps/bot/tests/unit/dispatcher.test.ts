@@ -3,12 +3,14 @@ import type {
   CommandInteractionInput,
   CoreEvent,
   GuildId,
+  ModuleContext,
   UserId,
 } from '@varde/contracts';
+import type { ModuleRef } from '@varde/core';
 import { createEventBus, createLogger, createUIService } from '@varde/core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createCommandRegistry } from '../../src/commands.js';
+import { type CommandCtxFactory, createCommandRegistry } from '../../src/commands.js';
 import { createDispatcher } from '../../src/dispatcher.js';
 
 const GUILD: GuildId = '111' as GuildId;
@@ -17,6 +19,12 @@ const USER: UserId = '42' as UserId;
 
 const silentLogger = () =>
   createLogger({ destination: { write: () => undefined }, level: 'fatal' });
+
+const stubCtxFactory: CommandCtxFactory = (ref: ModuleRef) =>
+  ({
+    module: { id: ref.id, version: ref.version },
+    ui: createUIService(),
+  }) as unknown as ModuleContext;
 
 const baseInteraction = (commandName: string): CommandInteractionInput => ({
   commandName,
@@ -37,7 +45,7 @@ describe('createDispatcher — dispatchEvent', () => {
     const dispatcher = createDispatcher({
       eventBus,
       commandRegistry: createCommandRegistry(),
-      ui: createUIService(),
+      ctxFactory: stubCtxFactory,
       logger,
     });
     await dispatcher.dispatchEvent({
@@ -54,7 +62,7 @@ describe('createDispatcher — dispatchEvent', () => {
     });
   });
 
-  it('absorbe une exception du bus sans la rethrow (log warn)', async () => {
+  it('absorbe une exception du bus sans la rethrow', async () => {
     const logger = silentLogger();
     const eventBus = createEventBus({ logger });
     eventBus.onAny(async () => {
@@ -63,11 +71,9 @@ describe('createDispatcher — dispatchEvent', () => {
     const dispatcher = createDispatcher({
       eventBus,
       commandRegistry: createCommandRegistry(),
-      ui: createUIService(),
+      ctxFactory: stubCtxFactory,
       logger,
     });
-    // Le dispatch n'échoue pas même si le handler throw (l'EventBus les isole
-    // déjà, et le dispatcher ré-absorbe au cas où).
     await expect(
       dispatcher.dispatchEvent({
         kind: 'guildMemberAdd',
@@ -82,11 +88,10 @@ describe('createDispatcher — dispatchEvent', () => {
 describe('createDispatcher — dispatchCommand', () => {
   it('retourne ui.error() si la commande est inconnue', async () => {
     const logger = silentLogger();
-    const ui = createUIService();
     const dispatcher = createDispatcher({
       eventBus: createEventBus({ logger }),
       commandRegistry: createCommandRegistry(),
-      ui,
+      ctxFactory: stubCtxFactory,
       logger,
     });
     const reply = await dispatcher.dispatchCommand(baseInteraction('inconnue'));
@@ -97,14 +102,19 @@ describe('createDispatcher — dispatchCommand', () => {
     const logger = silentLogger();
     const ui = createUIService();
     const registry = createCommandRegistry();
-    const handler = vi.fn(() => ui.success('pong'));
-    registry.register('hello-world' as never, {
-      ping: { name: 'ping', description: 'ping', handler },
-    });
+    const handler = vi.fn((_i: CommandInteractionInput, ctx: ModuleContext) =>
+      ctx.ui.success('pong'),
+    );
+    registry.register(
+      { id: 'hello-world' as never, version: '1.0.0' },
+      {
+        ping: { name: 'ping', description: 'ping', handler },
+      },
+    );
     const dispatcher = createDispatcher({
       eventBus: createEventBus({ logger }),
       commandRegistry: registry,
-      ui,
+      ctxFactory: stubCtxFactory,
       logger,
     });
     const reply = await dispatcher.dispatchCommand(baseInteraction('ping'));

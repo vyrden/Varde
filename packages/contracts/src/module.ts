@@ -42,9 +42,16 @@ export interface CommandInteractionInput {
   readonly options: Readonly<Record<string, string | number | boolean>>;
 }
 
-/** Handler de commande : reçoit l'interaction, retourne un UIMessage. */
+/**
+ * Handler de commande : reçoit l'interaction + le `ctx` scopé au
+ * module, retourne un UIMessage produit par `ctx.ui.*`. Le `ctx` est
+ * construit par le bot via le ctxFactory au moment de l'invocation
+ * (voir @varde/bot `routeCommandInteraction`), ce qui donne accès à
+ * i18n, audit, scheduler, config, etc. directement depuis le handler.
+ */
 export type ModuleCommandHandler = (
   input: CommandInteractionInput,
+  ctx: ModuleContext,
 ) => Promise<UIMessage> | UIMessage;
 
 /**
