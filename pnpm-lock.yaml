@@ -123,6 +123,15 @@ importers:
       '@varde/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@varde/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@varde/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      better-sqlite3:
+        specifier: 12.9.0
+        version: 12.9.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3

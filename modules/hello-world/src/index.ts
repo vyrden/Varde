@@ -31,6 +31,12 @@ const SENT_ACTION = 'hello-world.welcome.sent' as ActionId;
 
 const WELCOME_DELAY_MS = 300;
 
+// Souscriptions EventBus actives, collectées au onLoad et détachées
+// au onUnload. Le plugin loader ne détache pas automatiquement les
+// handlers du bus — c'est au module de nettoyer, sinon ses handlers
+// survivent à son propre unload.
+const subscriptions = new Set<() => void>();
+
 export const helloWorld = defineModule({
   manifest,
 
@@ -46,7 +52,7 @@ export const helloWorld = defineModule({
   onLoad: async (ctx) => {
     ctx.logger.info('hello-world : onLoad exécuté');
 
-    ctx.events.on('guild.memberJoin', async (event) => {
+    const unsubscribeMemberJoin = ctx.events.on('guild.memberJoin', async (event) => {
       ctx.logger.info('hello-world : memberJoin reçu', {
         guildId: event.guildId,
         userId: event.userId,
@@ -76,6 +82,15 @@ export const helloWorld = defineModule({
         });
       });
     });
+    subscriptions.add(unsubscribeMemberJoin);
+  },
+
+  onUnload: async (ctx) => {
+    for (const unsubscribe of subscriptions) {
+      unsubscribe();
+    }
+    subscriptions.clear();
+    ctx.logger.info('hello-world : onUnload exécuté');
   },
 });
 

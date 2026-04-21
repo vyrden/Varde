@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
-    "test:unit": "vitest run tests/unit"
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
     "@varde/contracts": "workspace:*"
@@ -20,6 +21,9 @@
   "devDependencies": {
     "@types/node": "24.12.2",
     "@varde/config": "workspace:*",
+    "@varde/db": "workspace:*",
+    "@varde/testing": "workspace:*",
+    "better-sqlite3": "12.9.0",
     "typescript": "6.0.3",
     "vitest": "4.1.4"
   }

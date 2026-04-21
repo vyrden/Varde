@@ -35,11 +35,11 @@ describe('helloWorld — définition runtime', () => {
     expect(ping?.defaultPermission).toBe('hello-world.ping');
   });
 
-  it('a un onLoad défini (pas d onEnable/onDisable/onUnload en V1)', () => {
+  it('a un onLoad et un onUnload (nettoyage des souscriptions EventBus)', () => {
     expect(typeof helloWorld.onLoad).toBe('function');
+    expect(typeof helloWorld.onUnload).toBe('function');
     expect(helloWorld.onEnable).toBeUndefined();
     expect(helloWorld.onDisable).toBeUndefined();
-    expect(helloWorld.onUnload).toBeUndefined();
   });
 });
 
