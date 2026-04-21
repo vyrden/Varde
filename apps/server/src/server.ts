@@ -7,6 +7,7 @@ import {
   createJwtAuthenticator,
   type DiscordClient,
   type OnboardingActionContextFactory,
+  registerAiSettingsRoutes,
   registerAuditRoutes,
   registerGuildsRoutes,
   registerModulesRoutes,
@@ -14,7 +15,7 @@ import {
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { ActionId, EventBus, Logger, UserId } from '@varde/contracts';
+import type { ActionId, EventBus, Logger, ModuleId, UserId } from '@varde/contracts';
 import {
   CORE_ACTIONS,
   type CoreAuditService,
@@ -25,6 +26,7 @@ import {
   createConfigService,
   createCtxFactory,
   createEventBus,
+  createKeystoreService,
   createLogger,
   createOnboardingExecutor,
   createPermissionService,
@@ -32,10 +34,43 @@ import {
   type OnboardingExecutor,
   type PluginLoader,
 } from '@varde/core';
-import { applyMigrations, createDbClient, type DbClient, type DbDriver } from '@varde/db';
+import {
+  applyMigrations,
+  createDbClient,
+  type DbClient,
+  type DbDriver,
+  pgSchema,
+  sqliteSchema,
+} from '@varde/db';
 import { PRESET_CATALOG } from '@varde/presets';
 
 type ApiServer = Awaited<ReturnType<typeof createApiServer>>;
+
+/**
+ * Insère (de manière idempotente) le pseudo-module `core.ai` dans
+ * `modules_registry` pour que le keystore scopé `core.ai` puisse
+ * respecter la FK `keystore.module_id`. Ce pseudo-module n'est pas
+ * chargé par le loader — il n'apparaît pas dans `/guilds/:id/modules`.
+ */
+const ensureCoreAiModuleRegistered = async <D extends DbDriver>(
+  client: DbClient<D>,
+  moduleId: string,
+): Promise<void> => {
+  if (client.driver === 'pg') {
+    const pg = client as DbClient<'pg'>;
+    await pg.db
+      .insert(pgSchema.modulesRegistry)
+      .values({ id: moduleId, version: '1.0.0', manifest: {}, schemaVersion: 0 })
+      .onConflictDoNothing({ target: pgSchema.modulesRegistry.id });
+    return;
+  }
+  const sqlite = client as DbClient<'sqlite'>;
+  sqlite.db
+    .insert(sqliteSchema.modulesRegistry)
+    .values({ id: moduleId, version: '1.0.0', manifest: {}, schemaVersion: 0 })
+    .onConflictDoNothing({ target: sqliteSchema.modulesRegistry.id })
+    .run();
+};
 
 /**
  * Paquet d'entrée monolith (ADR 0004) : compose @varde/core,
@@ -266,9 +301,26 @@ export async function createServer<D extends DbDriver>(
     };
   };
 
+  // Paramètres IA (jalon 3) : keystore scopé `core.ai` pour les
+  // credentials, config non-sensible dans `guild_config`. Le
+  // keystore référence modules_registry via FK, on y insère donc
+  // un pseudo-module idempotent — il n'apparaît pas dans /modules
+  // (ce dernier lit `loader.loadOrder()`, pas la table).
+  const aiModuleId = 'core.ai' as ModuleId;
+  await ensureCoreAiModuleRegistered(client, aiModuleId);
+  const aiKeystore = createKeystoreService({
+    client,
+    moduleId: aiModuleId,
+    masterKey: options.keystore?.masterKey ?? randomBytes(32),
+    ...(options.keystore?.previousMasterKey
+      ? { previousMasterKey: options.keystore.previousMasterKey }
+      : {}),
+  });
+
   registerGuildsRoutes(api, { client, discord });
   registerModulesRoutes(api, { loader, config, discord });
   registerAuditRoutes(api, { audit, discord });
+  registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });
   registerOnboardingRoutes(api, {
     client,
     discord,

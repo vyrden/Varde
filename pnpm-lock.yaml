@@ -38,6 +38,9 @@ importers:
       '@fastify/cors':
         specifier: 11.2.0
         version: 11.2.0
+      '@varde/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@varde/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

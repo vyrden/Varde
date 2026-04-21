@@ -60,6 +60,12 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
             Lancer l'onboarding →
           </Link>
           <Link
+            href={`/guilds/${guildId}/settings/ai`}
+            className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
+          >
+            Paramètres IA →
+          </Link>
+          <Link
             href={`/guilds/${guildId}/audit`}
             className="text-sm font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded"
           >
