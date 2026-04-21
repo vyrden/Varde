@@ -170,7 +170,7 @@ export async function createServer<D extends DbDriver>(
   const audit = createAuditService({ client });
 
   registerGuildsRoutes(api, { client, discord });
-  registerModulesRoutes(api, { loader, config, discord });
+  registerModulesRoutes(api, { loader, config, audit, discord });
   registerAuditRoutes(api, { audit, discord });
 
   const start = async (): Promise<{ readonly address: string }> => {
