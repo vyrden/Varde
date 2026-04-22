@@ -9,8 +9,17 @@ import {
   withTransaction,
 } from '../../src/index.js';
 
-const { guilds, guildConfig, modulesRegistry, guildModules, auditLog, scheduledTasks } =
-  sqliteSchema;
+const {
+  guilds,
+  guildConfig,
+  modulesRegistry,
+  guildModules,
+  auditLog,
+  scheduledTasks,
+  onboardingSessions,
+  onboardingActionsLog,
+  aiInvocations,
+} = sqliteSchema;
 
 const nowIso = (offsetMs = 0): string => new Date(Date.now() + offsetMs).toISOString();
 
@@ -26,7 +35,7 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
     await client.close();
   });
 
-  it('crée les 11 tables attendues par l ADR 0001', async () => {
+  it('crée les 12 tables attendues (ADR 0001 + onboarding_actions_log d ADR 0007)', async () => {
     const rows = await client.db.all<{ name: string }>(
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%' ORDER BY name`,
     );
@@ -38,6 +47,7 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
       'guilds',
       'keystore',
       'modules_registry',
+      'onboarding_actions_log',
       'onboarding_sessions',
       'permission_bindings',
       'permissions_registry',
@@ -157,5 +167,74 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
 
     const configs = await client.db.select().from(guildConfig).all();
     expect(configs).toHaveLength(0);
+  });
+
+  // ── Onboarding (ADR 0007) ───────────────────────────────────────────
+
+  it('onboarding : cascade DELETE session → actions_log', async () => {
+    await client.db.insert(guilds).values({ id: '666', name: 'Zeta' }).run();
+    await client.db
+      .insert(onboardingSessions)
+      .values({
+        id: '01HZ0000000000000000000ONB',
+        guildId: '666',
+        startedBy: 'user-42',
+        status: 'draft',
+        presetSource: 'blank',
+      })
+      .run();
+    await client.db
+      .insert(onboardingActionsLog)
+      .values({
+        id: '01HZ0000000000000000000ACT',
+        sessionId: '01HZ0000000000000000000ONB',
+        sequence: 0,
+        actionType: 'createRole',
+        actionPayload: { name: 'Modérateur' },
+        status: 'pending',
+      })
+      .run();
+    await client.db.delete(onboardingSessions).run();
+    const rows = await client.db.select().from(onboardingActionsLog).all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('onboarding : CHECK rejette un status hors enum', async () => {
+    await client.db.insert(guilds).values({ id: '777', name: 'Eta' }).run();
+    await expect(async () =>
+      client.db
+        .insert(onboardingSessions)
+        .values({
+          id: '01HZ0000000000000000000S01',
+          guildId: '777',
+          startedBy: 'user-42',
+          // biome-ignore lint/suspicious/noExplicitAny: test d intention
+          status: 'unknown' as any,
+          presetSource: 'blank',
+        })
+        .run(),
+    ).rejects.toThrow(/CHECK/i);
+  });
+
+  it('ai_invocations : colonnes actor_id et prompt_version présentes', async () => {
+    await client.db.insert(guilds).values({ id: 'BBB', name: 'Lambda' }).run();
+    await client.db
+      .insert(aiInvocations)
+      .values({
+        id: '01HZ0000000000000000000AI1',
+        guildId: 'BBB',
+        actorId: 'user-42',
+        purpose: 'generatePreset',
+        provider: 'stub',
+        model: 'rule-based',
+        promptHash: 'hash',
+        promptVersion: 'v1',
+        success: true,
+      })
+      .run();
+    const rows = await client.db.select().from(aiInvocations).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.actorId).toBe('user-42');
+    expect(rows[0]?.promptVersion).toBe('v1');
   });
 });

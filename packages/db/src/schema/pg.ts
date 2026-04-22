@@ -39,8 +39,17 @@ const severities = ['info', 'warn', 'error'] as const;
 const permissionLevels = ['admin', 'moderator', 'member', 'nobody'] as const;
 const taskKinds = ['one_shot', 'recurring'] as const;
 const taskStatuses = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const;
-const onboardingStatuses = ['in_progress', 'completed', 'aborted', 'rolled_back'] as const;
-const onboardingModes = ['fresh', 'existing', 'replay'] as const;
+const onboardingStatuses = [
+  'draft',
+  'previewing',
+  'applying',
+  'applied',
+  'rolled_back',
+  'expired',
+  'failed',
+] as const;
+const onboardingPresetSources = ['blank', 'preset', 'ai'] as const;
+const onboardingActionStatuses = ['pending', 'applied', 'undone', 'failed'] as const;
 
 export type ActorType = (typeof actorTypes)[number];
 export type TargetType = (typeof targetTypes)[number];
@@ -49,7 +58,8 @@ export type PermissionLevel = (typeof permissionLevels)[number];
 export type TaskKind = (typeof taskKinds)[number];
 export type TaskStatus = (typeof taskStatuses)[number];
 export type OnboardingStatus = (typeof onboardingStatuses)[number];
-export type OnboardingMode = (typeof onboardingModes)[number];
+export type OnboardingPresetSource = (typeof onboardingPresetSources)[number];
+export type OnboardingActionStatus = (typeof onboardingActionStatuses)[number];
 
 const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
 
@@ -215,7 +225,25 @@ export const scheduledTasks = pgTable(
   ],
 );
 
-/** Sessions d'onboarding en cours ou terminées. */
+/**
+ * Sessions d'onboarding : l'état d'une construction de serveur en
+ * cours, une fois applied, ou rollbackée. Le modèle est un builder
+ * interactif (ADR 0007) — le `draft` JSONB contient l'arbre
+ * rôles / catégories / salons / configs-module que l'admin édite
+ * avant apply. Chaque action effectivement appliquée vit dans
+ * `onboarding_actions_log` (pas en JSON ici) pour permettre le
+ * rollback granulaire et l'audit par ligne.
+ *
+ * Transitions valides :
+ *   draft → previewing → applying → applied
+ *                                  ↘  failed (undo auto)
+ *   applied → rolled_back (dans la fenêtre de 30 min)
+ *   applied → expired (après 30 min, gel)
+ *
+ * Un seul session « active » (`previewing` / `applying`) par guild
+ * à la fois — contrainte via partial unique index côté PG, trigger
+ * côté SQLite (risque R3 du plan jalon 3).
+ */
 export const onboardingSessions = pgTable(
   'onboarding_sessions',
   {
@@ -225,23 +253,75 @@ export const onboardingSessions = pgTable(
       .references(() => guilds.id, { onDelete: 'cascade' }),
     startedBy: varchar('started_by', { length: 20 }).notNull(),
     status: text('status').$type<OnboardingStatus>().notNull(),
-    mode: text('mode').$type<OnboardingMode>().notNull(),
-    answers: jsonb('answers').notNull().default(sql`'{}'::jsonb`),
-    plan: jsonb('plan'),
-    appliedActions: jsonb('applied_actions').notNull().default(sql`'[]'::jsonb`),
+    presetSource: text('preset_source').$type<OnboardingPresetSource>().notNull(),
+    presetId: varchar('preset_id', { length: 128 }),
+    aiInvocationId: varchar('ai_invocation_id', { length: 26 }),
+    draft: jsonb('draft').notNull().default(sql`'{}'::jsonb`),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
-    completedAt: timestamp('completed_at', { withTimezone: true }),
-    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
   },
   (t) => [
     index('idx_onboarding_guild_status').on(t.guildId, t.status),
-    index('idx_onboarding_expires').on(t.expiresAt).where(sql`${t.status} = 'in_progress'`),
+    index('idx_onboarding_expires').on(t.expiresAt).where(sql`${t.status} = 'applied'`),
+    // Partial unique : une seule session active par guild.
+    uniqueIndex('idx_onboarding_active_per_guild')
+      .on(t.guildId)
+      .where(sql`${t.status} IN ('draft', 'previewing', 'applying')`),
     check('onboarding_status_check', sql.raw(`status IN (${inList(onboardingStatuses)})`)),
-    check('onboarding_mode_check', sql.raw(`mode IN (${inList(onboardingModes)})`)),
+    check(
+      'onboarding_preset_source_check',
+      sql.raw(`preset_source IN (${inList(onboardingPresetSources)})`),
+    ),
   ],
 );
 
-/** Trace de chaque invocation IA. */
+/**
+ * Journal des actions appliquées dans une session d'onboarding. Une
+ * ligne par action tentée, dans l'ordre d'exécution (sequence). Le
+ * rollback s'appuie sur ce journal en ordre inverse : chaque ligne
+ * `applied` voit son `undo()` appelé, puis passe à `undone`.
+ */
+export const onboardingActionsLog = pgTable(
+  'onboarding_actions_log',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    sessionId: varchar('session_id', { length: 26 })
+      .notNull()
+      .references(() => onboardingSessions.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    actionType: varchar('action_type', { length: 128 }).notNull(),
+    actionPayload: jsonb('action_payload').notNull(),
+    status: text('status').$type<OnboardingActionStatus>().notNull(),
+    externalId: varchar('external_id', { length: 64 }),
+    result: jsonb('result'),
+    error: text('error'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    undoneAt: timestamp('undone_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('idx_onboarding_actions_session_sequence').on(t.sessionId, t.sequence),
+    check(
+      'onboarding_action_status_check',
+      sql.raw(`status IN (${inList(onboardingActionStatuses)})`),
+    ),
+  ],
+);
+
+/**
+ * Trace de chaque invocation IA (ADR 0007). Source de vérité pour :
+ * - le quota journalier par instance (R4 : count sur `created_at`
+ *   > now() - 24h)
+ * - le rate-limit per-user (actor_id × purpose sur l'heure courante)
+ * - le rejeu / debug d'un appel spécifique
+ * - le monitoring coût (inputTokens × outputTokens × costEstimate).
+ *
+ * `actorId` est l'ID Discord de l'user qui a déclenché l'appel (admin
+ * du dashboard). `promptVersion` trace quelle version de template a
+ * été utilisée (R5 : changement de prompt = bump version = audit
+ * trail clair des régressions potentielles).
+ */
 export const aiInvocations = pgTable(
   'ai_invocations',
   {
@@ -252,10 +332,12 @@ export const aiInvocations = pgTable(
     moduleId: varchar('module_id', { length: 128 }).references(() => modulesRegistry.id, {
       onDelete: 'set null',
     }),
+    actorId: varchar('actor_id', { length: 20 }),
     purpose: varchar('purpose', { length: 256 }).notNull(),
     provider: varchar('provider', { length: 64 }).notNull(),
     model: varchar('model', { length: 128 }).notNull(),
     promptHash: varchar('prompt_hash', { length: 64 }).notNull(),
+    promptVersion: varchar('prompt_version', { length: 32 }).notNull().default('v1'),
     inputTokens: integer('input_tokens').notNull().default(0),
     outputTokens: integer('output_tokens').notNull().default(0),
     costEstimate: numeric('cost_estimate', { precision: 18, scale: 8 }).notNull().default('0'),
@@ -263,7 +345,10 @@ export const aiInvocations = pgTable(
     error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('idx_ai_guild_created').on(t.guildId, t.createdAt)],
+  (t) => [
+    index('idx_ai_guild_created').on(t.guildId, t.createdAt),
+    index('idx_ai_actor_purpose_created').on(t.actorId, t.purpose, t.createdAt),
+  ],
 );
 
 /** Secrets tiers que les modules persistent, chiffrés au repos. */
@@ -297,6 +382,7 @@ export const pgSchema = {
   auditLog,
   scheduledTasks,
   onboardingSessions,
+  onboardingActionsLog,
   aiInvocations,
   keystore,
 } as const;

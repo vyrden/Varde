@@ -35,6 +35,31 @@ export {
 } from './loader.js';
 export { type CreateLoggerOptions, createLogger, type LogLevel } from './logger.js';
 export {
+  type ApplyActionsResult,
+  CORE_ACTIONS,
+  type CreateCategoryPayload,
+  type CreateCategoryResult,
+  type CreateChannelPayload,
+  type CreateChannelResult,
+  type CreateOnboardingExecutorOptions,
+  type CreateOnboardingHostServiceOptions,
+  type CreateRolePayload,
+  type CreateRoleResult,
+  createCategoryAction,
+  createChannelAction,
+  createOnboardingExecutor,
+  createOnboardingHostService,
+  createRoleAction,
+  type OnboardingExecutor,
+  type OnboardingHostService,
+  type PatchModuleConfigPayload,
+  type PatchModuleConfigResult,
+  PERMISSION_PRESET_BITS,
+  type PermissionPresetId,
+  patchModuleConfigAction,
+  type UndoSessionResult,
+} from './onboarding/index.js';
+export {
   type CorePermissionService,
   type CreatePermissionServiceOptions,
   createPermissionService,

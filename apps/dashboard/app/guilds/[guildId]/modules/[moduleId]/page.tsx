@@ -29,7 +29,7 @@ export default async function ModuleConfigPage({
 }: ModuleConfigPageProps): Promise<ReactElement> {
   const { guildId, moduleId } = await params;
   const session = await auth();
-  if (!session?.user) redirect('/api/auth/signin');
+  if (!session?.user) redirect('/');
 
   let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>>;
   let modules: Awaited<ReturnType<typeof fetchModules>>;
@@ -41,7 +41,7 @@ export default async function ModuleConfigPage({
       fetchModuleConfig(guildId, moduleId),
     ]);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) redirect('/api/auth/signin');
+    if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
       notFound();
     }

@@ -5,4 +5,5 @@ export * from './events.js';
 export * from './ids.js';
 export * from './manifest.js';
 export * from './module.js';
+export * from './onboarding.js';
 export * from './ulid.js';

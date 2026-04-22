@@ -2,7 +2,6 @@ import { randomBytes } from 'node:crypto';
 import type { GuildId, ModuleId } from '@varde/contracts';
 import { defineModule } from '@varde/contracts';
 import {
-  createAuditService,
   createConfigService,
   createCtxFactory,
   createEventBus,
@@ -105,7 +104,6 @@ describe('routes /guilds/:guildId/modules — permission', () => {
     const logger = silentLogger();
     const eventBus = createEventBus({ logger });
     const config = createConfigService({ client });
-    const audit = createAuditService({ client });
     const permissions = createPermissionService({
       client,
       resolveMemberContext: async () => null,
@@ -139,8 +137,8 @@ describe('routes /guilds/:guildId/modules — permission', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, audit, discord });
-    return { app, config, loader, bundle, audit };
+    registerModulesRoutes(app, { loader, config, discord });
+    return { app, config, loader, bundle };
   };
 
   it('401 sans session sur GET /modules', async () => {
@@ -208,7 +206,6 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
     const logger = silentLogger();
     const eventBus = createEventBus({ logger });
     const config = createConfigService({ client });
-    const audit = createAuditService({ client });
     const permissions = createPermissionService({
       client,
       resolveMemberContext: async () => null,
@@ -243,8 +240,8 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, audit, discord });
-    return { app, config, loader, audit };
+    registerModulesRoutes(app, { loader, config, discord });
+    return { app, config, loader };
   };
 
   it('GET /modules renvoie la liste des modules chargés', async () => {
@@ -331,29 +328,6 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json()).toMatchObject({ error: 'invalid_config' });
       expect(res.json().details).toBeDefined();
-    } finally {
-      await app.close();
-    }
-  });
-
-  it('PUT /modules/:id/config écrit une entrée core.config.updated dans l audit', async () => {
-    const { app, audit } = await build();
-    try {
-      const res = await app.inject({
-        method: 'PUT',
-        url: `/guilds/${GUILD}/modules/${MOD}/config`,
-        headers: { ...authHeader, 'content-type': 'application/json' },
-        payload: JSON.stringify({ welcomeDelayMs: 400 }),
-      });
-      expect(res.statusCode).toBe(204);
-
-      const rows = await audit.query({ guildId: GUILD, limit: 10 });
-      const updated = rows.find((r) => r.action === 'core.config.updated');
-      expect(updated).toBeDefined();
-      expect(updated?.actorType).toBe('user');
-      expect(updated?.actorId).toBe('42');
-      expect(updated?.severity).toBe('info');
-      expect(updated?.metadata).toMatchObject({ scope: `modules.${MOD}`, moduleId: MOD });
     } finally {
       await app.close();
     }

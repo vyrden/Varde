@@ -12,7 +12,8 @@
     "start": "node --env-file=../../.env.local dist/bin.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "tsc && node --watch --env-file=../../.env.local dist/bin.js"
   },
   "dependencies": {
     "@varde/api": "workspace:*",
@@ -20,7 +21,9 @@
     "@varde/contracts": "workspace:*",
     "@varde/core": "workspace:*",
     "@varde/db": "workspace:*",
-    "@varde/module-hello-world": "workspace:*"
+    "@varde/module-hello-world": "workspace:*",
+    "@varde/presets": "workspace:*",
+    "discord.js": "14.26.3"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

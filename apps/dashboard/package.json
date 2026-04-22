@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@varde/contracts": "workspace:*",
+    "@varde/presets": "workspace:*",
     "@varde/ui": "workspace:*",
     "ajv": "8.18.0",
     "jose": "6.2.2",

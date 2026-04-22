@@ -7,6 +7,143 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Jalon 3 — moteur d'onboarding (2026-04-22)
+
+Clos. Critère de sortie ROADMAP vérifié : avec un module témoin
+`onboarding-test` qui contribue une action custom et un hint via
+`ctx.onboarding.*`, un admin logué peut lancer un onboarding depuis
+un preset hand-curated ou depuis une proposition IA, preview les
+actions, appliquer — les rôles / catégories / salons apparaissent
+sur un vrai serveur Discord via discord.js v14 — puis rollback
+dans la fenêtre de 30 min avec retour à l'état initial. Pipeline
+CI vert, 561 tests monorepo.
+
+Surface livrée :
+
+- `@varde/contracts` : contrats onboarding complets.
+  - `OnboardingDraft` (rôles / catégories / salons / modules) et
+    `OnboardingActionDefinition<P, R>` (schema Zod, apply, undo,
+    canUndo, R8 du plan). `OnboardingActionContext` expose
+    `discord.*` pour Discord, `configPatch`, `logger`, et
+    `resolveLocalId(localId) → externalId` pour que les actions
+    résolvent les refs intra-session.
+  - `OnboardingService` exposé côté `ModuleContext.onboarding` :
+    `registerAction(def)` contribue une action custom au registre
+    de l'executor, `contributeHint(hint)` pose une suggestion
+    hand-curée pour le builder (PR 3.13).
+  - Status de session : `draft | previewing | applying | applied
+    | rolled_back | expired | failed`. Invariant unicité par
+    guild via partial unique index PG + check applicatif SQLite.
+- `@varde/db` : tables `onboarding_sessions`, `onboarding_actions_log`,
+  `ai_invocations` (ADR 0007). Colonnes `ciphertext/iv/authTag`
+  BLOB pour les secrets keystore. `ai_invocations` porte le
+  hash SHA-256 du prompt, jamais le prompt brut (R5).
+- `@varde/presets` (nouveau) : catalogue de 5 presets hand-curés
+  (tech, gaming, creative, study, generic starter) validés par
+  Zod + validator sémantique (refs `categoryLocalId` / `readableBy`
+  / `writableBy` doivent pointer vers des entités du même preset).
+  Exposé par `PRESET_CATALOG` + exports individuels.
+- `@varde/core` : moteur d'onboarding.
+  - `createOnboardingExecutor` : registry d'actions + cycle
+    `applyActions` (séquentiel, 50 ms entre actions pour laisser
+    de la marge aux buckets Discord) + rollback auto sur échec +
+    `undoSession` manuel idempotent. Maintient une map
+    `localId → externalId` pendant l'apply, injectée dans les
+    actions via `ctx.resolveLocalId` (PR 3.12a).
+  - Quatre actions core : `createRole`, `createCategory`,
+    `createChannel` (supporte `parentLocalId`, overwrites via
+    `readableRoleLocalIds` / `writableRoleLocalIds`, bits ViewChannel
+    / SendMessages / Connect / Speak selon type du salon),
+    `patchModuleConfig`. 4 presets de permissions hardcoded
+    (moderator-full / moderator-minimal / member-default /
+    member-restricted), aucun bitfield exposé à l'admin (R1).
+  - `createOnboardingHostService` : matérialise `ctx.onboarding`
+    côté host (server, harness). Expose `getHints` et
+    `getContributedActionTypes` pour introspection.
+- `@varde/ai` (nouveau) : contrat `AIProvider` + service tracé +
+  adapters.
+  - `generatePreset` (produit un preset complet à partir d'une
+    description FR/EN + hints optionnels) et `suggestCompletion`
+    (role / category / channel, avec contexte du draft + hint
+    libre). Sorties Zod-validées, erreurs `AIProviderError`
+    typées (`timeout | unavailable | invalid_response |
+    quota_exceeded | unauthorized | unknown`).
+  - `createStubProvider` : rule-based, déterministe, zéro réseau.
+    Match par mot-clé sur les 5 presets hand-curated + suggestions
+    seeds par kind. Utilisé en tests partout et en fallback runtime
+    quand aucun provider n'est configuré (CLAUDE.md §13, pas de
+    default cloud).
+  - `createOllamaProvider` : POST /api/chat `format: 'json'`,
+    retry 1× sur JSON invalide, testConnection via /api/tags.
+  - `createOpenAICompatibleProvider` : couvre OpenAI / OpenRouter /
+    Groq / vLLM / LocalAI / LM Studio. Bearer auth +
+    `response_format: { type: 'json_object' }`. Mapping status →
+    code AIProviderError (401/403 → unauthorized, 429 →
+    quota_exceeded, 404/5xx → unavailable). Timeout par requête
+    via `AbortController` (20 s défaut).
+  - `createAIService` : wrapper avec timeout global (30 s défaut,
+    englobe les adapters), validation Zod des inputs, insertion
+    `ai_invocations` succès comme échec, hash SHA-256 de l'input.
+  - Prompts versionnés `v1` dans `PROMPT_VERSIONS`, stamped dans
+    chaque ligne `ai_invocations` pour le rejeu.
+- `@varde/api` : six routes builder + deux routes IA + params IA.
+  - `POST /guilds/:id/onboarding` (source: blank | preset | ai),
+    `GET /onboarding/current` (inclut `applied` pour l'écran
+    rollback), `PATCH /onboarding/:sid/draft` (deepMerge côté
+    serveur, les arrays sont remplacés — les consommateurs
+    concatènent côté client), `POST /preview` (sérialise en
+    actions), `POST /apply` (invoque executor, sur succès pose
+    un job scheduler `onboarding.autoExpire:<sid>` à `expiresAt`),
+    `POST /rollback` (annule le job si encore pending).
+  - `POST /onboarding/ai/generate-preset` et
+    `POST /onboarding/ai/suggest-completion` (auth admin,
+    résolution provider via `buildAiProviderForGuild`).
+  - `GET | PUT /guilds/:id/settings/ai` + `POST /settings/ai/test`
+    (providerId `none | ollama | openai-compat`, apiKey stockée
+    dans keystore scope `core.ai` slot `providerApiKey`, jamais
+    renvoyée, `hasApiKey` remonté à l'UI).
+  - `reconcileOnboardingSessions` : au boot, scan des sessions
+    `applied` — `expiresAt` dépassé → `expired` immédiat, futur →
+    réenregistrement du handler scheduler.
+  - DiscordClient durci : dédup in-flight (promesse partagée par
+    N appelants sur le même token), fallback cache stale sur 429,
+    TTL cache 5 min.
+- `@varde/bot` : bridge discord.js pour l'onboarding (PR 3.12d).
+  - `createOnboardingDiscordBridge(client)` mappe les 6
+    primitives vers `guild.roles.create` / `.channels.create` /
+    `.delete` avec les bons `ChannelType` (GuildText / Voice /
+    Forum / Category), `OverwriteType.Role`, `PermissionsBitField`,
+    `colors: { primaryColor }` (nouvelle API discord.js v14.26).
+    Suppressions idempotentes si l'entité est déjà absente.
+- `@varde/dashboard` : flow builder complet.
+  - `PresetPicker` (5 presets + CTA IA), `AIGenerator` (textarea +
+    locale, progress bar + compteur pendant la génération,
+    proposition acceptable ou regénérable), `BuilderCanvas` (draft
+    en lecture + `SuggestionsPanel` IA), `PreviewStep` (liste des
+    actions), `AppliedStep` (compte à rebours MM:SS, barre de
+    progression remplie, heure d'expiration absolue, bouton
+    Actualiser post-expiration), `FinishedStep`.
+  - Page `/settings/ai` avec `AIProviderForm`. API key passée via
+    `FormData` pour ne pas apparaître en clair dans les dev logs
+    Next.js Turbopack (fix post-smoke).
+  - Nouveau composant réutilisable `@varde/ui/Progress` (ARIA
+    progressbar, pas de dépendance Radix).
+- `@varde/server` : executor + host `ctx.onboarding` construits
+  avant le ctx factory, scheduler scopé `core.onboarding` avec
+  reconcile au boot, bridge discord.js réel injecté dès que
+  `VARDE_DISCORD_TOKEN` est présent (fallback demo sinon — pour
+  CI / dev hors Discord).
+- `modules/onboarding-test` (nouveau) : module témoin qui
+  contribue une action `onboarding-test.setup-gaming-commands`
+  (crée un salon dédié, patche la config du module, undo supprime)
+  et un hint `channel` via `ctx.onboarding.*`. Couvre le
+  critère de sortie du jalon via 5 tests E2E `createTestHarness`.
+- ADR 0007 (moteur onboarding + IA en copilote, BYO-LLM) ajouté.
+- Outillage dev : `dev` script sur tous les packages internes
+  (tsc --watch), `pnpm dev` à la racine via Turbo pour lancer
+  tous les watchers + le `next dev` du dashboard + le `node --watch`
+  du server en parallèle. Fin des rebuilds manuels par paquet.
+
 ### Jalon 2 — dashboard minimum viable (2026-04-21)
 
 Clos. Critère de sortie ROADMAP vérifié : un admin logué via Discord

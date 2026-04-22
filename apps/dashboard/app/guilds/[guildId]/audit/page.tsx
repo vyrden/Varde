@@ -94,7 +94,7 @@ export default async function AuditPage({
   const { guildId } = await params;
   const rawSearch = await searchParams;
   const session = await auth();
-  if (!session?.user) redirect('/api/auth/signin');
+  if (!session?.user) redirect('/');
 
   const filters = buildFilters(rawSearch);
 
@@ -103,7 +103,7 @@ export default async function AuditPage({
   try {
     [guilds, page] = await Promise.all([fetchAdminGuilds(), fetchAudit(guildId, filters)]);
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) redirect('/api/auth/signin');
+    if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && error.status === 403) notFound();
     throw error;
   }

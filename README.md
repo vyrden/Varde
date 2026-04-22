@@ -18,6 +18,16 @@ Projet en conception avancée.
   config d'un module depuis un formulaire généré, et parcourir le
   journal d'audit. Single-origin bot + API via `apps/server`
   (ADR 0004), session partagée par cookie JWT HS256 (ADR 0006).
+- Jalon 3 (moteur d'onboarding) terminé (2026-04-22) : un admin
+  peut lancer un onboarding depuis un preset hand-curé ou depuis
+  une proposition IA, prévisualiser la liste d'actions, appliquer
+  sur le serveur Discord réel (bridge discord.js v14 :
+  création rôles / catégories / salons avec permission overwrites),
+  et rollback dans les 30 min. IA en copilote BYO-LLM — aucun
+  provider par défaut (CLAUDE.md §13 : pas de phone home), l'admin
+  branche Ollama en local ou un backend OpenAI-compatible
+  (OpenAI / OpenRouter / Groq / vLLM / LM Studio), la clé vit
+  chiffrée AES-256-GCM dans le keystore (ADR 0007).
 
 Paquets livrés à ce jour :
 
@@ -44,12 +54,24 @@ Paquets livrés à ce jour :
   (`ConfigForm`) dérivé de `configUi` + validation Ajv client
   (ADR 0005), page de journal d'audit.
 - `@varde/testing` — `createTestHarness` pour les tests d'intégration
-  de modules (SQLite in-memory, faux temps injectable).
-- `modules/hello-world` — module témoin de l'API.
+  de modules (SQLite in-memory, faux temps injectable, executor
+  onboarding pré-câblé avec les actions core).
+- `@varde/ai` — contrat `AIProvider` + service tracé
+  (`ai_invocations`, hash prompt SHA-256) + trois providers :
+  stub rule-based déterministe, Ollama, OpenAI-compatible.
+  Timeout 30 s, erreurs typées (`timeout | unavailable |
+  invalid_response | quota_exceeded | unauthorized | unknown`).
+- `@varde/presets` — catalogue de 5 presets hand-curés (tech,
+  gaming, creative, study, generic starter) validés Zod +
+  validator sémantique sur les refs locales.
+- `modules/hello-world` — module témoin de l'API core.
+- `modules/onboarding-test` — module témoin du contrat
+  d'extension onboarding : contribue une action custom et un hint
+  via `ctx.onboarding.*` (PR 3.13).
 
-Reste à livrer avant V1.0.0 : onboarding adaptatif (jalon 3), modules
-officiels moderation/welcome/roles/logs (jalons suivants). Pas encore
-de release tagguée.
+Reste à livrer avant V1.0.0 : modules officiels
+moderation / welcome / roles / logs (jalon 4), polish i18n +
+Playwright (jalon 5). Pas encore de release tagguée.
 
 ## Pourquoi un bot de plus
 

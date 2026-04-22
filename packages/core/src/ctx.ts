@@ -7,6 +7,7 @@ import type {
   ModuleContext,
   ModuleId,
   ModulesService,
+  OnboardingService,
   ScopedDatabase,
 } from '@varde/contracts';
 import type { DbClient, DbDriver } from '@varde/db';
@@ -53,6 +54,15 @@ export interface CreateCtxFactoryOptions<D extends DbDriver> {
   readonly modules?: ModulesService;
   /** Service IA. `null` en V1 si aucun provider configuré. */
   readonly ai?: AIService | null;
+  /**
+   * Point d'extension onboarding pour les modules (PR 3.13). Permet
+   * de `registerAction` (ajoute une action custom au registre de
+   * l'executor) et `contributeHint` (suggestion déterministe pour
+   * le builder). Stub si omis → les appels depuis un module
+   * lèveront une erreur explicite (utile pour isoler des tests
+   * unitaires qui n'ont pas besoin du moteur).
+   */
+  readonly onboarding?: OnboardingService;
   readonly defaultLocale?: string;
   readonly locales?: Readonly<Record<string, I18nMessages>>;
   readonly schedulerTickMs?: number;
@@ -81,6 +91,19 @@ const modulesStub: ModulesService = Object.freeze({
   isEnabled: async () => false,
 });
 
+const onboardingStub: OnboardingService = Object.freeze({
+  registerAction: () => {
+    throw new Error(
+      'OnboardingService non câblé : `ctx.onboarding.registerAction` nécessite un host qui expose un executor (apps/server).',
+    );
+  },
+  contributeHint: () => {
+    throw new Error(
+      'OnboardingService non câblé : `ctx.onboarding.contributeHint` nécessite un host qui expose un hint registry (apps/server).',
+    );
+  },
+});
+
 export function createCtxFactory<D extends DbDriver>(
   options: CreateCtxFactoryOptions<D>,
 ): CtxBundle {
@@ -95,6 +118,7 @@ export function createCtxFactory<D extends DbDriver>(
     discord = discordStub,
     modules = modulesStub,
     ai = null,
+    onboarding = onboardingStub,
     defaultLocale = 'en',
     locales = {},
     schedulerTickMs,
@@ -183,6 +207,7 @@ export function createCtxFactory<D extends DbDriver>(
       keystore: keystoreFor(moduleId),
       ai,
       ui,
+      onboarding,
     });
   };
 

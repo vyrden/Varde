@@ -20,6 +20,7 @@ import type {
   UserId,
 } from '@varde/contracts';
 import {
+  CORE_ACTIONS,
   type CoreConfigService,
   type CorePermissionService,
   type CoreSchedulerService,
@@ -29,8 +30,12 @@ import {
   createCtxFactory,
   createEventBus,
   createLogger,
+  createOnboardingExecutor,
+  createOnboardingHostService,
   createPermissionService,
   createPluginLoader,
+  type OnboardingExecutor,
+  type OnboardingHostService,
   type PermissionContext,
   type PluginLoader,
 } from '@varde/core';
@@ -68,6 +73,19 @@ export interface TestHarness {
   readonly ctxFactory: CtxFactory;
   readonly commandRegistry: CommandRegistry;
   readonly dispatcher: BotDispatcher;
+  /**
+   * Executor onboarding partagé avec `ctx.onboarding`. Les modules
+   * peuvent lui contribuer des actions custom via `registerAction` ;
+   * les tests peuvent directement le piloter via `applyActions` /
+   * `undoSession` pour simuler un cycle sans passer par les routes.
+   */
+  readonly onboardingExecutor: OnboardingExecutor;
+  /**
+   * Host du service `ctx.onboarding`. Expose `getHints` /
+   * `getContributedActionTypes` pour vérifier ce que les modules ont
+   * contribué pendant leur onLoad.
+   */
+  readonly onboardingHost: OnboardingHostService;
 
   readonly loadModule: (definition: ModuleDefinition) => Promise<void>;
   readonly enable: (guildId: GuildId, moduleId: ModuleId) => Promise<void>;
@@ -134,6 +152,20 @@ export async function createTestHarness(
   let fakeNow = options.startTime ?? new Date();
   const now = (): Date => fakeNow;
 
+  // Executor onboarding + hôte `ctx.onboarding` pré-alimenté avec
+  // les actions core (createRole/Category/Channel, patchModuleConfig).
+  // Les modules chargés via `loadModule()` peuvent ensuite contribuer
+  // leurs propres actions via `ctx.onboarding.registerAction` (PR 3.13).
+  const onboardingExecutor = createOnboardingExecutor({ client, logger });
+  for (const action of CORE_ACTIONS) {
+    onboardingExecutor.registerAction(
+      action as Parameters<typeof onboardingExecutor.registerAction>[0],
+    );
+  }
+  const onboardingHost: OnboardingHostService = createOnboardingHostService({
+    executor: onboardingExecutor,
+  });
+
   const bundle: CtxBundle = createCtxFactory({
     client,
     loggerRoot: logger,
@@ -142,6 +174,7 @@ export async function createTestHarness(
     permissions,
     keystoreMasterKey,
     schedulerNow: now,
+    onboarding: onboardingHost.service,
     ...(options.defaultLocale ? { defaultLocale: options.defaultLocale } : {}),
     ...(options.locales ? { locales: options.locales } : {}),
   });
@@ -209,6 +242,8 @@ export async function createTestHarness(
     ctxFactory: bundle.factory,
     commandRegistry,
     dispatcher,
+    onboardingExecutor,
+    onboardingHost,
 
     loadModule,
     enable: (guildId, moduleId) => loader.enable(guildId, moduleId),

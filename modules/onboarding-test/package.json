@@ -1,0 +1,34 @@
+{
+  "name": "@varde/module-onboarding-test",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Module témoin : exerce le contrat d'extension onboarding (registerAction + contributeHint).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "dev": "tsc --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@varde/contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "@varde/core": "workspace:*",
+    "@varde/db": "workspace:*",
+    "@varde/testing": "workspace:*",
+    "better-sqlite3": "12.9.0",
+    "drizzle-orm": "0.45.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  }
+}
