@@ -95,6 +95,31 @@ describe('AIGenerator', () => {
     );
   });
 
+  it('affiche une Progress bar tant que la génération est en cours', async () => {
+    type ResolveFn = (v: { ok: true; data: typeof fakeProposal }) => void;
+    const resolveRef: { current: ResolveFn | null } = { current: null };
+    generatePresetWithAi.mockImplementation(
+      () =>
+        new Promise<{ ok: true; data: typeof fakeProposal }>((r) => {
+          resolveRef.current = r;
+        }),
+    );
+    render(<AIGenerator guildId="g1" onBack={() => undefined} />);
+
+    fireEvent.change(screen.getByLabelText(/description de la communauté/i), {
+      target: { value: 'commu tech' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^générer$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar', { name: /génération ia/i })).toBeTruthy(),
+    );
+
+    resolveRef.current?.({ ok: true, data: fakeProposal });
+
+    await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull());
+  });
+
   it('bouton Régénérer ramène au formulaire de saisie', async () => {
     generatePresetWithAi.mockResolvedValue({ ok: true, data: fakeProposal });
     render(<AIGenerator guildId="g1" onBack={() => undefined} />);

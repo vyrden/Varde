@@ -1,7 +1,16 @@
 'use client';
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Label } from '@varde/ui';
-import { type FormEvent, type ReactElement, useState, useTransition } from 'react';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Label,
+  Progress,
+} from '@varde/ui';
+import { type FormEvent, type ReactElement, useEffect, useState, useTransition } from 'react';
 
 import { generatePresetWithAi, startOnboardingWithAiProposal } from '../../lib/onboarding-actions';
 import type { GeneratedPresetDto } from '../../lib/onboarding-client';
@@ -45,13 +54,31 @@ const descriptionOf = (preset: Readonly<Record<string, unknown>>): string => {
  * `/ai/generate-preset`. Seul le hash du prompt vit dans
  * `ai_invocations`, jamais le texte brut (ADR 0007 R5).
  */
+// Timeout appliqué côté `AIService` (packages/ai/src/service.ts).
+// On affiche une progress bar qui s'arrête à 95% pour ne jamais
+// donner l'impression que c'est fini avant que le résultat arrive.
+const AI_TIMEOUT_MS = 30_000;
+
 export function AIGenerator({ guildId, onBack }: AIGeneratorProps): ReactElement {
   const [description, setDescription] = useState('');
   const [locale, setLocale] = useState<'fr' | 'en'>('fr');
   const [generating, setGenerating] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [proposal, setProposal] = useState<GeneratedPresetDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accepting, startAccepting] = useTransition();
+
+  useEffect(() => {
+    if (!generating) {
+      setElapsedMs(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 200);
+    return () => clearInterval(id);
+  }, [generating]);
 
   const onGenerate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -200,9 +227,31 @@ export function AIGenerator({ guildId, onBack }: AIGeneratorProps): ReactElement
         </p>
       ) : null}
 
+      {generating ? (
+        <Card>
+          <CardContent className="space-y-2 pt-6">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">L'IA réfléchit…</span>
+              <span className="tabular-nums text-muted-foreground">
+                {Math.min(Math.round(elapsedMs / 1000), AI_TIMEOUT_MS / 1000)}s / ~
+                {AI_TIMEOUT_MS / 1000}s
+              </span>
+            </div>
+            <Progress
+              value={Math.min(95, (elapsedMs / AI_TIMEOUT_MS) * 100)}
+              label="génération IA en cours"
+            />
+            <p className="text-xs text-muted-foreground">
+              Le délai dépend du provider : Ollama local répond souvent en 2 à 5 secondes, OpenAI
+              gpt-4o-mini entre 5 et 15 secondes. La requête coupe à 30 secondes.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={generating}>
-          {generating ? 'Génération...' : 'Générer'}
+          {generating ? 'Génération…' : 'Générer'}
         </Button>
         <Button type="button" variant="outline" onClick={onBack} disabled={generating}>
           Retour aux presets
