@@ -12,6 +12,7 @@ export {
   createJwtAuthenticator,
 } from './jwt-authenticator.js';
 export { requireGuildAdmin } from './middleware/require-guild-admin.js';
+export { reconcileOnboardingSessions } from './onboarding-reconcile.js';
 export {
   type AiProviderId,
   type AiSettingsDto,
@@ -34,6 +35,8 @@ export {
   registerModulesRoutes,
 } from './routes/modules.js';
 export {
+  autoExpireJobKey,
+  buildAutoExpireHandler,
   type OnboardingActionContextFactory,
   type OnboardingSessionDto,
   type PreviewDto,

@@ -7,6 +7,7 @@ import {
   createJwtAuthenticator,
   type DiscordClient,
   type OnboardingActionContextFactory,
+  reconcileOnboardingSessions,
   registerAiSettingsRoutes,
   registerAuditRoutes,
   registerGuildsRoutes,
@@ -21,6 +22,7 @@ import {
   type CoreAuditService,
   type CoreConfigService,
   type CorePermissionService,
+  type CoreSchedulerService,
   type CtxBundle,
   createAuditService,
   createConfigService,
@@ -31,6 +33,7 @@ import {
   createOnboardingExecutor,
   createPermissionService,
   createPluginLoader,
+  createSchedulerService,
   type OnboardingExecutor,
   type PluginLoader,
 } from '@varde/core';
@@ -47,12 +50,13 @@ import { PRESET_CATALOG } from '@varde/presets';
 type ApiServer = Awaited<ReturnType<typeof createApiServer>>;
 
 /**
- * Insère (de manière idempotente) le pseudo-module `core.ai` dans
- * `modules_registry` pour que le keystore scopé `core.ai` puisse
- * respecter la FK `keystore.module_id`. Ce pseudo-module n'est pas
- * chargé par le loader — il n'apparaît pas dans `/guilds/:id/modules`.
+ * Insère (de manière idempotente) un pseudo-module dans
+ * `modules_registry`. Utilisé pour les scopes internes (`core.ai`,
+ * `core.onboarding`) qui ont besoin d'une FK `module_id` pour le
+ * keystore et le scheduler mais qui ne sont pas des plugins chargés
+ * par le loader — ils n'apparaissent pas dans `/guilds/:id/modules`.
  */
-const ensureCoreAiModuleRegistered = async <D extends DbDriver>(
+const ensurePseudoModuleRegistered = async <D extends DbDriver>(
   client: DbClient<D>,
   moduleId: string,
 ): Promise<void> => {
@@ -311,7 +315,7 @@ export async function createServer<D extends DbDriver>(
   // un pseudo-module idempotent — il n'apparaît pas dans /modules
   // (ce dernier lit `loader.loadOrder()`, pas la table).
   const aiModuleId = 'core.ai' as ModuleId;
-  await ensureCoreAiModuleRegistered(client, aiModuleId);
+  await ensurePseudoModuleRegistered(client, aiModuleId);
   const aiKeystore = createKeystoreService({
     client,
     moduleId: aiModuleId,
@@ -319,6 +323,20 @@ export async function createServer<D extends DbDriver>(
     ...(options.keystore?.previousMasterKey
       ? { previousMasterKey: options.keystore.previousMasterKey }
       : {}),
+  });
+
+  // Scheduler scopé au pseudo-module `core.onboarding` pour tenir les
+  // jobs d'auto-expiration des sessions appliquées (PR 3.12b). Chaque
+  // apply réussi pose un job one-shot à `expiresAt` ; chaque rollback
+  // réussi annule le job correspondant. Au boot, `reconcileOnboardingSessions`
+  // rattrape les jobs manqués pendant l'arrêt du process.
+  const onboardingModuleId = 'core.onboarding' as ModuleId;
+  await ensurePseudoModuleRegistered(client, onboardingModuleId);
+  const schedulerLogger = logger.child({ component: 'scheduler.onboarding' });
+  const onboardingScheduler: CoreSchedulerService = createSchedulerService({
+    client,
+    moduleId: onboardingModuleId,
+    logger,
   });
 
   registerGuildsRoutes(api, { client, discord });
@@ -332,9 +350,18 @@ export async function createServer<D extends DbDriver>(
     actionContextFactory: demoActionContextFactory,
     presetCatalog: PRESET_CATALOG,
     ai: { config, keystore: aiKeystore, logger },
+    scheduler: onboardingScheduler,
+    schedulerLogger,
+  });
+
+  await reconcileOnboardingSessions({
+    client,
+    scheduler: onboardingScheduler,
+    logger: schedulerLogger,
   });
 
   const start = async (): Promise<{ readonly address: string }> => {
+    onboardingScheduler.start();
     const address = await api.listen({
       port: options.api.port ?? 4000,
       host: options.api.host ?? '127.0.0.1',
@@ -343,6 +370,7 @@ export async function createServer<D extends DbDriver>(
   };
 
   const stop = async (): Promise<void> => {
+    onboardingScheduler.stop();
     await loader.unloadAll().catch(() => undefined);
     await api.close().catch(() => undefined);
     await ctxBundle.shutdown().catch(() => undefined);

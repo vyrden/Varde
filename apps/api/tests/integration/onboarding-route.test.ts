@@ -12,17 +12,21 @@ import {
   createKeystoreService,
   createLogger,
   createOnboardingExecutor,
+  createSchedulerService,
 } from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient, sqliteSchema } from '@varde/db';
 import { communityTechSmall, PRESET_CATALOG } from '@varde/presets';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type Authenticator,
+  autoExpireJobKey,
   createApiServer,
   createDiscordClient,
   type DiscordGuild,
   type FetchLike,
+  reconcileOnboardingSessions,
   registerOnboardingRoutes,
   type SessionData,
 } from '../../src/index.js';
@@ -111,7 +115,15 @@ describe('routes /guilds/:guildId/onboarding', () => {
     await client.close();
   });
 
-  const build = async (opts: { mockDiscord?: MockDiscord; withAi?: boolean } = {}) => {
+  const build = async (
+    opts: {
+      mockDiscord?: MockDiscord;
+      withAi?: boolean;
+      withScheduler?: boolean;
+      rollbackWindowMs?: number;
+      now?: () => Date;
+    } = {},
+  ) => {
     const logger = silentLogger();
     const config = createConfigService({ client });
     await config.ensureGuild(GUILD);
@@ -147,13 +159,29 @@ describe('routes /guilds/:guildId/onboarding', () => {
       aiOption = { config, keystore, logger };
     }
 
+    let scheduler: ReturnType<typeof createSchedulerService> | null = null;
+    if (opts.withScheduler) {
+      const onboardingModuleId = 'core.onboarding' as ModuleId;
+      await client.db
+        .insert(sqliteSchema.modulesRegistry)
+        .values({ id: onboardingModuleId, version: '1.0.0', manifest: {}, schemaVersion: 0 })
+        .run();
+      scheduler = createSchedulerService({
+        client,
+        moduleId: onboardingModuleId,
+        logger,
+        ...(opts.now ? { now: opts.now } : {}),
+      });
+    }
+
     registerOnboardingRoutes(app, {
       client,
       discord,
       executor,
       presetCatalog: PRESET_CATALOG,
-      rollbackWindowMs: 30 * 60 * 1000,
+      rollbackWindowMs: opts.rollbackWindowMs ?? 30 * 60 * 1000,
       ...(aiOption ? { ai: aiOption } : {}),
+      ...(scheduler ? { scheduler, schedulerLogger: logger } : {}),
       actionContextFactory: ({ guildId, actorId }): OnboardingActionContext => ({
         guildId,
         actorId,
@@ -169,7 +197,7 @@ describe('routes /guilds/:guildId/onboarding', () => {
         resolveLocalId: () => null,
       }),
     });
-    return { app, config, mock, executor };
+    return { app, config, mock, executor, scheduler, logger };
   };
 
   // ─── Authentication / authorization ───────────────────────────────
@@ -803,6 +831,235 @@ describe('routes /guilds/:guildId/onboarding', () => {
         headers: { 'content-type': 'application/json' },
       });
       expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // ─── Scheduler auto-expire (PR 3.12b) ────────────────────────────
+
+  it('apply réussi planifie un job auto-expire dans le scheduler', async () => {
+    // Fenêtre très courte et `now` scheduler aligné sur l'horloge
+    // réelle : on laisse le route calculer `expiresAt = new Date() +
+    // 1ms`, puis on avance légèrement la clock scheduler pour que
+    // `runOnce()` considère le job dû.
+    const realStart = Date.now();
+    const { app, scheduler } = await build({
+      withScheduler: true,
+      rollbackWindowMs: 1,
+      now: () => new Date(Date.now() + 1_000),
+    });
+    if (!scheduler) throw new Error('scheduler manquant');
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ source: 'preset', presetId: communityTechSmall.id }),
+      });
+      const sessionId = created.json().id as string;
+
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/apply`,
+        headers: authHeader,
+      });
+
+      const rows = await client.db.select().from(sqliteSchema.scheduledTasks).all();
+      const job = rows.find((r) => r.jobKey === autoExpireJobKey(sessionId));
+      expect(job).toBeDefined();
+      expect(job?.status).toBe('pending');
+      expect(job?.kind).toBe('one_shot');
+      // runAt proche de Date.now() au moment du apply (fenêtre = 1ms).
+      expect(new Date(job?.runAt ?? 0).getTime()).toBeGreaterThanOrEqual(realStart);
+
+      expect(await scheduler.runOnce()).toBe(1);
+
+      // GET /current retourne 404 puisque 'expired' n'est pas dans CURRENT_STATUSES.
+      const after = await app.inject({
+        method: 'GET',
+        url: `/guilds/${GUILD}/onboarding/current`,
+        headers: authHeader,
+      });
+      expect(after.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rollback réussi annule le job auto-expire planifié', async () => {
+    const fakeNow = new Date('2026-05-01T12:00:00.000Z');
+    const { app, scheduler } = await build({
+      withScheduler: true,
+      now: () => fakeNow,
+    });
+    if (!scheduler) throw new Error('scheduler manquant');
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ source: 'preset', presetId: communityTechSmall.id }),
+      });
+      const sessionId = created.json().id as string;
+
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/apply`,
+        headers: authHeader,
+      });
+
+      const before = await client.db.select().from(sqliteSchema.scheduledTasks).all();
+      expect(before.find((r) => r.jobKey === autoExpireJobKey(sessionId))?.status).toBe('pending');
+
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/rollback`,
+        headers: authHeader,
+      });
+
+      const after = await client.db.select().from(sqliteSchema.scheduledTasks).all();
+      expect(after.find((r) => r.jobKey === autoExpireJobKey(sessionId))?.status).toBe('cancelled');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('handler auto-expire est idempotent : ne touche pas une session déjà rolled_back', async () => {
+    let fakeNow = new Date('2026-05-01T14:00:00.000Z');
+    const { app, scheduler } = await build({
+      withScheduler: true,
+      rollbackWindowMs: 30 * 60 * 1000,
+      now: () => fakeNow,
+    });
+    if (!scheduler) throw new Error('scheduler manquant');
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ source: 'preset', presetId: communityTechSmall.id }),
+      });
+      const sessionId = created.json().id as string;
+
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/apply`,
+        headers: authHeader,
+      });
+      // rollback manuel AVANT échéance : le job est cancelled côté
+      // scheduler ; même si on force runOnce après l'échéance, la
+      // session reste rolled_back.
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/rollback`,
+        headers: authHeader,
+      });
+
+      fakeNow = new Date(fakeNow.getTime() + 60 * 60 * 1000);
+      await scheduler.runOnce();
+
+      const [row] = await client.db
+        .select()
+        .from(sqliteSchema.onboardingSessions)
+        .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
+        .all();
+      expect(row?.status).toBe('rolled_back');
+    } finally {
+      await app.close();
+    }
+  });
+
+  // ─── Reconcile au boot (PR 3.12b) ───────────────────────────────
+
+  it('reconcileOnboardingSessions : marque expired les sessions dont expiresAt est passé', async () => {
+    const { app, scheduler } = await build({ withScheduler: true });
+    if (!scheduler) throw new Error('scheduler manquant');
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ source: 'blank' }),
+      });
+      const sessionId = created.json().id as string;
+      // Force la session en applied avec expiresAt dans le passé.
+      await client.db
+        .update(sqliteSchema.onboardingSessions)
+        .set({
+          status: 'applied',
+          appliedAt: '2026-04-01T00:00:00.000Z',
+          expiresAt: '2026-04-01T00:30:00.000Z',
+        })
+        .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
+        .run();
+
+      const logger = silentLogger();
+      const result = await reconcileOnboardingSessions({
+        client,
+        scheduler,
+        logger,
+        now: () => new Date('2026-05-01T00:00:00.000Z'),
+      });
+
+      expect(result.expired).toBe(1);
+      expect(result.reenqueued).toBe(0);
+
+      const [row] = await client.db
+        .select()
+        .from(sqliteSchema.onboardingSessions)
+        .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
+        .all();
+      expect(row?.status).toBe('expired');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reconcileOnboardingSessions : réenregistre les sessions applied encore dans la fenêtre', async () => {
+    let fakeNow = new Date('2026-05-01T10:00:00.000Z');
+    const { app, scheduler } = await build({ withScheduler: true, now: () => fakeNow });
+    if (!scheduler) throw new Error('scheduler manquant');
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ source: 'blank' }),
+      });
+      const sessionId = created.json().id as string;
+      const futureExpires = new Date(fakeNow.getTime() + 20 * 60 * 1000);
+      await client.db
+        .update(sqliteSchema.onboardingSessions)
+        .set({
+          status: 'applied',
+          appliedAt: fakeNow.toISOString(),
+          expiresAt: futureExpires.toISOString(),
+        })
+        .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
+        .run();
+
+      const logger = silentLogger();
+      const result = await reconcileOnboardingSessions({
+        client,
+        scheduler,
+        logger,
+        now: () => fakeNow,
+      });
+
+      expect(result.expired).toBe(0);
+      expect(result.reenqueued).toBe(1);
+
+      // Le scheduler fait passer expired à l'échéance même après reconcile.
+      fakeNow = new Date(futureExpires.getTime() + 1_000);
+      expect(await scheduler.runOnce()).toBe(1);
+
+      const [row] = await client.db
+        .select()
+        .from(sqliteSchema.onboardingSessions)
+        .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
+        .all();
+      expect(row?.status).toBe('expired');
     } finally {
       await app.close();
     }

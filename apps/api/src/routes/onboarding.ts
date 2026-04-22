@@ -14,6 +14,7 @@ import {
   type OnboardingSessionRecord,
   onboardingDraftSchema,
   parseUlid,
+  type SchedulerService,
   type Ulid,
   type UserId,
 } from '@varde/contracts';
@@ -103,7 +104,21 @@ export interface RegisterOnboardingRoutesOptions<D extends DbDriver> {
     readonly logger: Logger;
     readonly fetchImpl?: typeof globalThis.fetch;
   };
+  /**
+   * SchedulerService pour l'auto-expiration des sessions appliquées.
+   * Fourni : chaque `/apply` réussi planifie un job one-shot à
+   * `expiresAt` qui passe la session en `expired` si l'admin n'a ni
+   * rollbacké ni confirmé. Omis : pas de transition auto, la session
+   * reste en `applied` indéfiniment (fallback utile en tests
+   * unitaires qui ne veulent pas bootstrap un scheduler).
+   */
+  readonly scheduler?: SchedulerService;
+  /** Logger pour le handler auto-expire. Requis si `scheduler` est fourni. */
+  readonly schedulerLogger?: Logger;
 }
+
+/** Clé de job utilisée pour `scheduler.at` + `scheduler.cancel`. */
+export const autoExpireJobKey = (sessionId: string): string => `onboarding.autoExpire:${sessionId}`;
 
 // ─── Types DTO ─────────────────────────────────────────────────────
 
@@ -197,15 +212,43 @@ const isSessionActive = (status: OnboardingSessionRecord['status']): boolean =>
 
 // ─── Enregistrement ────────────────────────────────────────────────
 
+/**
+ * Construit le handler de tâche planifiée qui fait expirer une
+ * session `applied` dont la fenêtre de rollback vient de s'écouler.
+ * Idempotent : re-vérifie le status en base avant de muter pour
+ * gérer la race où l'admin a rollbacké entre le schedule et le fire
+ * du job. Exporté pour que la passe de réconciliation au boot
+ * puisse réenregistrer exactement le même handler avec
+ * `scheduler.register(jobKey, handler)`.
+ */
+export const buildAutoExpireHandler = <D extends DbDriver>(
+  client: DbClient<D>,
+  sessionId: Ulid,
+  logger: Logger,
+): (() => Promise<void>) => {
+  return async () => {
+    const row = await findSessionById(client, sessionId);
+    if (!row) return;
+    if (row.status !== 'applied') return;
+    await updateSession(client, sessionId, { status: 'expired' });
+    logger.info('session onboarding auto-expirée', { sessionId });
+  };
+};
+
 export function registerOnboardingRoutes<D extends DbDriver>(
   app: FastifyInstance,
   options: RegisterOnboardingRoutesOptions<D>,
 ): void {
-  const { client, discord, executor, actionContextFactory } = options;
+  const { client, discord, executor, actionContextFactory, scheduler, schedulerLogger } = options;
   const rollbackWindowMs = options.rollbackWindowMs ?? DEFAULT_ROLLBACK_WINDOW_MS;
   const presetById = new Map<string, PresetDefinition>();
   for (const preset of options.presetCatalog ?? []) {
     presetById.set(preset.id, preset);
+  }
+  if (scheduler !== undefined && schedulerLogger === undefined) {
+    throw new Error(
+      'registerOnboardingRoutes: `schedulerLogger` requis quand `scheduler` est fourni.',
+    );
   }
 
   // POST /guilds/:guildId/onboarding — création de session
@@ -542,11 +585,16 @@ export function registerOnboardingRoutes<D extends DbDriver>(
 
       if (result.ok) {
         const now = new Date();
+        const expiresAt = new Date(now.getTime() + rollbackWindowMs);
         await updateSession(client, sessionId, {
           status: 'applied',
           appliedAt: now,
-          expiresAt: new Date(now.getTime() + rollbackWindowMs),
+          expiresAt,
         });
+        if (scheduler && schedulerLogger) {
+          const handler = buildAutoExpireHandler(client, sessionId, schedulerLogger);
+          await scheduler.at(expiresAt, autoExpireJobKey(sessionId), handler);
+        }
       } else {
         await updateSession(client, sessionId, { status: 'failed' });
       }
@@ -602,6 +650,9 @@ export function registerOnboardingRoutes<D extends DbDriver>(
 
       if (result.ok) {
         await updateSession(client, sessionId, { status: 'rolled_back' });
+        if (scheduler) {
+          await scheduler.cancel(autoExpireJobKey(sessionId));
+        }
       }
 
       return {
