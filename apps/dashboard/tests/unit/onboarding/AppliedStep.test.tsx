@@ -2,30 +2,40 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const rollbackOnboarding = vi.fn();
+const routerRefresh = vi.fn();
 
 vi.mock('../../../lib/onboarding-actions', () => ({
   rollbackOnboarding: (...args: unknown[]) => rollbackOnboarding(...args),
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: routerRefresh }),
+}));
+
 import { AppliedStep } from '../../../components/onboarding/AppliedStep';
 import type { OnboardingSessionDto } from '../../../lib/onboarding-client';
 
-const buildSession = (expiresInMs: number): OnboardingSessionDto => ({
-  id: '01HAPP',
-  guildId: 'g1',
-  status: 'applied',
-  presetSource: 'preset',
-  presetId: 'p',
-  draft: { locale: 'fr', roles: [], categories: [], channels: [], modules: [] },
-  startedAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  appliedAt: new Date().toISOString(),
-  expiresAt: new Date(Date.now() + expiresInMs).toISOString(),
-});
+const buildSession = (expiresInMs: number): OnboardingSessionDto => {
+  const appliedAt = new Date();
+  const expiresAt = new Date(appliedAt.getTime() + expiresInMs);
+  return {
+    id: '01HAPP',
+    guildId: 'g1',
+    status: 'applied',
+    presetSource: 'preset',
+    presetId: 'p',
+    draft: { locale: 'fr', roles: [], categories: [], channels: [], modules: [] },
+    startedAt: appliedAt.toISOString(),
+    updatedAt: appliedAt.toISOString(),
+    appliedAt: appliedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  };
+};
 
 describe('AppliedStep', () => {
   beforeEach(() => {
     rollbackOnboarding.mockReset();
+    routerRefresh.mockReset();
   });
 
   it('affiche le compte à rebours et active le bouton Défaire', () => {
@@ -51,5 +61,39 @@ describe('AppliedStep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /défaire/i }));
     await waitFor(() => expect(rollbackOnboarding).toHaveBeenCalledWith('g1', '01HAPP'));
+  });
+
+  it('affiche une progressbar avec aria-valuenow à mi-parcours', () => {
+    // On monte avec 5 min restantes sur une fenêtre de 30 min : la
+    // barre devrait être remplie à ~83%.
+    const appliedAt = new Date(Date.now() - 25 * 60_000);
+    const expiresAt = new Date(appliedAt.getTime() + 30 * 60_000);
+    render(
+      <AppliedStep
+        session={{
+          id: '01HAPP',
+          guildId: 'g1',
+          status: 'applied',
+          presetSource: 'preset',
+          presetId: 'p',
+          draft: { locale: 'fr', roles: [], categories: [], channels: [], modules: [] },
+          startedAt: appliedAt.toISOString(),
+          updatedAt: appliedAt.toISOString(),
+          appliedAt: appliedAt.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        }}
+      />,
+    );
+    const bar = screen.getByRole('progressbar');
+    const value = Number(bar.getAttribute('aria-valuenow'));
+    expect(value).toBeGreaterThanOrEqual(80);
+    expect(value).toBeLessThanOrEqual(100);
+  });
+
+  it('expose un bouton Actualiser après expiration qui appelle router.refresh', () => {
+    render(<AppliedStep session={buildSession(-1000)} />);
+    const refreshButton = screen.getByRole('button', { name: /actualiser/i });
+    fireEvent.click(refreshButton);
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
   });
 });

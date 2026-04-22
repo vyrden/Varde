@@ -17,6 +17,7 @@ export { Header, type HeaderProps } from './components/Header.js';
 export { Input, type InputProps } from './components/Input.js';
 export { Label, type LabelProps } from './components/Label.js';
 export { PageTitle, type PageTitleProps } from './components/PageTitle.js';
+export { Progress, type ProgressProps } from './components/Progress.js';
 export {
   Sidebar,
   SidebarItem,
