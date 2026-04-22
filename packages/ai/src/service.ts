@@ -23,7 +23,10 @@ import {
  * 1. valide les entrées via Zod (garde un contrat strict entre la
  *    route HTTP et l'adapter, même si l'adapter fait confiance à
  *    son input),
- * 2. applique un timeout global (défaut 8s, overridable),
+ * 2. applique un timeout global (défaut 30s, overridable). Choisi
+ *    pour englober les 20s de l'adapter OpenAI-compat tout en
+ *    laissant de la marge aux modèles cloud lents (gpt-4, Claude
+ *    Opus…). Le stub et Ollama local terminent en dizaines de ms.
  * 3. logge chaque invocation dans `ai_invocations` — succès comme
  *    échec — avec un hash SHA-256 de l'input (le prompt brut n'est
  *    jamais stocké, seul son hash l'est ; ADR 0007 / R5),
@@ -40,7 +43,7 @@ import {
  * dans la logique métier de l'adapter.
  */
 
-const DEFAULT_TIMEOUT_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PROMPT_VERSION = 'v1';
 
 export interface CreateAIServiceOptions<D extends DbDriver> {
