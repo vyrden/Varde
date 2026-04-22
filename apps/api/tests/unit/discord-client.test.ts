@@ -94,12 +94,72 @@ describe('createDiscordClient', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it('lève DependencyFailureError sur réponse non-OK', async () => {
+  it('lève DependencyFailureError sur réponse non-OK (hors 429 avec stale)', async () => {
+    const fetch = vi.fn<FetchLike>().mockResolvedValue(new Response('boom', { status: 500 }));
+    const client = createDiscordClient({ fetch });
+    await expect(client.fetchUserGuilds('token')).rejects.toBeInstanceOf(DependencyFailureError);
+  });
+
+  it('lève sur 429 quand aucun cache stale n est disponible (cold start)', async () => {
     const fetch = vi
       .fn<FetchLike>()
       .mockResolvedValue(new Response('rate limited', { status: 429 }));
     const client = createDiscordClient({ fetch });
     await expect(client.fetchUserGuilds('token')).rejects.toBeInstanceOf(DependencyFailureError);
+  });
+
+  it('429 : renvoie le cache périmé si disponible plutôt que de lever', async () => {
+    const responses = [
+      jsonResponse([guildFixture('111')]),
+      new Response('rate limited', { status: 429 }),
+    ];
+    const fetch = vi.fn<FetchLike>().mockImplementation(async () => responses.shift() as Response);
+    let now = 1_000;
+    const client = createDiscordClient({ fetch, now: () => now, cacheTtlMs: 500 });
+    const first = await client.fetchUserGuilds('token');
+    expect(first).toEqual([guildFixture('111')]);
+
+    // TTL dépassé : nouvelle fetch qui retourne 429 → on doit servir
+    // le cache périmé au lieu de propager.
+    now += 1_000;
+    const second = await client.fetchUserGuilds('token');
+    expect(second).toEqual([guildFixture('111')]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('dédupe les requêtes concurrentes : un seul appel réseau pour N lecteurs', async () => {
+    let resolve: ((r: Response) => void) | null = null;
+    const fetch = vi.fn<FetchLike>().mockImplementation(
+      () =>
+        new Promise<Response>((r) => {
+          resolve = r;
+        }),
+    );
+    const client = createDiscordClient({ fetch });
+
+    const p1 = client.fetchUserGuilds('token');
+    const p2 = client.fetchUserGuilds('token');
+    const p3 = client.fetchUserGuilds('token');
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    resolve?.(jsonResponse([guildFixture('111')]));
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+    expect(r1).toEqual([guildFixture('111')]);
+    expect(r2).toEqual([guildFixture('111')]);
+    expect(r3).toEqual([guildFixture('111')]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("relance un appel réseau après la fin d'une requête in-flight", async () => {
+    const fetch = vi
+      .fn<FetchLike>()
+      .mockImplementation(async () => jsonResponse([guildFixture('111')]));
+    const client = createDiscordClient({ fetch, cacheTtlMs: 0 });
+    await client.fetchUserGuilds('token');
+    await client.fetchUserGuilds('token');
+    // cacheTtlMs=0 → cache jamais hit, et pas de requête in-flight
+    // résiduelle d'un appel précédent → 2 fetchs distincts.
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
 
