@@ -10,6 +10,13 @@ import type { AiProviderId } from './ai-settings-client.js';
  * `onboarding-actions.ts` : le Next forwarde le cookie au Fastify,
  * pas d'exposition de l'API vers le navigateur, les mutations
  * invalident la page via `revalidatePath`.
+ *
+ * Les actions acceptent un `FormData` plutôt qu'un objet JS parce
+ * que Next.js Turbopack expand les args objets dans ses dev logs —
+ * on a vu la clé OpenAI apparaître en clair côté terminal. `FormData`
+ * est loggé comme objet opaque, la clé reste cachée. L'arbitrage
+ * est en dev : en prod les server actions ne sont pas loggées, mais
+ * la règle "ne logge pas les secrets" s'applique aussi au dev.
  */
 
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
@@ -42,7 +49,7 @@ export interface AiTestResult {
   };
 }
 
-export type SaveBody =
+type SaveBody =
   | { providerId: 'none' }
   | { providerId: 'ollama'; endpoint: string; model: string }
   | { providerId: 'openai-compat'; endpoint: string; model: string; apiKey?: string };
@@ -61,10 +68,45 @@ const parseError = async (
   }
 };
 
+/**
+ * Extrait le `SaveBody` d'un FormData. Toute valeur absente tombe
+ * en défaut raisonnable ; les champs requis manquants (endpoint /
+ * model sur ollama / openai-compat) remontent une erreur structurée
+ * consommée par l'UI.
+ */
+const bodyFromFormData = (formData: FormData): SaveBody | { error: string } => {
+  const providerId = formData.get('providerId') as AiProviderId | null;
+  if (providerId === 'none' || providerId === null) {
+    return { providerId: 'none' };
+  }
+  const endpoint = (formData.get('endpoint') ?? '').toString().trim();
+  const model = (formData.get('model') ?? '').toString().trim();
+  if (endpoint.length === 0) return { error: 'endpoint requis' };
+  if (model.length === 0) return { error: 'model requis' };
+  if (providerId === 'ollama') {
+    return { providerId: 'ollama', endpoint, model };
+  }
+  if (providerId === 'openai-compat') {
+    const rawKey = formData.get('apiKey');
+    const apiKey = typeof rawKey === 'string' && rawKey.length > 0 ? rawKey : undefined;
+    return {
+      providerId: 'openai-compat',
+      endpoint,
+      model,
+      ...(apiKey !== undefined ? { apiKey } : {}),
+    };
+  }
+  return { error: `providerId inconnu : ${String(providerId)}` };
+};
+
 export async function saveAiSettings(
   guildId: string,
-  body: SaveBody,
+  formData: FormData,
 ): Promise<AiSettingsMutationResult> {
+  const body = bodyFromFormData(formData);
+  if ('error' in body) {
+    return { ok: false, message: body.error };
+  }
   const response = await fetch(`${API_URL}/guilds/${encodeURIComponent(guildId)}/settings/ai`, {
     method: 'PUT',
     cache: 'no-store',
@@ -83,7 +125,11 @@ export async function saveAiSettings(
   return { ok: false, status: response.status, ...err };
 }
 
-export async function testAiSettings(guildId: string, body: SaveBody): Promise<AiTestResult> {
+export async function testAiSettings(guildId: string, formData: FormData): Promise<AiTestResult> {
+  const body = bodyFromFormData(formData);
+  if ('error' in body) {
+    return { ok: false, message: body.error };
+  }
   const response = await fetch(
     `${API_URL}/guilds/${encodeURIComponent(guildId)}/settings/ai/test`,
     {

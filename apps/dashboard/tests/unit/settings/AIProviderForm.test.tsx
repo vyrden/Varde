@@ -60,7 +60,7 @@ describe('AIProviderForm', () => {
     expect(apikey.placeholder).toContain('enregistrée');
   });
 
-  it('soumet ollama en construisant le body attendu', async () => {
+  it('soumet ollama en construisant un FormData avec les champs attendus', async () => {
     saveAiSettings.mockResolvedValue({ ok: true });
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
     fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'ollama' } });
@@ -71,11 +71,33 @@ describe('AIProviderForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     await waitFor(() => expect(saveAiSettings).toHaveBeenCalledTimes(1));
-    expect(saveAiSettings).toHaveBeenCalledWith('g1', {
-      providerId: 'ollama',
-      endpoint: 'http://localhost:11434',
-      model: 'llama3.1:8b',
+    const [guildArg, formDataArg] = saveAiSettings.mock.calls[0] ?? [];
+    expect(guildArg).toBe('g1');
+    expect(formDataArg).toBeInstanceOf(FormData);
+    const fd = formDataArg as FormData;
+    expect(fd.get('providerId')).toBe('ollama');
+    expect(fd.get('endpoint')).toBe('http://localhost:11434');
+    expect(fd.get('model')).toBe('llama3.1:8b');
+    expect(fd.has('apiKey')).toBe(false);
+  });
+
+  it('soumet openai-compat avec une apiKey via FormData (pas d objet JS expansé)', async () => {
+    saveAiSettings.mockResolvedValue({ ok: true });
+    render(<AIProviderForm guildId="g1" initial={initialNone} />);
+    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai-compat' } });
+    fireEvent.change(screen.getByLabelText('Endpoint'), {
+      target: { value: 'https://api.openai.com/v1' },
     });
+    fireEvent.change(screen.getByLabelText('Modèle'), { target: { value: 'gpt-4o-mini' } });
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-secret' } });
+    fireEvent.click(screen.getByRole('button', { name: /enregistrer/i }));
+
+    await waitFor(() => expect(saveAiSettings).toHaveBeenCalledTimes(1));
+    const [, formDataArg] = saveAiSettings.mock.calls[0] ?? [];
+    expect(formDataArg).toBeInstanceOf(FormData);
+    const fd = formDataArg as FormData;
+    expect(fd.get('providerId')).toBe('openai-compat');
+    expect(fd.get('apiKey')).toBe('sk-test-secret');
   });
 
   it('le bouton Tester appelle testAiSettings et affiche la latence', async () => {

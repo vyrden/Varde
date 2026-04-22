@@ -6,7 +6,6 @@ import { type FormEvent, type ReactElement, useState } from 'react';
 import {
   type AiSettingsMutationResult,
   type AiTestResult,
-  type SaveBody,
   saveAiSettings,
   testAiSettings,
 } from '../../lib/ai-settings-actions';
@@ -52,42 +51,48 @@ export function AIProviderForm({ guildId, initial }: AIProviderFormProps): React
   const [saveResult, setSaveResult] = useState<AiSettingsMutationResult | null>(null);
   const [testResult, setTestResult] = useState<AiTestResult | null>(null);
 
-  const bodyFromState = (): SaveBody | { error: string } => {
-    if (state.providerId === 'none') {
-      return { providerId: 'none' };
+  /**
+   * Construit un FormData à partir du state. Passé en argument aux
+   * server actions `saveAiSettings` / `testAiSettings` — Next.js
+   * Turbopack ne sérialise pas le contenu des FormData dans ses dev
+   * logs, ce qui évite de voir la clé API en clair côté terminal.
+   */
+  const formDataFromState = (): FormData => {
+    const formData = new FormData();
+    formData.set('providerId', state.providerId);
+    if (state.providerId !== 'none') {
+      formData.set('endpoint', state.endpoint);
+      formData.set('model', state.model);
     }
-    if (state.providerId === 'ollama') {
-      if (state.endpoint.trim().length === 0) return { error: 'endpoint requis' };
-      if (state.model.trim().length === 0) return { error: 'model requis' };
-      return { providerId: 'ollama', endpoint: state.endpoint, model: state.model };
+    if (state.providerId === 'openai-compat' && state.apiKey.length > 0) {
+      formData.set('apiKey', state.apiKey);
     }
+    return formData;
+  };
+
+  const validate = (): { error: string } | null => {
+    if (state.providerId === 'none') return null;
     if (state.endpoint.trim().length === 0) return { error: 'endpoint requis' };
     if (state.model.trim().length === 0) return { error: 'model requis' };
-    const body: SaveBody = {
-      providerId: 'openai-compat',
-      endpoint: state.endpoint,
-      model: state.model,
-      ...(state.apiKey.length > 0 ? { apiKey: state.apiKey } : {}),
-    };
-    return body;
+    return null;
   };
 
   const onSave = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setSaveResult(null);
     setTestResult(null);
-    const body = bodyFromState();
-    if ('error' in body) {
-      setSaveResult({ ok: false, message: body.error });
+    const err = validate();
+    if (err) {
+      setSaveResult({ ok: false, message: err.error });
       return;
     }
     setSaving(true);
     try {
-      const result = await saveAiSettings(guildId, body);
+      const result = await saveAiSettings(guildId, formDataFromState());
       setSaveResult(result);
       if (result.ok) {
         // Update stored key indicator without full reload.
-        if (body.providerId === 'none' || body.providerId === 'ollama') {
+        if (state.providerId === 'none' || state.providerId === 'ollama') {
           setHasStoredKey(false);
         } else if (state.apiKey.length > 0) {
           setHasStoredKey(true);
@@ -102,14 +107,14 @@ export function AIProviderForm({ guildId, initial }: AIProviderFormProps): React
   const onTest = async (): Promise<void> => {
     setSaveResult(null);
     setTestResult(null);
-    const body = bodyFromState();
-    if ('error' in body) {
-      setTestResult({ ok: false, message: body.error });
+    const err = validate();
+    if (err) {
+      setTestResult({ ok: false, message: err.error });
       return;
     }
     setTesting(true);
     try {
-      const result = await testAiSettings(guildId, body);
+      const result = await testAiSettings(guildId, formDataFromState());
       setTestResult(result);
     } finally {
       setTesting(false);
