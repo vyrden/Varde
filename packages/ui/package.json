@@ -18,7 +18,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "tsc --watch --preserveWatchOutput"
   },
   "peerDependencies": {
     "react": "^19.0.0"

@@ -11,7 +11,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "tsc --watch --preserveWatchOutput"
   },
   "dependencies": {
     "@varde/contracts": "workspace:*",
