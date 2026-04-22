@@ -31,10 +31,12 @@ import {
   createKeystoreService,
   createLogger,
   createOnboardingExecutor,
+  createOnboardingHostService,
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
   type OnboardingExecutor,
+  type OnboardingHostService,
   type PluginLoader,
 } from '@varde/core';
 import {
@@ -180,6 +182,19 @@ export async function createServer<D extends DbDriver>(
     resolveMemberContext: async () => null,
   });
 
+  // Onboarding executor + hôte `ctx.onboarding`. Construits avant le
+  // ctx factory pour que les modules chargés par le loader puissent
+  // contribuer des actions / hints dès leur `onLoad` (PR 3.13).
+  const onboardingExecutor = createOnboardingExecutor({ client, logger });
+  for (const action of CORE_ACTIONS) {
+    onboardingExecutor.registerAction(
+      action as Parameters<typeof onboardingExecutor.registerAction>[0],
+    );
+  }
+  const onboardingHost: OnboardingHostService = createOnboardingHostService({
+    executor: onboardingExecutor,
+  });
+
   const ctxBundle = createCtxFactory({
     client,
     loggerRoot: logger,
@@ -187,6 +202,7 @@ export async function createServer<D extends DbDriver>(
     config,
     permissions,
     keystoreMasterKey: options.keystore?.masterKey ?? randomBytes(32),
+    onboarding: onboardingHost.service,
     ...(options.keystore?.previousMasterKey
       ? { keystorePreviousMasterKey: options.keystore.previousMasterKey }
       : {}),
@@ -246,19 +262,14 @@ export async function createServer<D extends DbDriver>(
     });
   });
 
-  // Onboarding (jalon 3) : executor + routes builder. Le
-  // `actionContextFactory` en V1 est un bridge "demo" qui simule
-  // Discord — il génère des snowflakes faux et log les opérations.
-  // Permet de tester le flow UI bout en bout avant que le bridge
-  // discord.js réel soit posé (PR 3.13). Tant qu'on ne touche pas
-  // Discord, rollback et apply sont totalement safe en prod.
-  const onboardingExecutor = createOnboardingExecutor({ client, logger });
-  for (const action of CORE_ACTIONS) {
-    onboardingExecutor.registerAction(
-      action as Parameters<typeof onboardingExecutor.registerAction>[0],
-    );
-  }
-
+  // Onboarding (jalon 3) : `actionContextFactory` en V1 est un bridge
+  // "demo" qui simule Discord — il génère des snowflakes faux et log
+  // les opérations. Permet de tester le flow UI bout en bout avant
+  // que le bridge discord.js réel soit posé. Tant qu'on ne touche
+  // pas Discord, rollback et apply sont totalement safe en prod.
+  // L'executor lui-même + son hôte `ctx.onboarding` sont construits
+  // plus haut pour que les modules puissent contribuer des actions
+  // avant que les routes ne soient servies.
   const demoActionContextFactory: OnboardingActionContextFactory = ({ guildId, actorId }) => {
     let counter = 0;
     const nextId = (): string => {

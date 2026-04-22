@@ -32,3 +32,8 @@ export {
   type OnboardingExecutor,
   type UndoSessionResult,
 } from './executor.js';
+export {
+  type CreateOnboardingHostServiceOptions,
+  createOnboardingHostService,
+  type OnboardingHostService,
+} from './host.js';

@@ -10,6 +10,7 @@ import type {
   RoleId,
   UserId,
 } from './ids.js';
+import type { OnboardingActionDefinition } from './onboarding.js';
 
 /**
  * Interfaces des services exposés aux modules via `ctx`. Types
@@ -142,6 +143,46 @@ export interface ModulesService {
   readonly isEnabled: (guildId: GuildId, moduleId: ModuleId) => Promise<boolean>;
 }
 
+/**
+ * Suggestion contribuée par un module au flow onboarding (PR 3.13).
+ * Vit dans un registre in-process alimenté via
+ * `ctx.onboarding.contributeHint` pendant le `onLoad`. Les
+ * suggestions sont présentées à l'admin dans le panel latéral du
+ * builder au même titre que celles de l'IA — mais elles restent
+ * déterministes et n'appellent jamais un provider externe.
+ */
+export interface OnboardingHint {
+  /** Identifiant stable `${moduleId}.${slug}`. Utilisé pour dédupliquer. */
+  readonly id: string;
+  readonly kind: 'role' | 'category' | 'channel';
+  readonly label: string;
+  readonly rationale: string;
+  /** Fragment de draft qui sera concaténé si l'admin accepte. */
+  readonly patch: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Surface publique exposée aux modules pour contribuer au moteur
+ * d'onboarding (ADR 0007). Un module peut :
+ *
+ * - `registerAction(def)` : ajouter une action custom au registre de
+ *   l'executor. Utile pour des primitives métier (ex. "créer un
+ *   webhook Twitch et patcher la config du module streamer"). L'API
+ *   vérifie le contrat `OnboardingActionDefinition` (schema Zod +
+ *   `apply` + `undo` + `canUndo`).
+ * - `contributeHint(hint)` : poser une suggestion hand-curée dans le
+ *   registre partagé. L'admin voit ces suggestions à côté de celles
+ *   de l'IA sans jamais passer par un provider LLM.
+ *
+ * Le service est stubbé tant qu'aucun backend n'est câblé (tests
+ * isolés, smoke scripts) ; les appels lèvent alors une erreur
+ * explicite plutôt que de disparaître silencieusement.
+ */
+export interface OnboardingService {
+  readonly registerAction: <P, R>(definition: OnboardingActionDefinition<P, R>) => void;
+  readonly contributeHint: (hint: OnboardingHint) => void;
+}
+
 /** Service IA. `null` côté `ctx.ai` si aucun provider n'est configuré. */
 export interface AIService {
   readonly complete: (prompt: string, options?: { readonly maxTokens?: number }) => Promise<string>;
@@ -210,4 +251,5 @@ export interface ModuleContext {
   readonly keystore: KeystoreService;
   readonly ai: AIService | null;
   readonly ui: UIService;
+  readonly onboarding: OnboardingService;
 }
