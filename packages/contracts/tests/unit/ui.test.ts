@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DISCORD_EMBED_AUTHOR_NAME_LIMIT,
   DISCORD_EMBED_DESCRIPTION_LIMIT,
   DISCORD_EMBED_FIELD_NAME_LIMIT,
   DISCORD_EMBED_FIELD_VALUE_LIMIT,
@@ -19,6 +20,7 @@ import {
 describe('UI embed types', () => {
   it('expose les limites Discord documentées (snapshot stable)', () => {
     expect(DISCORD_EMBED_TITLE_LIMIT).toBe(256);
+    expect(DISCORD_EMBED_AUTHOR_NAME_LIMIT).toBe(256);
     expect(DISCORD_EMBED_DESCRIPTION_LIMIT).toBe(4096);
     expect(DISCORD_EMBED_FIELD_NAME_LIMIT).toBe(256);
     expect(DISCORD_EMBED_FIELD_VALUE_LIMIT).toBe(1024);

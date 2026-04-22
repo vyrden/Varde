@@ -14,6 +14,8 @@
 
 /** Limite de caractères du titre d'un embed Discord. */
 export const DISCORD_EMBED_TITLE_LIMIT = 256;
+/** Limite de caractères du nom de l'auteur d'un embed Discord. */
+export const DISCORD_EMBED_AUTHOR_NAME_LIMIT = 256;
 /** Limite de caractères de la description d'un embed Discord. */
 export const DISCORD_EMBED_DESCRIPTION_LIMIT = 4096;
 /** Limite de caractères du nom d'un field Discord. */
@@ -27,8 +29,10 @@ export const DISCORD_EMBED_MAX_FIELDS = 25;
 /** Total caractères max d'un embed (somme title+description+fields+footer+author). */
 export const DISCORD_EMBED_TOTAL_LIMIT = 6000;
 /**
- * Taille max (octets) d'un attachement envoyé à un serveur Discord non-boost.
- * 25 MB.
+ * Plafond conservateur pour la taille d'un attachement uploadé par le
+ * bot (25 MB). Discord autorise jusqu'à 10 MB sur guild non-boostée et
+ * plus sur guilds boostées ; on n'essaie pas d'uploader au-delà de
+ * cette borne pour rester compatible avec la majorité des serveurs.
  */
 export const DISCORD_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
