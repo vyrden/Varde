@@ -721,4 +721,76 @@ describe('routes /guilds/:guildId/onboarding', () => {
       await app.close();
     }
   });
+
+  // ─── Suggestions contextuelles (PR 3.11) ─────────────────────────
+
+  it('POST /onboarding/ai/suggest-completion désactivée sans option ai', async () => {
+    const { app } = await build();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/ai/suggest-completion`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ kind: 'role', contextDraft: {} }),
+      });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /onboarding/ai/suggest-completion renvoie des suggestions via stub', async () => {
+    const { app } = await build({ withAi: true });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/ai/suggest-completion`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ kind: 'role', contextDraft: {} }),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        suggestions: { label: string; patch: Record<string, unknown> }[];
+        invocationId: string;
+        provider: { id: string; model: string };
+      };
+      expect(body.suggestions.length).toBeGreaterThan(0);
+      expect(body.suggestions[0]?.patch).toHaveProperty('roles');
+      expect(body.invocationId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+      expect(body.provider.id).toBe('stub');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /onboarding/ai/suggest-completion 400 si kind inconnu', async () => {
+    const { app } = await build({ withAi: true });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/ai/suggest-completion`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ kind: 'webhook', contextDraft: {} }),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'invalid_body' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /onboarding/ai/suggest-completion 401 sans session', async () => {
+    const { app } = await build({ withAi: true });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/ai/suggest-completion`,
+        payload: JSON.stringify({ kind: 'role', contextDraft: {} }),
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
 });

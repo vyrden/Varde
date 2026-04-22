@@ -105,6 +105,27 @@ export interface GeneratedPresetDto {
   readonly provider: { readonly id: string; readonly model: string };
 }
 
+export type SuggestionKind = 'role' | 'category' | 'channel';
+
+/**
+ * Suggestion renvoyée par `POST /onboarding/ai/suggest-completion`
+ * (PR 3.11). `patch` est un fragment de draft (ex. `{ roles: [...] }`)
+ * que le dashboard fusionne avec le draft courant avant un PATCH —
+ * le merge est fait côté client pour concaténer les arrays, là où
+ * `deepMerge` côté serveur les remplace.
+ */
+export interface SuggestionDto {
+  readonly label: string;
+  readonly patch: Readonly<Record<string, unknown>>;
+  readonly rationale: string;
+}
+
+export interface SuggestCompletionResponseDto {
+  readonly suggestions: readonly SuggestionDto[];
+  readonly invocationId: string;
+  readonly provider: { readonly id: string; readonly model: string };
+}
+
 const buildCookieHeader = async (): Promise<string> => {
   const cookieStore = await cookies();
   const session = cookieStore.get(SESSION_COOKIE);

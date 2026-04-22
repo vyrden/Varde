@@ -7,6 +7,8 @@ import type {
   GeneratedPresetDto,
   OnboardingPreviewDto,
   OnboardingSessionDto,
+  SuggestCompletionResponseDto,
+  SuggestionKind,
 } from './onboarding-client.js';
 
 /**
@@ -137,6 +139,76 @@ export async function startOnboardingWithAiProposal(
     body: JSON.stringify({ source: 'ai', preset, aiInvocationId }),
   });
   if (response.status === 201) {
+    const data = (await response.json()) as OnboardingSessionDto;
+    invalidate(guildId);
+    return { ok: true, data };
+  }
+  const err = await parseErrorBody(response);
+  return { ok: false, status: response.status, ...err };
+}
+
+/**
+ * Demande à l'IA 1 ou 2 suggestions ciblées (`kind`) à partir du
+ * draft courant. Le résultat n'est pas appliqué — le dashboard le
+ * présente à l'admin, qui choisit d'en intégrer une via
+ * `patchOnboardingDraft` (ADR 0007 R1 — jamais de mutation sans
+ * validation humaine).
+ */
+export async function suggestOnboardingCompletion(
+  guildId: string,
+  kind: SuggestionKind,
+  contextDraft: Readonly<Record<string, unknown>>,
+  hint?: string,
+): Fetcher<SuggestCompletionResponseDto> {
+  const body: Record<string, unknown> = { kind, contextDraft };
+  if (hint !== undefined && hint.trim().length > 0) body['hint'] = hint;
+  const response = await fetch(
+    `${API_URL}/guilds/${encodeURIComponent(guildId)}/onboarding/ai/suggest-completion`,
+    {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        cookie: await buildCookieHeader(),
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (response.ok) {
+    const data = (await response.json()) as SuggestCompletionResponseDto;
+    return { ok: true, data };
+  }
+  const err = await parseErrorBody(response);
+  return { ok: false, status: response.status, ...err };
+}
+
+/**
+ * PATCH partiel sur le draft d'une session en cours. Passe-plat vers
+ * `PATCH /onboarding/:sessionId/draft` côté API. Utilisé par le panel
+ * de suggestions pour intégrer une entrée au draft (le caller est
+ * responsable de pré-concaténer les arrays, `deepMerge` côté API
+ * remplace).
+ */
+export async function patchOnboardingDraft(
+  guildId: string,
+  sessionId: string,
+  patch: Readonly<Record<string, unknown>>,
+): Fetcher<OnboardingSessionDto> {
+  const response = await fetch(
+    `${API_URL}/guilds/${encodeURIComponent(guildId)}/onboarding/${encodeURIComponent(sessionId)}/draft`,
+    {
+      method: 'PATCH',
+      cache: 'no-store',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        cookie: await buildCookieHeader(),
+      },
+      body: JSON.stringify(patch),
+    },
+  );
+  if (response.ok) {
     const data = (await response.json()) as OnboardingSessionDto;
     invalidate(guildId);
     return { ok: true, data };

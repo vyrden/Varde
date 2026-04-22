@@ -4,6 +4,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@varde/
 import { type ReactElement, useState, useTransition } from 'react';
 import { previewOnboarding } from '../../lib/onboarding-actions';
 import type { OnboardingSessionDto } from '../../lib/onboarding-client';
+import { SuggestionsPanel } from './SuggestionsPanel';
 
 export interface BuilderCanvasProps {
   readonly session: OnboardingSessionDto;
@@ -66,6 +67,8 @@ export function BuilderCanvas({ session }: BuilderCanvasProps): ReactElement {
           {error}
         </p>
       ) : null}
+
+      <SuggestionsPanel session={session} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>

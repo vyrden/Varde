@@ -1,4 +1,9 @@
-import { type AIProvider, createAIService, generatePresetInputSchema } from '@varde/ai';
+import {
+  type AIProvider,
+  createAIService,
+  generatePresetInputSchema,
+  suggestCompletionInputSchema,
+} from '@varde/ai';
 import {
   type GuildId,
   type KeystoreService,
@@ -169,6 +174,10 @@ const generatePresetBodySchema = generatePresetInputSchema.extend({
   purpose: z.string().max(128).default('onboarding.generatePreset'),
 });
 
+const suggestCompletionBodySchema = suggestCompletionInputSchema.extend({
+  purpose: z.string().max(128).default('onboarding.suggestCompletion'),
+});
+
 const parseSessionId = (raw: string): Ulid => {
   const parsed = parseUlid(raw);
   if (!parsed) {
@@ -319,6 +328,66 @@ export function registerOnboardingRoutes<D extends DbDriver>(
           preset: proposal.preset,
           rationale: proposal.rationale,
           confidence: proposal.confidence,
+          invocationId,
+          provider: { id: provider.id, model: provider.model },
+        };
+      },
+    );
+
+    // POST /guilds/:guildId/onboarding/ai/suggest-completion — demande
+    // une ou plusieurs suggestions ciblées sur un `kind` (rôle,
+    // catégorie, salon) en se basant sur le draft courant passé en
+    // `contextDraft`. Le consommateur applique ensuite la suggestion
+    // retenue côté dashboard via un PATCH /draft classique (les
+    // suggestions ne mutent jamais l'état elles-mêmes, ADR 0007 R1).
+    app.post<{ Params: { guildId: string }; Body: unknown }>(
+      '/guilds/:guildId/onboarding/ai/suggest-completion',
+      async (request) => {
+        const { guildId } = request.params;
+        const session = await requireGuildAdmin(app, request, guildId, discord);
+
+        const parsed = suggestCompletionBodySchema.safeParse(request.body ?? {});
+        if (!parsed.success) {
+          throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+        }
+
+        let provider: AIProvider;
+        try {
+          provider = await buildAiProviderForGuild({
+            config: aiOptions.config,
+            keystore: aiOptions.keystore,
+            guildId: guildId as GuildId,
+            ...(aiOptions.fetchImpl ? { fetchImpl: aiOptions.fetchImpl } : {}),
+          });
+        } catch (err) {
+          throw httpError(
+            502,
+            'ai_provider_build_failed',
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+
+        const aiService = createAIService({
+          provider,
+          client,
+          logger: aiOptions.logger,
+        });
+
+        const { suggestions, invocationId } = await aiService.suggestCompletion(
+          {
+            guildId: guildId as GuildId,
+            actorId: session.userId as UserId,
+            purpose: parsed.data.purpose,
+          },
+          {
+            kind: parsed.data.kind,
+            contextDraft: parsed.data.contextDraft,
+            ...(parsed.data.hint !== undefined ? { hint: parsed.data.hint } : {}),
+          },
+        );
+
+        return {
+          suggestions,
           invocationId,
           provider: { id: provider.id, model: provider.model },
         };
