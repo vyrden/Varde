@@ -81,13 +81,13 @@ describe('createOnboardingDiscordBridge', () => {
     expect(createRole).toHaveBeenCalledTimes(1);
     const passed = createRole.mock.calls[0]?.[0] as {
       name: string;
-      color: number;
+      colors: { primaryColor: number };
       hoist: boolean;
       mentionable: boolean;
       permissions: PermissionsBitField;
     };
     expect(passed.name).toBe('Mod');
-    expect(passed.color).toBe(0x3498db);
+    expect(passed.colors.primaryColor).toBe(0x3498db);
     expect(passed.hoist).toBe(true);
     expect(passed.mentionable).toBe(false);
     expect(passed.permissions).toBeInstanceOf(PermissionsBitField);

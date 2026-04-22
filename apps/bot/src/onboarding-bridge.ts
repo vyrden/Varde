@@ -80,9 +80,13 @@ export function createOnboardingDiscordBridge(client: Client): OnboardingDiscord
   return {
     async createRole(guildId, payload) {
       const guild = requireGuild(guildId);
+      // discord.js v14.26 a déprécié `color` au profit de `colors`
+      // (introduction des gradients Discord). On passe un
+      // `primaryColor` pour rester compatible V1 — un vrai support
+      // bi-color/tri-color n'est pas scope onboarding pour l'instant.
       const role = await guild.roles.create({
         name: payload.name,
-        color: payload.color ?? 0,
+        colors: { primaryColor: payload.color ?? 0 },
         hoist: payload.hoist ?? false,
         mentionable: payload.mentionable ?? false,
         ...(payload.permissions !== undefined
