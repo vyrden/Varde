@@ -24,6 +24,10 @@ export {
   mapDiscordEvent,
 } from './mapper.js';
 export {
+  createOnboardingDiscordBridge,
+  type OnboardingDiscordBridge,
+} from './onboarding-bridge.js';
+export {
   bindSignals,
   type CreateShutdownOptions,
   createShutdownCoordinator,

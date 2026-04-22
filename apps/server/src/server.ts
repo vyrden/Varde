@@ -14,7 +14,7 @@ import {
   registerModulesRoutes,
   registerOnboardingRoutes,
 } from '@varde/api';
-import type { BotDispatcher, CommandRegistry } from '@varde/bot';
+import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
 import type { ActionId, EventBus, Logger, ModuleId, UserId } from '@varde/contracts';
 import {
@@ -131,6 +131,14 @@ export interface CreateServerOptions<D extends DbDriver> {
   readonly logger?: Logger;
   /** Skip applyMigrations (tests qui montent déjà une DB migrée). */
   readonly skipMigrations?: boolean;
+  /**
+   * Bridge onboarding vers un Client discord.js (PR 3.12d). Fourni :
+   * les `core.createRole` / `createChannel` / `createCategory`
+   * atteignent Discord en vrai. Omis : le serveur retombe sur un
+   * bridge "demo" qui log sans toucher Discord, utile en CI ou dev
+   * sans `VARDE_DISCORD_TOKEN`.
+   */
+  readonly onboardingBridge?: OnboardingDiscordBridge;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -262,25 +270,54 @@ export async function createServer<D extends DbDriver>(
     });
   });
 
-  // Onboarding (jalon 3) : `actionContextFactory` en V1 est un bridge
-  // "demo" qui simule Discord — il génère des snowflakes faux et log
-  // les opérations. Permet de tester le flow UI bout en bout avant
-  // que le bridge discord.js réel soit posé. Tant qu'on ne touche
-  // pas Discord, rollback et apply sont totalement safe en prod.
-  // L'executor lui-même + son hôte `ctx.onboarding` sont construits
-  // plus haut pour que les modules puissent contribuer des actions
-  // avant que les routes ne soient servies.
-  const demoActionContextFactory: OnboardingActionContextFactory = ({ guildId, actorId }) => {
+  // Onboarding (jalon 3) : le `actionContextFactory` utilise le
+  // bridge discord.js réel si `options.onboardingBridge` est fourni
+  // (PR 3.12d). Sinon il retombe sur un bridge "demo" qui log sans
+  // toucher Discord — utile en CI et dev hors-Discord. Le choix se
+  // fait à la construction du handle : un même process reste sur un
+  // mode pendant sa durée de vie. `resolveLocalId` est un stub
+  // réinjecté par l'executor pendant `applyActions` (PR 3.12a), la
+  // valeur posée ici n'est jamais consultée en chemin nominal.
+  const onboardingBridge = options.onboardingBridge;
+  const demoLoggerRoot = logger.child({ component: 'onboarding.demo' });
+
+  const actionContextFactory: OnboardingActionContextFactory = ({ guildId, actorId }) => {
+    const scopedLogger = logger.child({ component: 'onboarding', guildId, actorId });
+
+    if (onboardingBridge) {
+      return {
+        guildId,
+        actorId,
+        logger: scopedLogger,
+        discord: {
+          createRole: (payload) => onboardingBridge.createRole(guildId, payload),
+          deleteRole: (roleId) => onboardingBridge.deleteRole(guildId, roleId),
+          createCategory: (payload) => onboardingBridge.createCategory(guildId, payload),
+          deleteCategory: (channelId) => onboardingBridge.deleteCategory(guildId, channelId),
+          createChannel: (payload) => onboardingBridge.createChannel(guildId, payload),
+          deleteChannel: (channelId) => onboardingBridge.deleteChannel(guildId, channelId),
+        },
+        configPatch: async (patch) => {
+          await config.setWith(guildId, patch, {
+            scope: 'onboarding',
+            updatedBy: actorId as UserId,
+          });
+        },
+        resolveLocalId: () => null,
+      };
+    }
+
+    // Fallback demo.
     let counter = 0;
     const nextId = (): string => {
       counter += 1;
       return `demo-${Date.now()}-${counter}`;
     };
-    const demoLogger = logger.child({ component: 'onboarding.demo', guildId, actorId });
+    const demoLogger = demoLoggerRoot.child({ guildId, actorId });
     return {
       guildId,
       actorId,
-      logger: demoLogger,
+      logger: scopedLogger,
       discord: {
         createRole: async (payload) => {
           const id = nextId();
@@ -313,9 +350,6 @@ export async function createServer<D extends DbDriver>(
           updatedBy: actorId as UserId,
         });
       },
-      // Stub : l'executor réinjecte une implémentation session-locale
-      // pendant `applyActions` (PR 3.12a). La valeur posée ici n'est
-      // jamais consultée en chemin nominal.
       resolveLocalId: () => null,
     };
   };
@@ -358,7 +392,7 @@ export async function createServer<D extends DbDriver>(
     client,
     discord,
     executor: onboardingExecutor,
-    actionContextFactory: demoActionContextFactory,
+    actionContextFactory,
     presetCatalog: PRESET_CATALOG,
     ai: { config, keystore: aiKeystore, logger },
     scheduler: onboardingScheduler,

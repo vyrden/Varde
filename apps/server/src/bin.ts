@@ -23,7 +23,11 @@
  * via l'API REST : à livrer quand la surface commandes sera stable.
  */
 
-import { attachDiscordClient } from '@varde/bot';
+import {
+  attachDiscordClient,
+  createOnboardingDiscordBridge,
+  type OnboardingDiscordBridge,
+} from '@varde/bot';
 import type { GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
@@ -171,23 +175,37 @@ function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void 
 
 interface DiscordAttachment {
   readonly client: Client;
-  readonly detach: () => void;
+  readonly bridge: OnboardingDiscordBridge;
 }
 
-async function attachDiscord(
-  handle: ServerHandle,
-  token: string,
-  logger: Logger,
-): Promise<DiscordAttachment> {
+interface DiscordBinding {
+  readonly detach: () => void;
+  readonly destroy: () => Promise<void>;
+}
+
+/**
+ * Instancie le Client discord.js + le bridge onboarding sans se
+ * connecter. Le bridge peut être passé à `createServer()` même avant
+ * `login()` : il résout les guilds lazy via le cache du Client, qui
+ * est peuplé dès le `clientReady`. Séparer l'instantiation du login
+ * permet à `createServer()` d'enregistrer les routes onboarding avec
+ * un bridge vivant tout en gardant `.login()` sous le contrôle du
+ * caller (bin.ts l'appelle après `attachDiscordToHandle`).
+ */
+function createDiscordAttachment(): DiscordAttachment {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
+  const bridge = createOnboardingDiscordBridge(client);
+  return { client, bridge };
+}
 
-  // Ready : on rattrape les guilds déjà présentes (le bot a pu être
-  // invité avant que ce process tourne). `guildCreate` ne refire pas
-  // sur reconnexion pour les guilds existantes — ce handler fait le
-  // pont.
-  client.once('ready', async (readyClient) => {
+function attachDiscordToHandle(
+  attachment: DiscordAttachment,
+  handle: ServerHandle,
+  logger: Logger,
+): DiscordBinding {
+  attachment.client.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
     for (const guild of guilds) {
@@ -195,12 +213,11 @@ async function attachDiscord(
       await enableHelloWorldOn(handle, guild.id, logger);
     }
   });
-
-  const { detach } = attachDiscordClient(client, handle.dispatcher, logger);
-
-  await client.login(token);
-
-  return { client, detach };
+  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
+  return {
+    detach,
+    destroy: () => attachment.client.destroy(),
+  };
 }
 
 async function main(): Promise<void> {
@@ -221,6 +238,13 @@ async function main(): Promise<void> {
 
   const logger = createLogger({ level: logLevel });
 
+  // Le Client discord.js + son bridge onboarding sont instanciés
+  // avant `createServer()` pour que les routes onboarding câblent
+  // directement le vrai bridge (PR 3.12d). `.login()` est repoussé
+  // jusqu'après `createServer()` pour que le dispatcher soit prêt à
+  // recevoir les events gateway.
+  const discordAttachment = discordToken !== null ? createDiscordAttachment() : null;
+
   const driver = pickDriver(databaseUrl);
   const handle =
     driver === 'pg'
@@ -228,11 +252,13 @@ async function main(): Promise<void> {
           database: { driver: 'pg', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
           logger,
+          ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
           logger,
+          ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
         });
 
   handle.loader.register(helloWorld);
@@ -242,12 +268,13 @@ async function main(): Promise<void> {
 
   await seedFromEnv(handle, seedIds, logger);
 
-  let discord: DiscordAttachment | null = null;
-  if (discordToken !== null) {
-    discord = await attachDiscord(handle, discordToken, logger);
+  let discord: DiscordBinding | null = null;
+  if (discordAttachment !== null && discordToken !== null) {
+    discord = attachDiscordToHandle(discordAttachment, handle, logger);
+    await discordAttachment.client.login(discordToken);
   } else {
     logger.warn(
-      'VARDE_DISCORD_TOKEN absent : la gateway Discord ne sera pas connectée. L API HTTP reste disponible pour le dashboard. Renseigner le token dans .env.local pour activer le bot.',
+      'VARDE_DISCORD_TOKEN absent : la gateway Discord ne sera pas connectée. L API HTTP reste disponible pour le dashboard. Le bridge onboarding retombe sur un mode demo (logs, pas d appels Discord). Renseigner le token dans .env.local pour activer le bot.',
     );
   }
 
@@ -267,7 +294,7 @@ async function main(): Promise<void> {
     try {
       if (discord !== null) {
         discord.detach();
-        await discord.client.destroy();
+        await discord.destroy();
       }
       unsubscribeAutoOnboard();
       await handle.stop();
