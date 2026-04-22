@@ -375,6 +375,18 @@ export function createOnboardingExecutor<D extends DbDriver>(
   ): Promise<ApplyActionsResult> => {
     validateRequests(requests);
 
+    // Map `localId → externalId` populée au fur et à mesure des
+    // apply réussies, puis exposée aux actions suivantes via
+    // `ctx.resolveLocalId`. Vit le temps d'un apply() : une session
+    // qui reprend après redémarrage n'y a pas accès, mais V1 ne
+    // supporte pas cette reprise (un apply est une transaction
+    // synchrone côté API).
+    const localIdMap = new Map<string, string>();
+    const wrappedCtx: OnboardingActionContext = {
+      ...ctx,
+      resolveLocalId: (localId) => localIdMap.get(localId) ?? null,
+    };
+
     // Batch insert de toutes les actions en status `pending`.
     const pendingRows: ActionRow[] = requests.map((req, index) => ({
       id: newUlid() as Ulid,
@@ -400,13 +412,16 @@ export function createOnboardingExecutor<D extends DbDriver>(
       const def = resolveDef(req.type);
       if (i > 0) await sleep(delay);
       try {
-        const result = (await def.apply(ctx, req.payload)) as
+        const result = (await def.apply(wrappedCtx, req.payload)) as
           | { id?: string }
           | Record<string, unknown>;
         const externalId =
           typeof (result as { id?: unknown }).id === 'string'
             ? (result as { id: string }).id
             : null;
+        if (req.localId && externalId) {
+          localIdMap.set(req.localId, externalId);
+        }
         await updateRowApplied(
           client,
           row.id,
@@ -422,7 +437,9 @@ export function createOnboardingExecutor<D extends DbDriver>(
           actionType: req.type,
           error: message,
         });
-        // Rollback auto des actions déjà appliquées.
+        // Rollback auto des actions déjà appliquées. L'undo n'a pas
+        // besoin de `resolveLocalId` en V1 (suppression par
+        // externalId stocké), on réutilise le `ctx` d'origine.
         await performUndoForSession(sessionId, ctx);
         return { ok: false, appliedCount: i, failedAt: i, error: message, externalIds };
       }

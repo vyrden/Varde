@@ -124,6 +124,17 @@ export interface OnboardingActionContext {
   };
   /** Raccourci vers le ConfigService pour `patchModuleConfig`. */
   readonly configPatch: (patch: Readonly<Record<string, unknown>>) => Promise<void>;
+  /**
+   * Résout une référence locale (`localId` défini dans le draft) vers
+   * l'`externalId` Discord produit par l'action correspondante plus
+   * tôt dans la séquence d'apply. Renvoie `null` si la ref est
+   * inconnue (action pas encore appliquée, ou ref orpheline).
+   *
+   * Utilisé en V1 par `core.createChannel` pour pointer un
+   * `parentLocalId` vers la catégorie réelle et pour construire
+   * les `permissionOverwrites` à partir des `roleLocalId`.
+   */
+  readonly resolveLocalId: (localId: string) => string | null;
 }
 
 export interface DiscordCreateRolePayload {
@@ -176,6 +187,15 @@ export interface OnboardingActionDefinition<Payload, Result> {
 export interface OnboardingActionRequest {
   readonly type: string;
   readonly payload: unknown;
+  /**
+   * Référence locale stable attribuée par le builder (ex. `role-mod`,
+   * `cat-general`). Quand l'action produit un `externalId` Discord,
+   * l'executor associe `localId ↔ externalId` dans sa map pour que
+   * les actions suivantes puissent résoudre cette ref via
+   * `ctx.resolveLocalId`. Facultatif : une action qui ne référence
+   * rien et qui n'est référencée par rien peut l'omettre.
+   */
+  readonly localId?: string;
 }
 
 // ─── Re-exports pour ergonomie ────────────────────────────────────

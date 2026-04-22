@@ -298,6 +298,10 @@ export async function createServer<D extends DbDriver>(
           updatedBy: actorId as UserId,
         });
       },
+      // Stub : l'executor réinjecte une implémentation session-locale
+      // pendant `applyActions` (PR 3.12a). La valeur posée ici n'est
+      // jamais consultée en chemin nominal.
+      resolveLocalId: () => null,
     };
   };
 

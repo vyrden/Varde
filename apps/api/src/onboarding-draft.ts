@@ -12,20 +12,12 @@ import type { PresetDefinition } from '@varde/presets';
  * - `OnboardingDraft` → `OnboardingActionRequest[]` : sérialisation
  *   du draft en liste ordonnée d'actions à passer à l'executor.
  *
- * Limitations V1 (documentées côté UI builder, PR 3.5) :
- *
- * 1. Pas de résolution `categoryLocalId` → `parentId` Discord.
- *    Les salons sont créés à plat (sans parent) ; l'admin réorganise
- *    manuellement après apply. La résolution de refs sera posée
- *    en PR 3.12 via un mapping `localId → externalId` maintenu par
- *    l'executor pendant l'exécution.
- * 2. Pas d'application des `readableBy` / `writableBy` sur les
- *    channels. Les permissions overwrites par rôle seront ajoutées
- *    avec la même résolution de refs.
- *
- * Ces restrictions sont acceptées en V1 : elles n'entravent pas la
- * démonstration du moteur, et le scope est contenu. L'UI builder
- * affichera les relations prévues, mais le côté Discord reste plat.
+ * Les refs locales (`localId`, `categoryLocalId`, `readableBy`,
+ * `writableBy`) sont propagées intactes sur les `OnboardingActionRequest`.
+ * L'executor maintient une map `localId → externalId` pendant l'apply
+ * et les actions (`core.createChannel` en particulier) consultent
+ * `ctx.resolveLocalId` pour obtenir le snowflake Discord de la
+ * catégorie parente et des rôles cibles des overwrites (PR 3.12a).
  */
 
 export function presetToDraft(preset: PresetDefinition): OnboardingDraft {
@@ -80,6 +72,7 @@ export function serializeDraftToActions(draft: OnboardingDraft): OnboardingActio
   for (const role of draft.roles) {
     requests.push({
       type: 'core.createRole',
+      localId: role.localId,
       payload: {
         name: role.name,
         color: role.color,
@@ -92,17 +85,22 @@ export function serializeDraftToActions(draft: OnboardingDraft): OnboardingActio
   for (const category of draft.categories) {
     requests.push({
       type: 'core.createCategory',
+      localId: category.localId,
       payload: { name: category.name, position: category.position },
     });
   }
   for (const channel of draft.channels) {
     requests.push({
       type: 'core.createChannel',
+      localId: channel.localId,
       payload: {
         name: channel.name,
         type: channel.type,
+        ...(channel.categoryLocalId !== null ? { parentLocalId: channel.categoryLocalId } : {}),
         ...(channel.topic !== undefined ? { topic: channel.topic } : {}),
         slowmodeSeconds: channel.slowmodeSeconds,
+        readableRoleLocalIds: channel.readableBy,
+        writableRoleLocalIds: channel.writableBy,
       },
     });
   }

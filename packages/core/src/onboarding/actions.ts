@@ -1,4 +1,4 @@
-import type { OnboardingActionDefinition } from '@varde/contracts';
+import type { DiscordPermissionOverwrite, OnboardingActionDefinition } from '@varde/contracts';
 import { z } from 'zod';
 
 /**
@@ -147,14 +147,101 @@ const channelTypes = ['text', 'voice', 'forum'] as const;
 const createChannelPayloadSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(channelTypes).default('text'),
+  /**
+   * Parent Discord direct (snowflake). Surface historique pour les
+   * appels qui connaissent déjà l'id. Les appels venus du builder
+   * passent plutôt par `parentLocalId` — résolu par l'executor via
+   * `ctx.resolveLocalId`.
+   */
   parentId: z.string().min(1).optional(),
+  /** Ref locale vers une `core.createCategory` appliquée plus tôt. */
+  parentLocalId: z.string().min(1).optional(),
   topic: z.string().max(1024).optional(),
   slowmodeSeconds: z.number().int().min(0).max(21_600).default(0),
+  /**
+   * Rôles (par `localId`) qui peuvent voir le salon. Vide =
+   * visible par tout le monde. Traduit en overwrites Discord via
+   * les bits `ViewChannel` / `Connect` selon le type du salon.
+   */
+  readableRoleLocalIds: z.array(z.string().min(1)).default([]),
+  /**
+   * Rôles (par `localId`) qui peuvent écrire / parler dans le salon.
+   * Vide = autorisé à tout le monde. Implique aussi le droit de
+   * voir : un rôle dans `writableRoleLocalIds` obtient à la fois
+   * `ViewChannel` et le bit d'écriture approprié.
+   */
+  writableRoleLocalIds: z.array(z.string().min(1)).default([]),
 });
 export type CreateChannelPayload = z.infer<typeof createChannelPayloadSchema>;
 export interface CreateChannelResult {
   readonly id: string;
 }
+
+// Bits Discord utilisés pour construire les overwrites. Références
+// `PermissionFlagsBits` de discord.js v14.
+const BIT_VIEW_CHANNEL = 1n << 10n;
+const BIT_SEND_MESSAGES = 1n << 11n;
+const BIT_CONNECT = 1n << 20n;
+const BIT_SPEAK = 1n << 21n;
+
+const readBitsFor = (type: (typeof channelTypes)[number]): bigint =>
+  type === 'voice' ? BIT_VIEW_CHANNEL | BIT_CONNECT : BIT_VIEW_CHANNEL;
+
+const writeBitsFor = (type: (typeof channelTypes)[number]): bigint =>
+  type === 'voice' ? BIT_SPEAK : BIT_SEND_MESSAGES;
+
+/**
+ * Construit les `permissionOverwrites` Discord à partir des listes
+ * `readableRoleLocalIds` / `writableRoleLocalIds` et du type du
+ * salon. Sémantique :
+ *
+ * - Un rôle dans `writable` reçoit `allow = read | write`, ce qui
+ *   évite le piège d'un rôle autorisé à écrire mais pas à voir.
+ * - Un rôle dans `read` seul reçoit `allow = read`.
+ * - Si au moins une whitelist est non-vide, on refuse les bits
+ *   correspondants à `@everyone` (le guild id sert d'id de rôle
+ *   @everyone côté API Discord).
+ *
+ * Les refs non résolues (rôle qui n'a pas encore été appliqué dans
+ * la séquence) sont silencieusement ignorées — la validation
+ * préalable côté draft garantit qu'elles existent, mais un
+ * executor idempotent doit rester tolérant.
+ */
+const buildOverwrites = (
+  guildId: string,
+  resolveLocalId: (localId: string) => string | null,
+  type: (typeof channelTypes)[number],
+  readable: readonly string[],
+  writable: readonly string[],
+): readonly DiscordPermissionOverwrite[] => {
+  const readBits = readBitsFor(type);
+  const writeBits = writeBitsFor(type);
+  const perRoleAllow = new Map<string, bigint>();
+
+  for (const localId of readable) {
+    const roleId = resolveLocalId(localId);
+    if (!roleId) continue;
+    perRoleAllow.set(roleId, (perRoleAllow.get(roleId) ?? 0n) | readBits);
+  }
+  for (const localId of writable) {
+    const roleId = resolveLocalId(localId);
+    if (!roleId) continue;
+    perRoleAllow.set(roleId, (perRoleAllow.get(roleId) ?? 0n) | readBits | writeBits);
+  }
+
+  let everyoneDeny = 0n;
+  if (readable.length > 0) everyoneDeny |= readBits;
+  if (writable.length > 0 && readable.length === 0) everyoneDeny |= writeBits;
+
+  const overwrites: DiscordPermissionOverwrite[] = [];
+  if (everyoneDeny !== 0n) {
+    overwrites.push({ roleId: guildId, deny: everyoneDeny });
+  }
+  for (const [roleId, allow] of perRoleAllow) {
+    overwrites.push({ roleId, allow });
+  }
+  return overwrites;
+};
 
 export const createChannelAction: OnboardingActionDefinition<
   CreateChannelPayload,
@@ -164,12 +251,27 @@ export const createChannelAction: OnboardingActionDefinition<
   schema: createChannelPayloadSchema,
   canUndo: true,
   apply: async (ctx, payload) => {
+    const resolvedParentId =
+      payload.parentId ??
+      (payload.parentLocalId
+        ? (ctx.resolveLocalId(payload.parentLocalId) ?? undefined)
+        : undefined);
+
+    const overwrites = buildOverwrites(
+      ctx.guildId,
+      ctx.resolveLocalId,
+      payload.type,
+      payload.readableRoleLocalIds,
+      payload.writableRoleLocalIds,
+    );
+
     const result = await ctx.discord.createChannel({
       name: payload.name,
       type: payload.type,
-      ...(payload.parentId !== undefined ? { parentId: payload.parentId } : {}),
+      ...(resolvedParentId !== undefined ? { parentId: resolvedParentId } : {}),
       ...(payload.topic !== undefined ? { topic: payload.topic } : {}),
       slowmodeSeconds: payload.slowmodeSeconds,
+      ...(overwrites.length > 0 ? { permissionOverwrites: overwrites } : {}),
     });
     return { id: result.id };
   },

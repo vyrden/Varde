@@ -166,6 +166,7 @@ describe('routes /guilds/:guildId/onboarding', () => {
         configPatch: async (patch) => {
           await config.setWith(guildId, patch, { scope: 'onboarding', updatedBy: actorId });
         },
+        resolveLocalId: () => null,
       }),
     });
     return { app, config, mock, executor };
@@ -477,6 +478,19 @@ describe('routes /guilds/:guildId/onboarding', () => {
       expect(mock.createRole).toHaveBeenCalledTimes(communityTechSmall.roles.length);
       expect(mock.createCategory).toHaveBeenCalledTimes(communityTechSmall.categories.length);
       expect(mock.createChannel).toHaveBeenCalledTimes(communityTechSmall.channels.length);
+
+      // Chaque channel du preset reçoit un parentId résolu depuis sa
+      // categoryLocalId (PR 3.12a). Le mock donne des snowflakes
+      // `snowflake-N` séquentiels ; on vérifie seulement qu'un
+      // parentId non-null a bien été passé pour chaque channel qui
+      // référence une catégorie.
+      const channelCalls = mock.createChannel.mock.calls as readonly (readonly [
+        { parentId?: string },
+      ])[];
+      for (const [payload] of channelCalls) {
+        expect(typeof payload.parentId).toBe('string');
+        expect(payload.parentId).toMatch(/^snowflake-/);
+      }
 
       // GET /current expose toujours la session après apply pour
       // que l UI puisse montrer l écran "Appliqué" avec rollback.

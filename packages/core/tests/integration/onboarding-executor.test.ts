@@ -85,6 +85,7 @@ const makeContext = (
     configPatch: async (patch) => {
       calls.configPatch.push(patch);
     },
+    resolveLocalId: () => null,
   };
   return { ctx, calls };
 };
@@ -456,5 +457,109 @@ describe('OnboardingExecutor — undoSession idempotence', () => {
     expect(second.undoneCount).toBe(0); // rien de plus à défaire
     // Aucun `undo` supplémentaire n'a été appelé.
     expect(undoCalls).toEqual(undoCallsBefore);
+  });
+});
+
+describe('OnboardingExecutor — résolution localId → externalId (PR 3.12a)', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = createDbClient({ driver: 'sqlite', url: ':memory:' });
+    await applyMigrations(client);
+    client.db.insert(sqliteSchema.guilds).values({ id: '111', name: 'Test' }).run();
+    client.db
+      .insert(sqliteSchema.onboardingSessions)
+      .values({
+        id: SESSION,
+        guildId: '111',
+        startedBy: '42',
+        status: 'applying',
+        presetSource: 'blank',
+      })
+      .run();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it('populate la map au fur et à mesure et la passe en ctx aux actions suivantes', async () => {
+    const exec = createOnboardingExecutor({
+      client,
+      logger: silentLogger(),
+      delayBetweenActionsMs: 0,
+    });
+    const producer = makeTestAction({
+      type: 'test.produce',
+      apply: async () => ({ id: 'produced-ext-id' }),
+      undo: async () => undefined,
+      canUndo: true,
+    });
+    const consumerCalls: (string | null)[] = [];
+    const consumer = makeTestAction({
+      type: 'test.consume',
+      apply: async (ctx, payload) => {
+        const ref = (payload as { localIdRef: string }).localIdRef;
+        consumerCalls.push(ctx.resolveLocalId(ref));
+        return {};
+      },
+      undo: async () => undefined,
+      canUndo: true,
+    });
+    exec.registerAction(producer);
+    exec.registerAction(consumer);
+
+    const { ctx } = makeContext();
+    const res = await exec.applyActions(
+      SESSION,
+      [
+        { type: 'test.produce', payload: {}, localId: 'alpha' },
+        { type: 'test.consume', payload: { localIdRef: 'alpha' } },
+        { type: 'test.consume', payload: { localIdRef: 'inconnu' } },
+      ],
+      ctx,
+    );
+
+    expect(res.ok).toBe(true);
+    expect(consumerCalls).toEqual(['produced-ext-id', null]);
+  });
+
+  it('le ctx externe (factory) fournit un resolveLocalId stub, overridé pendant apply', async () => {
+    const exec = createOnboardingExecutor({
+      client,
+      logger: silentLogger(),
+      delayBetweenActionsMs: 0,
+    });
+    const producer = makeTestAction({
+      type: 'test.produce',
+      apply: async () => ({ id: 'real-id' }),
+      undo: async () => undefined,
+      canUndo: true,
+    });
+    let seen: string | null = 'uninit';
+    const consumer = makeTestAction({
+      type: 'test.consume',
+      apply: async (ctx) => {
+        seen = ctx.resolveLocalId('key');
+        return {};
+      },
+      undo: async () => undefined,
+      canUndo: true,
+    });
+    exec.registerAction(producer);
+    exec.registerAction(consumer);
+
+    // Le ctx externe retourne toujours null — l'executor doit l'override.
+    const { ctx } = makeContext();
+    await exec.applyActions(
+      SESSION,
+      [
+        { type: 'test.produce', payload: {}, localId: 'key' },
+        { type: 'test.consume', payload: {} },
+      ],
+      ctx,
+    );
+
+    expect(seen).toBe('real-id');
   });
 });
