@@ -411,16 +411,66 @@ function AddRouteForm({
   );
 }
 
-/** Éditeur de la liste d'exclusions (IDs séparés par virgule). */
+/**
+ * Extrait un userId depuis "<@123>", "<@!123>" ou "123" (snowflake brut).
+ * Retourne null si le format est invalide.
+ */
+export function parseUserIdInput(raw: string): string | null {
+  const mentionMatch = /^<@!?(\d{17,19})>$/.exec(raw.trim());
+  if (mentionMatch) return mentionMatch[1] ?? null;
+  const snowflake = /^\d{17,19}$/.exec(raw.trim());
+  if (snowflake) return raw.trim();
+  return null;
+}
+
+/**
+ * Parse une liste d'entrées séparées par virgule.
+ * Retourne les IDs valides et les entrées invalides séparément.
+ */
+export function parseUserIdList(input: string): {
+  readonly ok: readonly string[];
+  readonly invalid: readonly string[];
+} {
+  const parts = input
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const ok: string[] = [];
+  const invalid: string[] = [];
+  for (const part of parts) {
+    const id = parseUserIdInput(part);
+    if (id !== null) {
+      ok.push(id);
+    } else {
+      invalid.push(part);
+    }
+  }
+  return { ok, invalid };
+}
+
+/** Éditeur de la liste d'exclusions avec selects pour salons/rôles et validation mention pour utilisateurs. */
 function ExclusionsEditor({
   exclusions,
   roles,
+  channels,
   onChange,
 }: {
   exclusions: LogsExclusionsClient;
   roles: readonly RoleOption[];
+  channels: readonly ChannelOption[];
   onChange: (e: LogsExclusionsClient) => void;
 }) {
+  /** Valeur brute de l'input utilisateurs (texte libre). */
+  const [usersRaw, setUsersRaw] = useState<string>(exclusions.userIds.join(', '));
+  /** Entrées invalides détectées au blur. */
+  const [usersInvalid, setUsersInvalid] = useState<readonly string[]>([]);
+
+  const handleUsersBlur = () => {
+    const { ok, invalid } = parseUserIdList(usersRaw);
+    setUsersInvalid(invalid);
+    onChange({ ...exclusions, userIds: ok });
+  };
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold">Exclusions</h3>
@@ -428,23 +478,42 @@ function ExclusionsEditor({
       {/* Utilisateurs */}
       <div className="space-y-1">
         <label htmlFor="excl-users" className="block text-sm font-medium">
-          IDs utilisateurs exclus
+          Utilisateurs exclus
         </label>
         <input
           id="excl-users"
           type="text"
-          defaultValue={exclusions.userIds.join(', ')}
-          onBlur={(e) => {
-            const ids = e.target.value
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean);
-            onChange({ ...exclusions, userIds: ids });
+          value={usersRaw}
+          onChange={(e) => {
+            setUsersRaw(e.target.value);
+            /* Réinitialise les erreurs dès que l'utilisateur retape. */
+            setUsersInvalid([]);
           }}
-          placeholder="123456789, 987654321"
-          className="flex h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="IDs utilisateurs exclus, séparés par des virgules"
+          onBlur={handleUsersBlur}
+          placeholder="<@123456789>, 987654321"
+          className={[
+            'flex h-9 w-full max-w-sm rounded-md border bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            usersInvalid.length > 0 ? 'border-destructive' : 'border-input',
+          ].join(' ')}
+          aria-label="Utilisateurs exclus — mentions Discord ou IDs numériques, séparés par des virgules"
+          aria-describedby="excl-users-help excl-users-error"
         />
+        {usersInvalid.length > 0 && (
+          <p id="excl-users-error" className="text-xs text-destructive" role="alert">
+            Format invalide : copie-colle une mention Discord (@nom) ou un ID numérique.{' '}
+            <span className="font-medium">Ignorés : {usersInvalid.join(', ')}</span>
+          </p>
+        )}
+        {exclusions.userIds.length > 0 && usersInvalid.length === 0 && (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {exclusions.userIds.length} utilisateur{exclusions.userIds.length > 1 ? 's' : ''} exclu
+            {exclusions.userIds.length > 1 ? 's' : ''}.
+          </p>
+        )}
+        <p id="excl-users-help" className="text-xs text-muted-foreground">
+          Pour obtenir l'ID d'un utilisateur : active le mode développeur Discord (Paramètres &gt;
+          Avancé &gt; Mode développeur), puis clique droit sur l'utilisateur → Copier l'ID.
+        </p>
       </div>
 
       {/* Rôles */}
@@ -462,7 +531,7 @@ function ExclusionsEditor({
             onChange({ ...exclusions, roleIds: selected });
           }}
           className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Rôles exclus (sélection multiple)"
+          aria-label="Rôles exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
         >
           {roles.map((r) => (
             <option key={r.id} value={r.id}>
@@ -470,28 +539,37 @@ function ExclusionsEditor({
             </option>
           ))}
         </select>
+        <p className="text-xs text-muted-foreground">
+          Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs rôles.
+        </p>
       </div>
 
       {/* Salons exclus */}
       <div className="space-y-1">
         <label htmlFor="excl-channels" className="block text-sm font-medium">
-          IDs salons exclus
+          Salons exclus
         </label>
-        <input
+        <select
           id="excl-channels"
-          type="text"
-          defaultValue={exclusions.channelIds.join(', ')}
-          onBlur={(e) => {
-            const ids = e.target.value
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean);
-            onChange({ ...exclusions, channelIds: ids });
+          multiple
+          size={Math.min(channels.length + 1, 6)}
+          value={[...exclusions.channelIds]}
+          onChange={(e) => {
+            const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+            onChange({ ...exclusions, channelIds: selected });
           }}
-          placeholder="123456789, 987654321"
-          className="flex h-9 w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="IDs salons exclus, séparés par des virgules"
-        />
+          className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Salons exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
+        >
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              #{c.name}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs salons.
+        </p>
       </div>
 
       {/* Exclure les bots */}
@@ -701,6 +779,7 @@ export function LogsAdvancedMode({
       <ExclusionsEditor
         exclusions={config.exclusions}
         roles={roles}
+        channels={channels}
         onChange={handleExclusionsChange}
       />
 
