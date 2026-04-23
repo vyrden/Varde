@@ -19,6 +19,8 @@ out/
 # Logs
 logs/
 !modules/logs/
+!apps/dashboard/components/logs/
+!apps/dashboard/tests/unit/logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
