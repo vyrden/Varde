@@ -25,10 +25,12 @@
 
 import {
   attachDiscordClient,
+  createDiscordJsChannelSender,
+  createDiscordService,
   createOnboardingDiscordBridge,
   type OnboardingDiscordBridge,
 } from '@varde/bot';
-import type { GuildId, Logger, ModuleId } from '@varde/contracts';
+import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
@@ -176,6 +178,8 @@ function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void 
 interface DiscordAttachment {
   readonly client: Client;
   readonly bridge: OnboardingDiscordBridge;
+  /** Service Discord concret à passer à `createServer` via `discordService`. */
+  readonly discordService: DiscordService;
 }
 
 interface DiscordBinding {
@@ -191,13 +195,19 @@ interface DiscordBinding {
  * permet à `createServer()` d'enregistrer les routes onboarding avec
  * un bridge vivant tout en gardant `.login()` sous le contrôle du
  * caller (bin.ts l'appelle après `attachDiscordToHandle`).
+ *
+ * Le `ChannelSender` concret est construit ici à partir du Client ;
+ * il est wrappé dans un `DiscordService` (rate limiter + traçabilité)
+ * et passé à `createServer` pour alimenter `ctx.discord` des modules.
  */
-function createDiscordAttachment(): DiscordAttachment {
+function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
   const bridge = createOnboardingDiscordBridge(client);
-  return { client, bridge };
+  const sender = createDiscordJsChannelSender(client);
+  const discordService = createDiscordService({ sender, logger });
+  return { client, bridge, discordService };
 }
 
 function attachDiscordToHandle(
@@ -243,7 +253,7 @@ async function main(): Promise<void> {
   // directement le vrai bridge (PR 3.12d). `.login()` est repoussé
   // jusqu'après `createServer()` pour que le dispatcher soit prêt à
   // recevoir les events gateway.
-  const discordAttachment = discordToken !== null ? createDiscordAttachment() : null;
+  const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
 
   const driver = pickDriver(databaseUrl);
   const handle =
@@ -253,12 +263,14 @@ async function main(): Promise<void> {
           api: { port, host, corsOrigin, authSecret },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
         });
 
   handle.loader.register(helloWorld);

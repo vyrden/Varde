@@ -16,7 +16,14 @@ import {
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { ActionId, EventBus, Logger, ModuleId, UserId } from '@varde/contracts';
+import type {
+  ActionId,
+  DiscordService,
+  EventBus,
+  Logger,
+  ModuleId,
+  UserId,
+} from '@varde/contracts';
 import {
   CORE_ACTIONS,
   type CoreAuditService,
@@ -139,6 +146,12 @@ export interface CreateServerOptions<D extends DbDriver> {
    * sans `VARDE_DISCORD_TOKEN`.
    */
   readonly onboardingBridge?: OnboardingDiscordBridge;
+  /**
+   * Service Discord concret câblé par `bin.ts` quand le token est
+   * présent. Omis → `createCtxFactory` utilise son stub interne
+   * (lève une erreur explicite si un module tente de l'appeler).
+   */
+  readonly discordService?: DiscordService;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -214,6 +227,7 @@ export async function createServer<D extends DbDriver>(
     ...(options.keystore?.previousMasterKey
       ? { keystorePreviousMasterKey: options.keystore.previousMasterKey }
       : {}),
+    ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
   });
 
   const loader = createPluginLoader({ coreVersion, logger, ctxFactory: ctxBundle.factory });
