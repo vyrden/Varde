@@ -43,6 +43,16 @@ import { createServer } from './server.js';
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
+const LOGS_ID = 'logs' as ModuleId;
+
+/**
+ * Modules activés par défaut sur toute guild connue. `hello-world`
+ * reste dans la liste tant qu'il sert de témoin ; `logs` est le
+ * premier vrai module officiel (jalon 4). Les quatre autres
+ * (`welcome`, `roles`, `moderation`, `onboarding-presets`) s'y
+ * ajouteront à mesure de leur livraison.
+ */
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID, LOGS_ID];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -133,18 +143,21 @@ async function upsertGuild(
   }
 }
 
-async function enableHelloWorldOn(
+async function enableDefaultModulesOn(
   handle: ServerHandle,
   guildId: string,
   logger: Logger,
 ): Promise<void> {
-  try {
-    await handle.loader.enable(guildId as GuildId, HELLO_WORLD_ID);
-  } catch (error) {
-    logger.warn('enable hello-world échoué', {
-      err: error instanceof Error ? error.message : String(error),
-      guildId,
-    });
+  for (const moduleId of DEFAULT_ENABLED_MODULES) {
+    try {
+      await handle.loader.enable(guildId as GuildId, moduleId);
+    } catch (error) {
+      logger.warn('enable module par défaut échoué', {
+        err: error instanceof Error ? error.message : String(error),
+        guildId,
+        moduleId,
+      });
+    }
   }
 }
 
@@ -156,7 +169,7 @@ async function seedFromEnv(
   if (ids.length === 0) return;
   for (const id of ids) {
     await upsertGuild(handle, id, `seed-${id}`, logger);
-    await enableHelloWorldOn(handle, id, logger);
+    await enableDefaultModulesOn(handle, id, logger);
   }
   logger.info('seed guilds depuis env appliqué', { count: ids.length });
 }
@@ -172,8 +185,8 @@ async function seedFromEnv(
 function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void {
   return handle.eventBus.on('guild.join', async (event) => {
     await upsertGuild(handle, event.guildId, event.guildId, logger);
-    await enableHelloWorldOn(handle, event.guildId, logger);
-    logger.info('guild rejointe, hello-world activé', { guildId: event.guildId });
+    await enableDefaultModulesOn(handle, event.guildId, logger);
+    logger.info('guild rejointe, modules par défaut activés', { guildId: event.guildId });
   });
 }
 
@@ -253,7 +266,7 @@ function attachDiscordToHandle(
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
-      await enableHelloWorldOn(handle, guild.id, logger);
+      await enableDefaultModulesOn(handle, guild.id, logger);
     }
   });
   const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
