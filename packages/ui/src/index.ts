@@ -24,4 +24,5 @@ export {
   type SidebarItemProps,
   type SidebarProps,
 } from './components/Sidebar.js';
+export * from './components/UnboundPermissionsBanner.js';
 export { cn } from './lib/cn.js';
