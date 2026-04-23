@@ -116,4 +116,5 @@ export const communityCreative: PresetDefinition = {
       config: { welcomeDelayMs: 800 },
     },
   ],
+  permissionBindings: [],
 };

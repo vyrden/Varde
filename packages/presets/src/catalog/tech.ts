@@ -131,4 +131,5 @@ export const communityTechSmall: PresetDefinition = {
       config: { welcomeDelayMs: 1000 },
     },
   ],
+  permissionBindings: [],
 };
