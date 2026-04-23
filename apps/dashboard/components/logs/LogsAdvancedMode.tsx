@@ -3,7 +3,8 @@
 import { Button } from '@varde/ui';
 import { useState } from 'react';
 
-import { saveLogsConfig } from '../../lib/logs-actions';
+import type { TestLogsRouteError } from '../../lib/logs-actions';
+import { saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
 import type {
   ChannelOption,
   LogsConfigClient,
@@ -11,6 +12,20 @@ import type {
   LogsRouteClient,
   RoleOption,
 } from './LogsConfigEditor';
+
+/** Traduit un code d'erreur de la route test en phrase française. */
+function formatTestReason(reason: TestLogsRouteError['reason']): string {
+  switch (reason) {
+    case 'channel-not-found':
+      return 'Salon introuvable ou inaccessible par le bot.';
+    case 'missing-permission':
+      return 'Permissions manquantes (SendMessages ou EmbedLinks).';
+    case 'rate-limit-exhausted':
+      return 'Limite de débit Discord atteinte, réessaie dans quelques secondes.';
+    case 'unknown':
+      return 'Erreur inattendue, consulte les logs du serveur.';
+  }
+}
 
 export interface LogsAdvancedModeProps {
   readonly guildId: string;
@@ -22,17 +37,18 @@ export interface LogsAdvancedModeProps {
 }
 
 /**
- * Ligne du tableau des routes. Les actions (tester, supprimer) sont des
- * placeholders câblés aux Tasks 7-8.
+ * Ligne du tableau des routes.
  */
 function RouteRow({
   route,
   channels,
+  isTesting,
   onDelete,
   onTest,
 }: {
   route: LogsRouteClient;
   channels: readonly ChannelOption[];
+  isTesting: boolean;
   onDelete: () => void;
   onTest: () => void;
 }) {
@@ -53,9 +69,10 @@ function RouteRow({
             variant="ghost"
             size="sm"
             onClick={onTest}
+            disabled={isTesting}
             aria-label={`Tester la route ${route.label}`}
           >
-            Tester
+            {isTesting ? 'Test…' : 'Tester'}
           </Button>
           <Button
             type="button"
@@ -207,7 +224,11 @@ export function LogsAdvancedMode({
 }: LogsAdvancedModeProps) {
   const [routes, setRoutes] = useState<readonly LogsRouteClient[]>(config.routes);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  /** ID de la route en cours de test (null si aucun test en cours). */
+  const [testingRouteId, setTestingRouteId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const syncRoutes = (next: readonly LogsRouteClient[]) => {
     setRoutes(next);
@@ -218,9 +239,18 @@ export function LogsAdvancedMode({
     syncRoutes(routes.filter((r) => r.id !== id));
   };
 
-  const handleTestRoute = (id: string) => {
-    /* Placeholder — câblé à la Task 8 */
-    console.warn(`LogsAdvancedMode.handleTestRoute(${id}) non câblé — Task 8`);
+  const handleTestRoute = async (id: string) => {
+    const route = routes.find((r) => r.id === id);
+    if (!route) return;
+    setTestingRouteId(id);
+    setFeedback(null);
+    const result = await testLogsRoute(guildId, route.channelId);
+    setTestingRouteId(null);
+    if (result.ok) {
+      setFeedback({ kind: 'success', message: 'Test envoyé : va vérifier dans le salon.' });
+    } else {
+      setFeedback({ kind: 'error', message: `Échec : ${formatTestReason(result.reason)}` });
+    }
   };
 
   const handleAddRoute = () => {
@@ -238,9 +268,12 @@ export function LogsAdvancedMode({
     const result = await saveLogsConfig(guildId, config);
     setIsSaving(false);
     if (!result.ok) {
-      setFeedback(result.issues[0]?.message ?? 'Erreur inconnue');
+      setFeedback({
+        kind: 'error',
+        message: result.issues[0]?.message ?? 'Erreur inconnue',
+      });
     } else {
-      setFeedback('Configuration enregistrée.');
+      setFeedback({ kind: 'success', message: 'Configuration enregistrée.' });
     }
   };
 
@@ -291,8 +324,9 @@ export function LogsAdvancedMode({
                     key={route.id}
                     route={route}
                     channels={channels}
+                    isTesting={testingRouteId === route.id}
                     onDelete={() => handleDeleteRoute(route.id)}
-                    onTest={() => handleTestRoute(route.id)}
+                    onTest={() => void handleTestRoute(route.id)}
                   />
                 ))}
               </tbody>
@@ -316,12 +350,12 @@ export function LogsAdvancedMode({
         <p
           role="status"
           className={
-            feedback === 'Configuration enregistrée.'
+            feedback.kind === 'success'
               ? 'text-sm text-green-700 dark:text-green-400'
               : 'text-sm text-destructive'
           }
         >
-          {feedback}
+          {feedback.message}
         </p>
       )}
 

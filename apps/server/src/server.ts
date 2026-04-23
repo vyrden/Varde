@@ -11,6 +11,7 @@ import {
   registerAiSettingsRoutes,
   registerAuditRoutes,
   registerGuildsRoutes,
+  registerLogsRoutes,
   registerModulesRoutes,
   registerOnboardingRoutes,
 } from '@varde/api';
@@ -413,6 +414,10 @@ export async function createServer<D extends DbDriver>(
   });
 
   registerGuildsRoutes(api, { client, discord });
+  registerLogsRoutes(api, {
+    discord,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+  });
   registerModulesRoutes(api, { loader, config, discord });
   registerAuditRoutes(api, { audit, discord });
   registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });

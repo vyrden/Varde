@@ -1,5 +1,7 @@
+import type { DiscordService } from '@varde/contracts';
+import { assertChannelId, DiscordSendError } from '@varde/contracts';
 import { getBrokenRoutesFor } from '@varde/module-logs';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { DiscordClient } from '../discord-client.js';
 import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
 
@@ -7,7 +9,13 @@ import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
  * Options d'enregistrement des routes du module logs.
  */
 export interface RegisterLogsRoutesOptions {
+  /** Client Discord OAuth2 (vérification des permissions admin). */
   readonly discord: DiscordClient;
+  /**
+   * Service Discord proactif (envoi d'embeds). Requis pour la route
+   * POST /test-route. Si absent, la route retourne 503.
+   */
+  readonly discordService?: DiscordService;
 }
 
 /**
@@ -36,6 +44,55 @@ export function registerLogsRoutes(app: FastifyInstance, options: RegisterLogsRo
       }));
 
       return { routes };
+    },
+  );
+
+  /**
+   * Route : POST /guilds/:guildId/modules/logs/test-route
+   *
+   * Envoie un embed factice dans le salon `channelId` pour permettre à
+   * l'admin de vérifier qu'une route fonctionne avant de l'enregistrer.
+   * Retourne `{ ok: true }` si Discord a accepté, ou `{ reason }` avec
+   * le code HTTP approprié en cas d'échec.
+   *
+   * Accès restreint : MANAGE_GUILD Discord requis.
+   */
+  app.post<{ Params: { guildId: string }; Body: { channelId: string } }>(
+    '/guilds/:guildId/modules/logs/test-route',
+    async (request, reply: FastifyReply) => {
+      const { guildId } = request.params;
+      await requireGuildAdmin(app, request, guildId, options.discord);
+
+      if (!options.discordService) {
+        return reply.code(503).send({ reason: 'service-indisponible' });
+      }
+
+      const { channelId } = request.body as { channelId: unknown };
+      if (typeof channelId !== 'string' || !/^\d{17,19}$/.test(channelId)) {
+        return reply.code(400).send({ reason: 'channelId invalide' });
+      }
+
+      const now = new Date().toISOString();
+
+      try {
+        await options.discordService.sendEmbed(assertChannelId(channelId), {
+          kind: 'embed',
+          payload: {
+            title: 'Test de la route',
+            description:
+              'Si tu vois ce message, la route fonctionne correctement. Tu peux fermer ce test.',
+            color: 0x2ecc71,
+            timestamp: now,
+            footer: { text: `Varde · ${now}` },
+          },
+        });
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof DiscordSendError) {
+          return reply.code(502).send({ reason: error.reason });
+        }
+        return reply.code(500).send({ reason: 'unknown' });
+      }
     },
   );
 }

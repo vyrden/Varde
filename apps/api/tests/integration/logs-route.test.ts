@@ -1,6 +1,7 @@
-import type { GuildId } from '@varde/contracts';
+import type { ChannelId, DiscordService, GuildId, UIMessage } from '@varde/contracts';
+import { DiscordSendError } from '@varde/contracts';
 import { createLogger } from '@varde/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   type Authenticator,
@@ -48,7 +49,14 @@ const adminFetch: FetchLike = async () => jsonResponse([discordGuild(GUILD, '0x2
 /** Fetch Discord qui répond sans permission MANAGE_GUILD. */
 const nonAdminFetch: FetchLike = async () => jsonResponse([discordGuild(GUILD, '0x8')]);
 
-const build = async (fetchImpl: FetchLike) => {
+const makeDiscordService = (
+  sendEmbedImpl: (channelId: ChannelId, message: UIMessage) => Promise<void>,
+): DiscordService => ({
+  sendMessage: vi.fn(),
+  sendEmbed: vi.fn().mockImplementation(sendEmbedImpl),
+});
+
+const build = async (fetchImpl: FetchLike, discordService?: DiscordService) => {
   const logger = silentLogger();
   const discord = createDiscordClient({ fetch: fetchImpl });
   const app = await createApiServer({
@@ -56,13 +64,13 @@ const build = async (fetchImpl: FetchLike) => {
     version: 'test',
     authenticator: headerAuthenticator,
   });
-  registerLogsRoutes(app, { discord });
+  registerLogsRoutes(app, { discord, discordService });
   return { app };
 };
 
 describe('GET /guilds/:guildId/modules/logs/broken-routes', () => {
   it('401 sans session', async () => {
-    const { app } = await build(adminFetch);
+    const { app } = await build(adminFetch, undefined);
     try {
       const res = await app.inject({
         method: 'GET',
@@ -75,7 +83,7 @@ describe('GET /guilds/:guildId/modules/logs/broken-routes', () => {
   });
 
   it('403 si non admin de la guild', async () => {
-    const { app } = await build(nonAdminFetch);
+    const { app } = await build(nonAdminFetch, undefined);
     try {
       const res = await app.inject({
         method: 'GET',
@@ -90,7 +98,7 @@ describe('GET /guilds/:guildId/modules/logs/broken-routes', () => {
   });
 
   it('200 avec routes vide si aucune route cassée pour cette guild', async () => {
-    const { app } = await build(adminFetch);
+    const { app } = await build(adminFetch, undefined);
     try {
       const res = await app.inject({
         method: 'GET',
@@ -114,7 +122,7 @@ describe('GET /guilds/:guildId/modules/logs/broken-routes', () => {
   });
 
   it('200 avec body { routes: [] } pour une guild admin sans route cassée', async () => {
-    const { app } = await build(adminFetch);
+    const { app } = await build(adminFetch, undefined);
     try {
       const res = await app.inject({
         method: 'GET',
@@ -124,6 +132,83 @@ describe('GET /guilds/:guildId/modules/logs/broken-routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json() as { routes: unknown[] };
       expect(Array.isArray(body.routes)).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('POST /guilds/:guildId/modules/logs/test-route', () => {
+  const VALID_CHANNEL = '111222333444555666';
+
+  it('200 { ok: true } quand discordService.sendEmbed réussit', async () => {
+    const sendEmbed = vi.fn().mockResolvedValue(undefined);
+    const discordService = makeDiscordService(sendEmbed);
+    const { app } = await build(adminFetch, discordService);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/modules/logs/test-route`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ channelId: VALID_CHANNEL }),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { ok: boolean };
+      expect(body.ok).toBe(true);
+      expect(sendEmbed).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 avec reason quand discordService.sendEmbed lève DiscordSendError', async () => {
+    const sendEmbed = vi
+      .fn()
+      .mockRejectedValue(
+        new DiscordSendError('channel-not-found', 'Salon introuvable dans le test.'),
+      );
+    const discordService = makeDiscordService(sendEmbed);
+    const { app } = await build(adminFetch, discordService);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/modules/logs/test-route`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ channelId: VALID_CHANNEL }),
+      });
+      expect(res.statusCode).toBe(502);
+      const body = res.json() as { reason: string };
+      expect(body.reason).toBe('channel-not-found');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('401 sans session', async () => {
+    const { app } = await build(adminFetch, undefined);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/modules/logs/test-route`,
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ channelId: VALID_CHANNEL }),
+      });
+      expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 si non admin de la guild', async () => {
+    const { app } = await build(nonAdminFetch, undefined);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/modules/logs/test-route`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ channelId: VALID_CHANNEL }),
+      });
+      expect(res.statusCode).toBe(403);
     } finally {
       await app.close();
     }

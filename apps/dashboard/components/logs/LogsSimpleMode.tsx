@@ -3,8 +3,23 @@
 import { Button } from '@varde/ui';
 import { useState } from 'react';
 
-import { saveLogsConfig } from '../../lib/logs-actions';
+import type { TestLogsRouteError } from '../../lib/logs-actions';
+import { saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
 import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsConfigEditor';
+
+/** Traduit un code d'erreur de la route test en phrase française. */
+function formatTestReason(reason: TestLogsRouteError['reason']): string {
+  switch (reason) {
+    case 'channel-not-found':
+      return 'Salon introuvable ou inaccessible par le bot.';
+    case 'missing-permission':
+      return 'Permissions manquantes (SendMessages ou EmbedLinks).';
+    case 'rate-limit-exhausted':
+      return 'Limite de débit Discord atteinte, réessaie dans quelques secondes.';
+    case 'unknown':
+      return 'Erreur inattendue, consulte les logs du serveur.';
+  }
+}
 
 /** Identifiant stable de la route générée en mode simple. */
 const SIMPLE_ROUTE_ID = 'simple-default';
@@ -74,7 +89,10 @@ export function LogsSimpleMode({
   const [preset, setPreset] = useState<LogPreset>('all');
   const [excludeBots, setExcludeBots] = useState<boolean>(config.exclusions.excludeBots);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
+    null,
+  );
 
   const canSave = channelId !== '';
 
@@ -114,15 +132,23 @@ export function LogsSimpleMode({
     const result = await saveLogsConfig(guildId, config);
     setIsSaving(false);
     if (!result.ok) {
-      setFeedback(result.issues[0]?.message ?? 'Erreur inconnue');
+      setFeedback({ kind: 'error', message: result.issues[0]?.message ?? 'Erreur inconnue' });
     } else {
-      setFeedback('Configuration enregistrée.');
+      setFeedback({ kind: 'success', message: 'Configuration enregistrée.' });
     }
   };
 
-  /** Placeholder — câblé à la Task 8. */
-  const handleTest = () => {
-    console.warn('LogsSimpleMode.handleTest non câblé — Task 8');
+  const handleTest = async () => {
+    if (!channelId) return;
+    setIsTesting(true);
+    setFeedback(null);
+    const result = await testLogsRoute(guildId, channelId);
+    setIsTesting(false);
+    if (result.ok) {
+      setFeedback({ kind: 'success', message: 'Test envoyé : va vérifier dans le salon.' });
+    } else {
+      setFeedback({ kind: 'error', message: `Échec : ${formatTestReason(result.reason)}` });
+    }
   };
 
   return (
@@ -216,12 +242,12 @@ export function LogsSimpleMode({
         <p
           role="status"
           className={
-            feedback === 'Configuration enregistrée.'
+            feedback.kind === 'success'
               ? 'text-sm text-green-700 dark:text-green-400'
               : 'text-sm text-destructive'
           }
         >
-          {feedback}
+          {feedback.message}
         </p>
       )}
 
@@ -230,8 +256,13 @@ export function LogsSimpleMode({
         <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSubmit()}>
           {isSaving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
-        <Button type="button" variant="ghost" disabled={!canSave} onClick={handleTest}>
-          Tester
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!canSave || isTesting}
+          onClick={() => void handleTest()}
+        >
+          {isTesting ? 'Test en cours…' : 'Tester'}
         </Button>
       </div>
 

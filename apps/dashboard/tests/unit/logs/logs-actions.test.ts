@@ -18,7 +18,7 @@ const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
 import type { LogsConfigClient } from '../../../lib/logs-actions';
-import { saveLogsConfig } from '../../../lib/logs-actions';
+import { saveLogsConfig, testLogsRoute } from '../../../lib/logs-actions';
 
 const minimalConfig: LogsConfigClient = {
   version: 1,
@@ -106,5 +106,55 @@ describe('saveLogsConfig', () => {
     if (!result.ok) {
       expect(result.issues[0]?.message).toBe('Network error');
     }
+  });
+});
+
+describe('testLogsRoute', () => {
+  it('renvoie { ok: true } quand API repond 200', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await testLogsRoute('guild-1', '123456789012345678');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('appelle POST /guilds/:guildId/modules/logs/test-route avec le bon channelId', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await testLogsRoute('guild-42', '111222333444555666');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/guilds/guild-42/modules/logs/test-route');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ channelId: '111222333444555666' });
+  });
+
+  it('renvoie { ok: false, reason } quand API repond 502 avec reason', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ reason: 'channel-not-found' }), {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await testLogsRoute('guild-1', '123456789012345678');
+    expect(result).toEqual({ ok: false, reason: 'channel-not-found' });
+  });
+
+  it('renvoie { ok: false, reason: unknown } quand fetch leve une exception reseau', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('Network error'));
+
+    const result = await testLogsRoute('guild-1', '123456789012345678');
+    expect(result).toEqual({ ok: false, reason: 'unknown' });
   });
 });

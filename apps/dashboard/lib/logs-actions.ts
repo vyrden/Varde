@@ -30,6 +30,15 @@ export interface LogsConfigClient {
   };
 }
 
+export interface TestLogsRouteResult {
+  readonly ok: true;
+}
+
+export interface TestLogsRouteError {
+  readonly ok: false;
+  readonly reason: 'channel-not-found' | 'missing-permission' | 'rate-limit-exhausted' | 'unknown';
+}
+
 export interface SaveLogsConfigResult {
   readonly ok: true;
 }
@@ -92,5 +101,69 @@ export async function saveLogsConfig(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { ok: false, issues: [{ path: '', message }] };
+  }
+}
+
+/** Raisons typées retournées par l'API /test-route. */
+const KNOWN_REASONS = new Set([
+  'channel-not-found',
+  'missing-permission',
+  'rate-limit-exhausted',
+] as const);
+
+type KnownReason = 'channel-not-found' | 'missing-permission' | 'rate-limit-exhausted';
+
+/** Extrait un reason typé depuis le body d'erreur de l'API. */
+function extractReason(body: unknown): TestLogsRouteError['reason'] {
+  if (
+    body !== null &&
+    typeof body === 'object' &&
+    'reason' in body &&
+    typeof (body as { reason: unknown }).reason === 'string' &&
+    KNOWN_REASONS.has((body as { reason: KnownReason }).reason)
+  ) {
+    return (body as { reason: KnownReason }).reason;
+  }
+  return 'unknown';
+}
+
+/**
+ * Envoie un embed factice dans le salon cible pour valider qu'une
+ * route fonctionne. Retourne ok=true si Discord a accepté l'envoi,
+ * ou ok=false + reason pour les échecs typés.
+ */
+export async function testLogsRoute(
+  guildId: string,
+  channelId: string,
+): Promise<TestLogsRouteResult | TestLogsRouteError> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/logs/test-route`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify({ channelId }),
+      },
+    );
+
+    if (response.ok) {
+      return { ok: true };
+    }
+
+    let errorBody: unknown = null;
+    try {
+      errorBody = await response.json();
+    } catch {
+      /* réponse non-JSON : reason 'unknown' */
+    }
+
+    return { ok: false, reason: extractReason(errorBody) };
+  } catch {
+    return { ok: false, reason: 'unknown' };
   }
 }
