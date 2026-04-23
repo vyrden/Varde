@@ -11,6 +11,7 @@ import type {
   UserId,
 } from './ids.js';
 import type { OnboardingActionDefinition } from './onboarding.js';
+import type { UIAttachment, UIEmbed } from './ui.js';
 
 /**
  * Interfaces des services exposés aux modules via `ctx`. Types
@@ -193,11 +194,36 @@ export interface AIService {
 /** Type de message UI normalisé. */
 export type UIMessageKind = 'embed' | 'success' | 'error' | 'confirm';
 
-/** Message UI normalisé, retourné par le module au handler d'interaction. */
-export interface UIMessage {
-  readonly kind: UIMessageKind;
-  readonly payload: unknown;
+/** Payload "message simple" (success, error). */
+export interface UITextPayload {
+  readonly message: string;
 }
+
+/** Payload d'une demande de confirmation interactive. */
+export interface UIConfirmPayload {
+  readonly message: string;
+  readonly confirmLabel: string;
+  readonly cancelLabel: string;
+}
+
+/**
+ * Message UI normalisé. Union discriminée par `kind`. Les consommateurs
+ * narrow avec un `switch (message.kind)` ou un `if (message.kind === ...)`
+ * et obtiennent le type concret du payload sans cast.
+ *
+ * Le kind `'embed'` accepte des attachments optionnels pour les cas où
+ * un contenu utilisateur trop long ne rentre pas dans l'embed (cf.
+ * `UIAttachment` et le module `logs`).
+ */
+export type UIMessage =
+  | {
+      readonly kind: 'embed';
+      readonly payload: UIEmbed;
+      readonly attachments?: readonly UIAttachment[];
+    }
+  | { readonly kind: 'success'; readonly payload: UITextPayload }
+  | { readonly kind: 'error'; readonly payload: UITextPayload }
+  | { readonly kind: 'confirm'; readonly payload: UIConfirmPayload };
 
 /**
  * Factory d'UI standard (embeds, réponses, confirmations). Seule
