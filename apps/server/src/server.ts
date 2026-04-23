@@ -246,7 +246,16 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
   });
 
-  const loader = createPluginLoader({ coreVersion, logger, ctxFactory: ctxBundle.factory });
+  const loader = createPluginLoader({
+    coreVersion,
+    logger,
+    ctxFactory: ctxBundle.factory,
+    // Branche la persistance des permissions du manifest dans
+    // `permissions_registry` au chargement, sans quoi l'action
+    // `core.bindPermission` (ADR 0008 seeding A) échoue par FK
+    // violation sur le premier onboarding qui apply des bindings.
+    registerPermissions: (entries) => permissions.registerPermissions(entries),
+  });
   const commandRegistry = createCommandRegistry();
 
   const dispatcher = createDispatcher({

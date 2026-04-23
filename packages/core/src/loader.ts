@@ -1,10 +1,12 @@
 import {
   type GuildId,
+  type Iso8601DateTime,
   type Logger,
   type ModuleContext,
   type ModuleDefinition,
   ModuleError,
   type ModuleId,
+  type PermissionRegistryRecord,
   ValidationError,
 } from '@varde/contracts';
 import { satisfies as semverSatisfies } from 'semver';
@@ -51,11 +53,31 @@ export interface ModuleRef {
 /** Signature du constructeur de ctx. */
 export type CtxFactory = (ref: ModuleRef, guildId?: GuildId) => ModuleContext;
 
+/**
+ * Enregistre les permissions déclarées dans les manifests des modules
+ * chargés dans `permissions_registry`. Injectable par le server
+ * (`apps/server`) via les options du loader. Si omis, les permissions
+ * ne sont **pas** enregistrées — utile pour les tests unitaires qui
+ * ne touchent pas la DB, mais en prod doit toujours être fourni
+ * sinon l'action `core.bindPermission` (ADR 0008) échoue par FK
+ * violation sur `permission_id`.
+ */
+export type RegisterManifestPermissions = (
+  entries: readonly PermissionRegistryRecord[],
+) => Promise<void>;
+
 /** Options de construction. */
 export interface CreatePluginLoaderOptions {
   readonly coreVersion: string;
   readonly logger: Logger;
   readonly ctxFactory: CtxFactory;
+  /**
+   * Callback pour persister les permissions du manifest dans
+   * `permissions_registry` au chargement du module. Typiquement :
+   * `(entries) => permissionService.registerPermissions(entries)`.
+   * Absent = skip (voir JSDoc de `RegisterManifestPermissions`).
+   */
+  readonly registerPermissions?: RegisterManifestPermissions;
 }
 
 interface ModuleRecord {
@@ -143,7 +165,7 @@ const sortByDependencies = (modules: ReadonlyMap<ModuleId, ModuleDefinition>): M
 };
 
 export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLoader {
-  const { coreVersion, ctxFactory } = options;
+  const { coreVersion, ctxFactory, registerPermissions } = options;
   const logger = options.logger.child({ component: 'loader' });
   const registry = new Map<ModuleId, ModuleRecord>();
   let computedOrder: ModuleId[] | null = null;
@@ -212,6 +234,40 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
       for (const id of order) {
         const record = requireRecord(id);
         if (record.loaded) continue;
+
+        // Persiste les permissions déclarées dans `permissions_registry`
+        // AVANT le `onLoad` du module, pour que toute action qui lie
+        // une permission à un rôle (action onboarding
+        // `core.bindPermission`, écran dashboard de binding) puisse
+        // satisfaire la FK `permission_bindings.permission_id`.
+        // Invariant ADR 0008 : toute permission déclarée par un
+        // manifest est présente dans le registre au moment où le
+        // module est chargé.
+        if (registerPermissions && record.definition.manifest.permissions.length > 0) {
+          const createdAt = new Date().toISOString() as Iso8601DateTime;
+          const entries: PermissionRegistryRecord[] = record.definition.manifest.permissions.map(
+            (perm) => ({
+              id: perm.id,
+              moduleId: id,
+              description: perm.description,
+              category: perm.category,
+              defaultLevel: perm.defaultLevel,
+              createdAt,
+            }),
+          );
+          try {
+            await registerPermissions(entries);
+            logger.debug('permissions du manifest enregistrées', {
+              moduleId: id,
+              count: entries.length,
+            });
+          } catch (error) {
+            const moduleError = toModuleError(id, 'registerPermissions', error);
+            logger.error('registerPermissions en échec', moduleError, { moduleId: id });
+            throw moduleError;
+          }
+        }
+
         if (!record.definition.onLoad) {
           record.loaded = true;
           continue;

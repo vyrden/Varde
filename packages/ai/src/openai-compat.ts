@@ -111,16 +111,36 @@ const presetProposalResponseSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.5),
 });
 
+const suggestionItemSchema = z.object({
+  label: z.string().min(1).max(200),
+  patch: z.record(z.string(), z.unknown()),
+  rationale: z.string().min(1).max(500),
+});
+
+/**
+ * Accepte les deux formes classiques pour les LLMs derrière
+ * `response_format: { type: 'json_object' }` :
+ *
+ * - Array direct `[{...}, {...}]` (idéal, mais certains providers
+ *   refusent car ils imposent un object racine).
+ * - Object wrapper `{ suggestions: [...] }` ou `{ completions: [...] }`
+ *   ou `{ items: [...] }` (variantes les plus courantes renvoyées par
+ *   les modèles qui exigent un object racine).
+ *
+ * Les trois variantes sont normalisées en array via `.transform`.
+ */
 const suggestionArrayResponseSchema = z
-  .array(
-    z.object({
-      label: z.string().min(1).max(200),
-      patch: z.record(z.string(), z.unknown()),
-      rationale: z.string().min(1).max(500),
-    }),
-  )
-  .min(1)
-  .max(5);
+  .union([
+    z.array(suggestionItemSchema).min(1).max(5),
+    z
+      .object({ suggestions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.suggestions),
+    z
+      .object({ completions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.completions),
+    z.object({ items: z.array(suggestionItemSchema).min(1).max(5) }).transform((o) => o.items),
+  ])
+  .transform((arr) => arr as readonly z.infer<typeof suggestionItemSchema>[]);
 
 // ─── Helpers ───────────────────────────────────────────────────────
 

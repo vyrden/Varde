@@ -1,5 +1,16 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Mock de `../auth` : évite que vitest charge next-auth (qui importe
+// `next/server` non résolvable en environnement de test). La vraie
+// `signOut` est consommée à l'exécution via une server action, le
+// composant ne la déclenche jamais côté render.
+vi.mock('../../auth', () => ({
+  signOut: vi.fn(),
+  signIn: vi.fn(),
+  auth: vi.fn(),
+  handlers: {},
+}));
 
 import { DashboardHeader } from '../../components/DashboardHeader';
 
@@ -21,11 +32,13 @@ describe('DashboardHeader', () => {
     expect(screen.getByRole('button', { name: /Se déconnecter/i })).toBeDefined();
   });
 
-  it('utilise un formulaire qui POST sur /api/auth/signout (signout server-side)', () => {
+  it('enveloppe le bouton dans un formulaire (server action signOut)', () => {
     const { container } = render(<DashboardHeader />);
     const form = container.querySelector('form');
     expect(form).not.toBeNull();
-    expect(form?.getAttribute('action')).toBe('/api/auth/signout');
-    expect(form?.getAttribute('method')).toBe('post');
+    // L'action est une server action (function), pas une URL — on vérifie
+    // que le form existe et encadre bien le bouton submit.
+    const button = form?.querySelector('button[type="submit"]');
+    expect(button).not.toBeNull();
   });
 });
