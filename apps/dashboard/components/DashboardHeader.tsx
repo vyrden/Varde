@@ -1,15 +1,18 @@
 import { Button, Header } from '@varde/ui';
 import type { ReactElement } from 'react';
 
+import { signOut } from '../auth';
+
 export interface DashboardHeaderProps {
   readonly userName?: string | null | undefined;
 }
 
 /**
  * Entête du dashboard. Affiche le nom du user logué et un bouton
- * de déconnexion qui POST sur l'endpoint Auth.js (le form est
- * serveur-compatible pour marcher sans JS actif — important pour
- * l'accessibilité et les navigateurs avec JS désactivé).
+ * de déconnexion. Utilise une server action qui appelle `signOut()`
+ * exporté depuis `auth.ts` — Auth.js v5 gère le CSRF token
+ * automatiquement, contrairement au POST direct sur
+ * `/api/auth/signout` qui échoue silencieusement sans token.
  */
 export function DashboardHeader({ userName }: DashboardHeaderProps): ReactElement {
   return (
@@ -20,7 +23,12 @@ export function DashboardHeader({ userName }: DashboardHeaderProps): ReactElemen
           {userName ? (
             <span className="hidden text-sm text-muted-foreground sm:inline">{userName}</span>
           ) : null}
-          <form action="/api/auth/signout" method="post">
+          <form
+            action={async () => {
+              'use server';
+              await signOut({ redirectTo: '/' });
+            }}
+          >
             <Button type="submit" variant="ghost" size="sm">
               Se déconnecter
             </Button>
