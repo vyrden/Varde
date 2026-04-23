@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "ui": "tui",
+  "ui": "stream",
   "concurrency": "20",
   "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
   "tasks": {
