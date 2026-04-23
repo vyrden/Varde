@@ -382,15 +382,10 @@ describe('createPermissionService — bind / unbind', () => {
     // Deuxième appel identique : ne doit pas lever d'erreur ni créer de doublon.
     await expect(permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE)).resolves.toBeUndefined();
 
-    const rows = await client.db
-      .select()
-      .from(sqliteSchema.permissionBindings)
-      .all();
+    const rows = await client.db.select().from(sqliteSchema.permissionBindings).all();
     const matching = rows.filter(
       (r) =>
-        r.guildId === GUILD &&
-        r.permissionId === BAN_PERMISSION &&
-        r.roleId === MODERATOR_ROLE,
+        r.guildId === GUILD && r.permissionId === BAN_PERMISSION && r.roleId === MODERATOR_ROLE,
     );
     expect(matching).toHaveLength(1);
   });
@@ -418,13 +413,8 @@ describe('createPermissionService — bind / unbind', () => {
     );
 
     // Vérification directe en DB : seul MEMBER_ROLE subsiste.
-    const rows = await client.db
-      .select()
-      .from(sqliteSchema.permissionBindings)
-      .all();
-    const remaining = rows.filter(
-      (r) => r.guildId === GUILD && r.permissionId === BAN_PERMISSION,
-    );
+    const rows = await client.db.select().from(sqliteSchema.permissionBindings).all();
+    const remaining = rows.filter((r) => r.guildId === GUILD && r.permissionId === BAN_PERMISSION);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.roleId).toBe(MEMBER_ROLE);
   });

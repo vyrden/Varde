@@ -84,20 +84,12 @@ export interface CorePermissionService {
    * de la guild concernée pour que la résolution suivante lise la
    * nouvelle valeur.
    */
-  readonly bind: (
-    guildId: GuildId,
-    permissionId: PermissionId,
-    roleId: RoleId,
-  ) => Promise<void>;
+  readonly bind: (guildId: GuildId, permissionId: PermissionId, roleId: RoleId) => Promise<void>;
   /**
    * Supprime uniquement la ligne `(guildId, permissionId, roleId)`.
    * No-op si la ligne n'existe pas. Invalide le cache.
    */
-  readonly unbind: (
-    guildId: GuildId,
-    permissionId: PermissionId,
-    roleId: RoleId,
-  ) => Promise<void>;
+  readonly unbind: (guildId: GuildId, permissionId: PermissionId, roleId: RoleId) => Promise<void>;
 }
 
 type PermissionIndex = ReadonlyMap<PermissionId, ReadonlySet<RoleId>>;
