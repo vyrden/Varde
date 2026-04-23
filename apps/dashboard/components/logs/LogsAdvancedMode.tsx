@@ -27,6 +27,32 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
   }
 }
 
+/** Labels français des 4 événements pilotes V1. */
+const EVENT_LABELS: Record<string, string> = {
+  'guild.memberJoin': 'Arrivée membre',
+  'guild.memberLeave': 'Départ membre',
+  'guild.messageDelete': 'Message supprimé',
+  'guild.messageEdit': 'Message édité',
+};
+
+const EVENTS = Object.keys(EVENT_LABELS) as readonly string[];
+
+/** Brouillon de route pour le formulaire d'ajout. */
+interface RouteDraft {
+  label: string;
+  events: readonly string[];
+  channelId: string;
+  verbosity: 'compact' | 'detailed';
+}
+
+function emptyDraft(): RouteDraft {
+  return { label: '', events: [], channelId: '', verbosity: 'detailed' };
+}
+
+function isDraftValid(d: RouteDraft): boolean {
+  return d.label.trim() !== '' && d.events.length > 0 && d.channelId !== '';
+}
+
 export interface LogsAdvancedModeProps {
   readonly guildId: string;
   readonly config: LogsConfigClient;
@@ -36,7 +62,7 @@ export interface LogsAdvancedModeProps {
 }
 
 /**
- * Ligne du tableau des routes.
+ * Ligne du tableau des routes — supporte un mode édition inline.
  */
 function RouteRow({
   route,
@@ -44,14 +70,153 @@ function RouteRow({
   isTesting,
   onDelete,
   onTest,
+  onUpdate,
 }: {
   route: LogsRouteClient;
   channels: readonly ChannelOption[];
   isTesting: boolean;
   onDelete: () => void;
   onTest: () => void;
+  onUpdate: (updated: LogsRouteClient) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  /** Copie locale mutable pendant l'édition. */
+  const [draft, setDraft] = useState<RouteDraft>({
+    label: route.label,
+    events: [...route.events],
+    channelId: route.channelId,
+    verbosity: route.verbosity,
+  });
+
   const channelName = channels.find((c) => c.id === route.channelId)?.name ?? route.channelId;
+
+  const handleEdit = () => {
+    /* Réinitialise le brouillon à partir de la valeur actuelle de la route. */
+    setDraft({
+      label: route.label,
+      events: [...route.events],
+      channelId: route.channelId,
+      verbosity: route.verbosity,
+    });
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+  };
+
+  const handleValidate = () => {
+    if (!isDraftValid(draft)) return;
+    onUpdate({ ...route, ...draft });
+    setIsEditing(false);
+  };
+
+  const toggleEvent = (ev: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      events: prev.events.includes(ev) ? prev.events.filter((e) => e !== ev) : [...prev.events, ev],
+    }));
+  };
+
+  if (isEditing) {
+    return (
+      <tr className="border-b last:border-0 bg-muted/20">
+        {/* Label */}
+        <td className="px-3 py-2">
+          <input
+            type="text"
+            value={draft.label}
+            maxLength={64}
+            onChange={(e) => setDraft((prev) => ({ ...prev, label: e.target.value }))}
+            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Label de la route"
+          />
+        </td>
+
+        {/* Événements — checkboxes multi-sélection */}
+        <td className="px-3 py-2">
+          <fieldset>
+            <legend className="sr-only">Événements de la route</legend>
+            <div className="flex flex-col gap-1">
+              {EVENTS.map((ev) => (
+                <label key={ev} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.events.includes(ev)}
+                    onChange={() => toggleEvent(ev)}
+                    className="h-3.5 w-3.5 rounded"
+                    aria-label={EVENT_LABELS[ev] ?? ev}
+                  />
+                  {EVENT_LABELS[ev] ?? ev}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </td>
+
+        {/* Salon */}
+        <td className="px-3 py-2">
+          <select
+            value={draft.channelId}
+            onChange={(e) => setDraft((prev) => ({ ...prev, channelId: e.target.value }))}
+            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Salon de destination"
+          >
+            <option value="">— Choisir —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+        </td>
+
+        {/* Verbosité */}
+        <td className="px-3 py-2">
+          <select
+            value={draft.verbosity}
+            onChange={(e) =>
+              setDraft((prev) => ({
+                ...prev,
+                verbosity: e.target.value as 'compact' | 'detailed',
+              }))
+            }
+            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Verbosité de la route"
+            title="Compact : une ligne par événement. Détaillé : embed complet avec tous les champs."
+          >
+            <option value="compact">Compact</option>
+            <option value="detailed">Détaillé</option>
+          </select>
+        </td>
+
+        {/* Actions */}
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleValidate}
+              disabled={!isDraftValid(draft)}
+              aria-label="Valider les modifications"
+            >
+              Valider
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              aria-label="Annuler les modifications"
+            >
+              Annuler
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <tr className="border-b last:border-0">
@@ -63,6 +228,15 @@ function RouteRow({
       <td className="px-3 py-2 text-sm capitalize">{route.verbosity}</td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleEdit}
+            aria-label={`Éditer la route ${route.label}`}
+          >
+            Éditer
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -86,6 +260,154 @@ function RouteRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Formulaire inline d'ajout de route — affiché sous le tableau au clic
+ * sur "+ Nouvelle route". Disparaît après validation ou annulation.
+ */
+function AddRouteForm({
+  channels,
+  onAdd,
+  onCancel,
+}: {
+  channels: readonly ChannelOption[];
+  onAdd: (draft: RouteDraft) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<RouteDraft>(emptyDraft);
+
+  const toggleEvent = (ev: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      events: prev.events.includes(ev) ? prev.events.filter((e) => e !== ev) : [...prev.events, ev],
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isDraftValid(draft)) return;
+    onAdd(draft);
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-lg border border-dashed border-primary/40 bg-muted/20 p-4 space-y-4"
+      aria-label="Formulaire d'ajout de route"
+    >
+      <p className="text-sm font-semibold">Nouvelle route</p>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Label */}
+        <div className="space-y-1">
+          <label htmlFor="new-route-label" className="block text-sm font-medium">
+            Label
+          </label>
+          <input
+            id="new-route-label"
+            type="text"
+            value={draft.label}
+            maxLength={64}
+            onChange={(e) => setDraft((prev) => ({ ...prev, label: e.target.value }))}
+            placeholder="ex : Modération"
+            required
+            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Label de la nouvelle route (64 caractères max)"
+          />
+        </div>
+
+        {/* Salon */}
+        <div className="space-y-1">
+          <label htmlFor="new-route-channel" className="block text-sm font-medium">
+            Salon
+          </label>
+          <select
+            id="new-route-channel"
+            value={draft.channelId}
+            onChange={(e) => setDraft((prev) => ({ ...prev, channelId: e.target.value }))}
+            required
+            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Salon de destination de la route"
+          >
+            <option value="">— Choisir un salon —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Événements */}
+      <div className="space-y-1">
+        <p className="text-sm font-medium" id="new-route-events-label">
+          Événements
+          <span
+            className="ml-1 text-xs text-muted-foreground"
+            title="Sélectionne les types d'événements Discord à envoyer sur cette route."
+          >
+            (au moins 1)
+          </span>
+        </p>
+        <fieldset aria-labelledby="new-route-events-label">
+          <legend className="sr-only">Événements à envoyer sur cette route</legend>
+          <div className="flex flex-wrap gap-3">
+            {EVENTS.map((ev) => (
+              <label key={ev} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draft.events.includes(ev)}
+                  onChange={() => toggleEvent(ev)}
+                  className="h-4 w-4 rounded"
+                  aria-label={EVENT_LABELS[ev] ?? ev}
+                />
+                {EVENT_LABELS[ev] ?? ev}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+
+      {/* Verbosité */}
+      <div className="space-y-1">
+        <label htmlFor="new-route-verbosity" className="block text-sm font-medium">
+          Verbosité
+          <span
+            className="ml-1 text-xs text-muted-foreground"
+            title="Compact : une ligne par événement. Détaillé : embed complet avec tous les champs."
+          >
+            (?)
+          </span>
+        </label>
+        <select
+          id="new-route-verbosity"
+          value={draft.verbosity}
+          onChange={(e) =>
+            setDraft((prev) => ({
+              ...prev,
+              verbosity: e.target.value as 'compact' | 'detailed',
+            }))
+          }
+          className="h-9 w-48 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Verbosité de la route"
+        >
+          <option value="compact">Compact</option>
+          <option value="detailed">Détaillé</option>
+        </select>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button type="submit" size="sm" disabled={!isDraftValid(draft)}>
+          Ajouter
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Annuler
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -220,8 +542,8 @@ function LimitsNotice() {
 
 /**
  * Mode avancé : tableau des routes + exclusions + encart limites.
- * Les server actions (créer, tester, supprimer une route) sont des
- * placeholders câblés aux Tasks 7-8.
+ * Permet d'ajouter une route via un formulaire inline et d'éditer
+ * chaque ligne individuellement.
  */
 export function LogsAdvancedMode({
   guildId,
@@ -237,6 +559,8 @@ export function LogsAdvancedMode({
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
     null,
   );
+  /** Contrôle la visibilité du formulaire d'ajout inline. */
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const syncRoutes = (next: readonly LogsRouteClient[]) => {
     setRoutes(next);
@@ -245,6 +569,10 @@ export function LogsAdvancedMode({
 
   const handleDeleteRoute = (id: string) => {
     syncRoutes(routes.filter((r) => r.id !== id));
+  };
+
+  const handleUpdateRoute = (updated: LogsRouteClient) => {
+    syncRoutes(routes.map((r) => (r.id === updated.id ? updated : r)));
   };
 
   const handleTestRoute = async (id: string) => {
@@ -262,8 +590,24 @@ export function LogsAdvancedMode({
   };
 
   const handleAddRoute = () => {
-    /* Placeholder — câblé à la Task 7 */
-    console.warn('LogsAdvancedMode.handleAddRoute non câblé — Task 7');
+    setShowAddForm(true);
+  };
+
+  /** Reçoit le brouillon validé depuis AddRouteForm et l'ajoute aux routes. */
+  const handleConfirmAdd = (draft: RouteDraft) => {
+    const newRoute: LogsRouteClient = {
+      id: crypto.randomUUID(),
+      label: draft.label.trim(),
+      events: draft.events,
+      channelId: draft.channelId,
+      verbosity: draft.verbosity,
+    };
+    syncRoutes([...routes, newRoute]);
+    setShowAddForm(false);
+  };
+
+  const handleCancelAdd = () => {
+    setShowAddForm(false);
   };
 
   const handleExclusionsChange = (exclusions: LogsExclusionsClient) => {
@@ -298,40 +642,57 @@ export function LogsAdvancedMode({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Routes ({routes.length})</h3>
-          <Button type="button" size="sm" onClick={handleAddRoute}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleAddRoute}
+            disabled={showAddForm}
+            aria-expanded={showAddForm}
+            aria-controls="add-route-form"
+          >
             + Nouvelle route
           </Button>
         </div>
 
-        {routes.length === 0 ? (
+        {routes.length === 0 && !showAddForm ? (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
             Aucune route configurée.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-left">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Label</th>
-                  <th className="px-3 py-2">Événements</th>
-                  <th className="px-3 py-2">Salon</th>
-                  <th className="px-3 py-2">Verbosité</th>
-                  <th className="px-3 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {routes.map((route) => (
-                  <RouteRow
-                    key={route.id}
-                    route={route}
-                    channels={channels}
-                    isTesting={testingRouteId === route.id}
-                    onDelete={() => handleDeleteRoute(route.id)}
-                    onTest={() => void handleTestRoute(route.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
+          routes.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-left">
+                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Label</th>
+                    <th className="px-3 py-2">Événements</th>
+                    <th className="px-3 py-2">Salon</th>
+                    <th className="px-3 py-2">Verbosité</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.map((route) => (
+                    <RouteRow
+                      key={route.id}
+                      route={route}
+                      channels={channels}
+                      isTesting={testingRouteId === route.id}
+                      onDelete={() => handleDeleteRoute(route.id)}
+                      onTest={() => void handleTestRoute(route.id)}
+                      onUpdate={handleUpdateRoute}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {/* Formulaire d'ajout inline */}
+        {showAddForm && (
+          <div id="add-route-form">
+            <AddRouteForm channels={channels} onAdd={handleConfirmAdd} onCancel={handleCancelAdd} />
           </div>
         )}
       </div>

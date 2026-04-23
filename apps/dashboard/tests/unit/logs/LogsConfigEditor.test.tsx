@@ -8,6 +8,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+import { LogsAdvancedMode } from '../../../components/logs/LogsAdvancedMode';
 import { LogsConfigEditor } from '../../../components/logs/LogsConfigEditor';
 import { LogsSimpleMode } from '../../../components/logs/LogsSimpleMode';
 
@@ -111,6 +112,145 @@ describe('LogsConfigEditor', () => {
     );
     fireEvent.click(screen.getByRole('tab', { name: /mode avancé/i }));
     expect(routerReplace).toHaveBeenCalledWith('?mode=advanced');
+  });
+});
+
+describe('LogsAdvancedMode', () => {
+  const baseConfig = {
+    version: 1 as const,
+    routes: [],
+    exclusions: { userIds: [], roleIds: [], channelIds: [], excludeBots: false },
+  };
+
+  const channels = [
+    { id: 'c1', name: 'logs-mod' },
+    { id: 'c2', name: 'logs-general' },
+  ];
+
+  it('affiche le bouton "+ Nouvelle route"', () => {
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={baseConfig}
+        setConfig={() => undefined}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /nouvelle route/i })).toBeDefined();
+  });
+
+  it('affiche le formulaire d\'ajout au clic sur "+ Nouvelle route"', () => {
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={baseConfig}
+        setConfig={() => undefined}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
+    expect(screen.getByRole('form', { name: /formulaire d'ajout de route/i })).toBeDefined();
+  });
+
+  it('bouton Ajouter désactivé tant que le formulaire est invalide', () => {
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={baseConfig}
+        setConfig={() => undefined}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
+    const addBtn = screen.getByRole('button', { name: /^ajouter$/i });
+    expect((addBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('ajoute une route après avoir rempli le formulaire', () => {
+    const setConfig = vi.fn();
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={baseConfig}
+        setConfig={setConfig}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
+
+    fireEvent.change(screen.getByLabelText(/label de la nouvelle route/i), {
+      target: { value: 'Modération' },
+    });
+    /* Coche un événement */
+    fireEvent.click(screen.getByLabelText('Arrivée membre'));
+    /* Sélectionne un salon */
+    fireEvent.change(screen.getByLabelText(/salon de destination de la route/i), {
+      target: { value: 'c1' },
+    });
+
+    const addBtn = screen.getByRole('button', { name: /^ajouter$/i });
+    expect((addBtn as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(addBtn);
+
+    expect(setConfig).toHaveBeenCalledOnce();
+    const called = setConfig.mock.calls[0]?.[0] as typeof baseConfig & { routes: unknown[] };
+    expect(called.routes).toHaveLength(1);
+  });
+
+  it('affiche le bouton "Éditer" sur les routes existantes', () => {
+    const configWithRoute = {
+      ...baseConfig,
+      routes: [
+        {
+          id: 'r1',
+          label: 'Test route',
+          events: ['guild.memberJoin'],
+          channelId: 'c1',
+          verbosity: 'detailed' as const,
+        },
+      ],
+    };
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={configWithRoute}
+        setConfig={() => undefined}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /éditer la route test route/i })).toBeDefined();
+  });
+
+  it('passe la ligne en mode édition au clic sur "Éditer"', () => {
+    const configWithRoute = {
+      ...baseConfig,
+      routes: [
+        {
+          id: 'r1',
+          label: 'Test route',
+          events: ['guild.memberJoin'],
+          channelId: 'c1',
+          verbosity: 'detailed' as const,
+        },
+      ],
+    };
+    render(
+      <LogsAdvancedMode
+        guildId="g1"
+        config={configWithRoute}
+        setConfig={() => undefined}
+        channels={channels}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /éditer la route test route/i }));
+    expect(screen.getByRole('button', { name: /valider les modifications/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /annuler les modifications/i })).toBeDefined();
   });
 });
 
