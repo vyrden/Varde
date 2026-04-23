@@ -5,6 +5,7 @@ import {
   presetDefinitionSchema,
   presetPermissionBindingSchema,
 } from '../../src/types.js';
+import { validatePreset } from '../../src/validator.js';
 
 describe('PresetPermissionBinding schema', () => {
   it('accepte un binding nominal', () => {
@@ -59,5 +60,81 @@ describe('PresetDefinition avec permissionBindings', () => {
       permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
     });
     expect(parsed.permissionBindings).toHaveLength(1);
+  });
+});
+
+describe('validator — permissionBindings', () => {
+  const base = {
+    id: 'test-preset',
+    name: 'Test',
+    description: 'Test',
+    tags: [],
+    locale: 'fr' as const,
+    roles: [
+      {
+        localId: 'role-mod',
+        name: 'Mod',
+        color: 0,
+        permissionPreset: 'moderator-minimal' as const,
+        hoist: false,
+        mentionable: false,
+      },
+    ],
+    categories: [],
+    channels: [],
+    modules: [],
+  };
+
+  it('accepte un binding vers un rôle existant', () => {
+    const result = validatePreset({
+      ...base,
+      permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuse un binding vers un rôle inexistant', () => {
+    const result = validatePreset({
+      ...base,
+      permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-ghost' }],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('guard');
+    expect(result.issues.some((i) => i.code === 'unknown_role_ref_binding')).toBe(true);
+  });
+
+  it('refuse un doublon exact (même permissionId, même roleLocalId)', () => {
+    const result = validatePreset({
+      ...base,
+      permissionBindings: [
+        { permissionId: 'logs.config.manage', roleLocalId: 'role-mod' },
+        { permissionId: 'logs.config.manage', roleLocalId: 'role-mod' },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('guard');
+    expect(result.issues.some((i) => i.code === 'duplicate_binding')).toBe(true);
+  });
+
+  it('accepte le même permissionId lié à deux rôles différents', () => {
+    const result = validatePreset({
+      ...base,
+      roles: [
+        ...base.roles,
+        {
+          localId: 'role-admin',
+          name: 'Admin',
+          color: 0,
+          permissionPreset: 'moderator-full' as const,
+          hoist: false,
+          mentionable: false,
+        },
+      ],
+      permissionBindings: [
+        { permissionId: 'logs.config.manage', roleLocalId: 'role-mod' },
+        { permissionId: 'logs.config.manage', roleLocalId: 'role-admin' },
+      ],
+    });
+    expect(result.ok).toBe(true);
   });
 });

@@ -122,8 +122,38 @@ export function validatePreset(input: unknown): PresetValidationResult {
     }
   }
 
+  // permissionBindings : roleLocalId référence un rôle existant +
+  // pas de doublon exact.
+  const seenBindings = new Set<string>();
+  for (const [i, binding] of preset.permissionBindings.entries()) {
+    if (!roleIds.has(binding.roleLocalId)) {
+      issues.push(
+        issue(
+          'unknown_role_ref_binding',
+          `permissionBindings[${i}] référence un rôle inconnu "${binding.roleLocalId}"`,
+          ['permissionBindings', i, 'roleLocalId'],
+        ),
+      );
+    }
+    const key = `${binding.permissionId}::${binding.roleLocalId}`;
+    if (seenBindings.has(key)) {
+      issues.push(
+        issue(
+          'duplicate_binding',
+          `permissionBindings[${i}] doublon exact de (${binding.permissionId}, ${binding.roleLocalId})`,
+          ['permissionBindings', i],
+        ),
+      );
+    }
+    seenBindings.add(key);
+  }
+
   const objectCount =
-    preset.roles.length + preset.categories.length + preset.channels.length + preset.modules.length;
+    preset.roles.length +
+    preset.categories.length +
+    preset.channels.length +
+    preset.modules.length +
+    preset.permissionBindings.length;
   if (objectCount > PRESET_OBJECT_BUDGET) {
     issues.push(
       issue(
