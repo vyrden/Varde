@@ -25,12 +25,22 @@ export interface AdminGuildDto {
   readonly iconUrl: string | null;
 }
 
+/** Définition d'une permission telle qu'exposée dans le manifeste d'un module. */
+export interface PermissionDefinitionDto {
+  readonly id: string;
+  readonly category: string;
+  readonly defaultLevel: 'admin' | 'moderator' | 'member' | 'nobody';
+  readonly description: string;
+}
+
 export interface ModuleListItemDto {
   readonly id: string;
   readonly version: string;
   readonly name: string;
   readonly description: string;
   readonly enabled: boolean;
+  /** Permissions déclarées dans le manifeste du module. */
+  readonly permissions: readonly PermissionDefinitionDto[];
 }
 
 export interface ModuleConfigDto {
@@ -234,4 +244,24 @@ export async function fetchGuildRoles(guildId: string): Promise<readonly GuildRo
     if (error instanceof ApiError && error.status === 503) return [];
     throw error;
   }
+}
+
+/** Binding permission → rôle tel que renvoyé par l'API. */
+export interface PermissionBindingDto {
+  readonly permissionId: string;
+  readonly roleId: string;
+}
+
+/**
+ * Liste tous les bindings permission → rôle actifs pour une guild.
+ * Utilisé par la page `settings/permissions` pour initialiser l'état
+ * de l'éditeur sans appel réseau supplémentaire côté client.
+ */
+export async function fetchPermissionBindings(
+  guildId: string,
+): Promise<readonly PermissionBindingDto[]> {
+  const body = await apiGet<{ bindings: PermissionBindingDto[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/permissions/bindings`,
+  );
+  return body.bindings;
 }

@@ -15,6 +15,7 @@ import {
   registerDiscordChannelsRoutes,
   registerGuildsRoutes,
   registerLogsRoutes,
+  registerModulePermissionsRoutes,
   registerModulesRoutes,
   registerOnboardingRoutes,
   registerUnboundPermissionsRoutes,
@@ -447,6 +448,7 @@ export async function createServer<D extends DbDriver>(
   });
   registerModulesRoutes(api, { loader, config, discord });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
+  registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });
   registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });
   registerOnboardingRoutes(api, {

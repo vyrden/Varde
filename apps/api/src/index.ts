@@ -43,6 +43,10 @@ export {
   registerLogsRoutes,
 } from './routes/logs.js';
 export {
+  type RegisterModulePermissionsRoutesOptions,
+  registerModulePermissionsRoutes,
+} from './routes/module-permissions.js';
+export {
   type RegisterModulesRoutesOptions,
   registerModulesRoutes,
 } from './routes/modules.js';
