@@ -35,6 +35,7 @@ import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
+import { logs } from '@varde/module-logs';
 import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
 
 import { createServer } from './server.js';
@@ -314,6 +315,7 @@ async function main(): Promise<void> {
         });
 
   handle.loader.register(helloWorld);
+  handle.loader.register(logs);
   await handle.loader.loadAll();
 
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);

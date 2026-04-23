@@ -200,6 +200,9 @@ importers:
       '@varde/module-hello-world':
         specifier: workspace:*
         version: link:../../modules/hello-world
+      '@varde/module-logs':
+        specifier: workspace:*
+        version: link:../../modules/logs
       '@varde/presets':
         specifier: workspace:*
         version: link:../../packages/presets
