@@ -312,6 +312,52 @@ export const patchModuleConfigAction: OnboardingActionDefinition<
   },
 };
 
+// ─── bindPermission ────────────────────────────────────────────────
+
+const bindPermissionPayloadSchema = z.object({
+  permissionId: z.string().min(1),
+  roleLocalId: z.string().min(1),
+});
+export type BindPermissionPayload = z.infer<typeof bindPermissionPayloadSchema>;
+export interface BindPermissionResult {
+  /** Snowflake Discord du rôle lié, capturé à l'apply pour l'undo. */
+  readonly roleId: string;
+}
+
+/**
+ * Lie une permission applicative à un rôle Discord. `apply` résout le
+ * `roleLocalId` via `ctx.resolveLocalId` (rôle créé plus tôt dans la
+ * séquence d'onboarding par un `core.createRole`), puis appelle
+ * `ctx.permissions.bind` qui écrit dans `permission_bindings`.
+ *
+ * Idempotence : `permissions.bind` est idempotent côté core (insert
+ * ignoré si la ligne existe déjà — cf. service). `undo` supprime
+ * uniquement la ligne `(guildId, permissionId, roleId)` exacte, ce
+ * qui n'interfère pas avec un binding posé à la main par l'admin
+ * entre l'apply et le rollback (ADR 0008 § invariant).
+ */
+export const bindPermissionAction: OnboardingActionDefinition<
+  BindPermissionPayload,
+  BindPermissionResult
+> = {
+  type: 'core.bindPermission',
+  schema: bindPermissionPayloadSchema,
+  canUndo: true,
+  apply: async (ctx, payload) => {
+    const roleId = ctx.resolveLocalId(payload.roleLocalId);
+    if (roleId === null) {
+      throw new Error(
+        `core.bindPermission : roleLocalId "${payload.roleLocalId}" non résolu (action createRole manquante ou orpheline)`,
+      );
+    }
+    await ctx.permissions.bind(payload.permissionId, roleId);
+    return { roleId };
+  },
+  undo: async (ctx, payload, previousResult) => {
+    await ctx.permissions.unbind(payload.permissionId, previousResult.roleId);
+  },
+};
+
 /**
  * Ensemble des actions core-owned à enregistrer au démarrage du
  * monolith `@varde/server`.
@@ -321,4 +367,5 @@ export const CORE_ACTIONS = [
   createCategoryAction,
   createChannelAction,
   patchModuleConfigAction,
+  bindPermissionAction,
 ] as const;
