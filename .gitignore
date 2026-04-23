@@ -18,6 +18,7 @@ out/
 
 # Logs
 logs/
+!modules/logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
