@@ -308,3 +308,135 @@ describe('createPermissionService — can sans guild', () => {
     }
   });
 });
+
+describe('createPermissionService — bind / unbind', () => {
+  let client: DbClient<'sqlite'>;
+
+  const insertPermissionsRegistry = async (): Promise<void> => {
+    await client.db
+      .insert(sqliteSchema.permissionsRegistry)
+      .values([
+        {
+          id: BAN_PERMISSION,
+          moduleId: MODERATION,
+          description: 'Bannir un user',
+          category: 'moderation',
+          defaultLevel: 'moderator',
+        },
+        {
+          id: GREET_PERMISSION,
+          moduleId: WELCOME,
+          description: 'Envoyer un message d accueil',
+          category: 'welcome',
+          defaultLevel: 'member',
+        },
+      ])
+      .run();
+  };
+
+  beforeEach(async () => {
+    client = createDbClient({ driver: 'sqlite', url: ':memory:' });
+    await applyMigrations(client);
+    await seed(client);
+    await insertPermissionsRegistry();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it('bind ajoute une ligne et rend la permission résolvable pour un user portant le rôle', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver({
+        roles: [MODERATOR_ROLE],
+        isOwner: false,
+        isAdministrator: false,
+      }),
+    });
+
+    // Avant bind : refus.
+    expect(await permissions.canInGuild(GUILD, { type: 'user', id: USER }, BAN_PERMISSION)).toBe(
+      false,
+    );
+
+    await permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE);
+
+    // Après bind : autorisation.
+    expect(await permissions.canInGuild(GUILD, { type: 'user', id: USER }, BAN_PERMISSION)).toBe(
+      true,
+    );
+  });
+
+  it('bind deux fois avec le même (permission, role) est idempotent', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver({
+        roles: [MODERATOR_ROLE],
+        isOwner: false,
+        isAdministrator: false,
+      }),
+    });
+
+    await permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE);
+    // Deuxième appel identique : ne doit pas lever d'erreur ni créer de doublon.
+    await expect(permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE)).resolves.toBeUndefined();
+
+    const rows = await client.db
+      .select()
+      .from(sqliteSchema.permissionBindings)
+      .all();
+    const matching = rows.filter(
+      (r) =>
+        r.guildId === GUILD &&
+        r.permissionId === BAN_PERMISSION &&
+        r.roleId === MODERATOR_ROLE,
+    );
+    expect(matching).toHaveLength(1);
+  });
+
+  it('unbind supprime uniquement la ligne exacte, les autres restent actives', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver({
+        roles: [MEMBER_ROLE],
+        isOwner: false,
+        isAdministrator: false,
+      }),
+    });
+
+    // Lier la même permission à deux rôles distincts.
+    await permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE);
+    await permissions.bind(GUILD, BAN_PERMISSION, MEMBER_ROLE);
+
+    // Supprimer uniquement le binding MODERATOR_ROLE.
+    await permissions.unbind(GUILD, BAN_PERMISSION, MODERATOR_ROLE);
+
+    // MEMBER_ROLE est toujours lié → le user (portant MEMBER_ROLE) reste autorisé.
+    expect(await permissions.canInGuild(GUILD, { type: 'user', id: USER }, BAN_PERMISSION)).toBe(
+      true,
+    );
+
+    // Vérification directe en DB : seul MEMBER_ROLE subsiste.
+    const rows = await client.db
+      .select()
+      .from(sqliteSchema.permissionBindings)
+      .all();
+    const remaining = rows.filter(
+      (r) => r.guildId === GUILD && r.permissionId === BAN_PERMISSION,
+    );
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.roleId).toBe(MEMBER_ROLE);
+  });
+
+  it('unbind sur une ligne inexistante ne throw pas', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver(null),
+    });
+
+    await expect(
+      permissions.unbind(GUILD, BAN_PERMISSION, MODERATOR_ROLE),
+    ).resolves.toBeUndefined();
+  });
+});
