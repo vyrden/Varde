@@ -98,16 +98,12 @@ const messageDeleteInput = (message: Message): DiscordEventInput | null => {
 
 const channelInput = (
   channel: Channel,
-  kind: 'channelCreate' | 'channelUpdate' | 'channelDelete',
+  kind: 'channelCreate' | 'channelDelete',
 ): DiscordEventInput | null => {
   if (!('guildId' in channel) || !channel.guildId) return null;
   const timestamp = Date.now();
   const timestampField =
-    kind === 'channelCreate'
-      ? { createdAt: timestamp }
-      : kind === 'channelUpdate'
-        ? { updatedAt: timestamp }
-        : { deletedAt: timestamp };
+    kind === 'channelCreate' ? { createdAt: timestamp } : { deletedAt: timestamp };
   return {
     kind,
     guildId: channel.guildId,
@@ -116,17 +112,46 @@ const channelInput = (
   } as DiscordEventInput;
 };
 
-const roleInput = (
-  role: Role,
-  kind: 'roleCreate' | 'roleUpdate' | 'roleDelete',
-): DiscordEventInput => {
+const channelUpdateInput = (oldChannel: Channel, newChannel: Channel): DiscordEventInput | null => {
+  if (!('guildId' in newChannel) || !newChannel.guildId) return null;
+  // Les channels de guilde ont toujours name/position/parentId en discord.js v14.
+  // `topic` n'existe que sur les channels textuels ; on normalise en null sinon.
+  const anyOld = oldChannel as unknown as {
+    name?: string;
+    position?: number;
+    parentId?: string | null;
+    topic?: string | null;
+  };
+  const anyNew = newChannel as unknown as {
+    id: string;
+    guildId: string;
+    name?: string;
+    position?: number;
+    parentId?: string | null;
+    topic?: string | null;
+  };
+  const oldTopic = 'topic' in anyOld ? (anyOld.topic ?? null) : null;
+  const newTopic = 'topic' in anyNew ? (anyNew.topic ?? null) : null;
+  return {
+    kind: 'channelUpdate',
+    guildId: anyNew.guildId,
+    channelId: anyNew.id,
+    nameBefore: anyOld.name ?? '',
+    nameAfter: anyNew.name ?? '',
+    topicBefore: oldTopic,
+    topicAfter: newTopic,
+    positionBefore: anyOld.position ?? 0,
+    positionAfter: anyNew.position ?? 0,
+    parentIdBefore: anyOld.parentId ?? null,
+    parentIdAfter: anyNew.parentId ?? null,
+    updatedAt: Date.now(),
+  };
+};
+
+const roleInput = (role: Role, kind: 'roleCreate' | 'roleDelete'): DiscordEventInput => {
   const timestamp = Date.now();
   const timestampField =
-    kind === 'roleCreate'
-      ? { createdAt: timestamp }
-      : kind === 'roleUpdate'
-        ? { updatedAt: timestamp }
-        : { deletedAt: timestamp };
+    kind === 'roleCreate' ? { createdAt: timestamp } : { deletedAt: timestamp };
   return {
     kind,
     guildId: role.guild.id,
@@ -134,6 +159,23 @@ const roleInput = (
     ...timestampField,
   } as DiscordEventInput;
 };
+
+const roleUpdateInput = (oldRole: Role, newRole: Role): DiscordEventInput => ({
+  kind: 'roleUpdate',
+  guildId: newRole.guild.id,
+  roleId: newRole.id,
+  nameBefore: oldRole.name,
+  nameAfter: newRole.name,
+  colorBefore: oldRole.color,
+  colorAfter: newRole.color,
+  hoistBefore: oldRole.hoist,
+  hoistAfter: newRole.hoist,
+  mentionableBefore: oldRole.mentionable,
+  mentionableAfter: newRole.mentionable,
+  permissionsBefore: oldRole.permissions.bitfield.toString(),
+  permissionsAfter: newRole.permissions.bitfield.toString(),
+  updatedAt: Date.now(),
+});
 
 const guildCreateInput = (guild: Guild): DiscordEventInput => ({
   kind: 'guildCreate',
@@ -183,12 +225,14 @@ export function attachDiscordClient(
   );
   on('messageDelete', (message) => dispatch(messageDeleteInput(message as Message)));
   on('channelCreate', (channel) => dispatch(channelInput(channel as Channel, 'channelCreate')));
-  on('channelUpdate', (_oldChannel, newChannel) =>
-    dispatch(channelInput(newChannel as Channel, 'channelUpdate')),
+  on('channelUpdate', (oldChannel, newChannel) =>
+    dispatch(channelUpdateInput(oldChannel as Channel, newChannel as Channel)),
   );
   on('channelDelete', (channel) => dispatch(channelInput(channel as Channel, 'channelDelete')));
   on('roleCreate', (role) => dispatch(roleInput(role as Role, 'roleCreate')));
-  on('roleUpdate', (_oldRole, newRole) => dispatch(roleInput(newRole as Role, 'roleUpdate')));
+  on('roleUpdate', (oldRole, newRole) =>
+    dispatch(roleUpdateInput(oldRole as Role, newRole as Role)),
+  );
   on('roleDelete', (role) => dispatch(roleInput(role as Role, 'roleDelete')));
   on('guildCreate', (guild) => dispatch(guildCreateInput(guild as Guild)));
   on('guildDelete', (guild) => dispatch(guildDeleteInput(guild as Guild)));

@@ -98,6 +98,14 @@ interface ChannelUpdateInput {
   readonly kind: 'channelUpdate';
   readonly guildId: string;
   readonly channelId: string;
+  readonly nameBefore: string;
+  readonly nameAfter: string;
+  readonly topicBefore: string | null;
+  readonly topicAfter: string | null;
+  readonly positionBefore: number;
+  readonly positionAfter: number;
+  readonly parentIdBefore: string | null;
+  readonly parentIdAfter: string | null;
   readonly updatedAt: number;
 }
 
@@ -119,6 +127,16 @@ interface RoleUpdateInput {
   readonly kind: 'roleUpdate';
   readonly guildId: string;
   readonly roleId: string;
+  readonly nameBefore: string;
+  readonly nameAfter: string;
+  readonly colorBefore: number;
+  readonly colorAfter: number;
+  readonly hoistBefore: boolean;
+  readonly hoistAfter: boolean;
+  readonly mentionableBefore: boolean;
+  readonly mentionableAfter: boolean;
+  readonly permissionsBefore: string;
+  readonly permissionsAfter: string;
   readonly updatedAt: number;
 }
 
@@ -232,6 +250,14 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         type: 'guild.channelUpdate',
         guildId: input.guildId as GuildId,
         channelId: input.channelId as ChannelId,
+        nameBefore: input.nameBefore,
+        nameAfter: input.nameAfter,
+        topicBefore: input.topicBefore,
+        topicAfter: input.topicAfter,
+        positionBefore: input.positionBefore,
+        positionAfter: input.positionAfter,
+        parentIdBefore: input.parentIdBefore === null ? null : (input.parentIdBefore as ChannelId),
+        parentIdAfter: input.parentIdAfter === null ? null : (input.parentIdAfter as ChannelId),
         updatedAt: input.updatedAt,
       };
     case 'channelDelete':
@@ -253,6 +279,16 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         type: 'guild.roleUpdate',
         guildId: input.guildId as GuildId,
         roleId: input.roleId as RoleId,
+        nameBefore: input.nameBefore,
+        nameAfter: input.nameAfter,
+        colorBefore: input.colorBefore,
+        colorAfter: input.colorAfter,
+        hoistBefore: input.hoistBefore,
+        hoistAfter: input.hoistAfter,
+        mentionableBefore: input.mentionableBefore,
+        mentionableAfter: input.mentionableAfter,
+        permissionsBefore: input.permissionsBefore,
+        permissionsAfter: input.permissionsAfter,
         updatedAt: input.updatedAt,
       };
     case 'roleDelete':

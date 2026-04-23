@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   configChangedSchema,
   coreEventSchema,
+  guildChannelUpdateSchema,
   guildMemberJoinSchema,
   guildMessageCreateSchema,
   guildMessageEditSchema,
   guildRoleDeleteSchema,
+  guildRoleUpdateSchema,
   isCoreEvent,
   moduleLoadedSchema,
   parseCoreEvent,
@@ -221,6 +223,125 @@ describe('coreEventSchema (union discriminée)', () => {
     // Sert d'assertion de compilation : le narrow fonctionne.
     if (event.type === 'config.changed') {
       expect(event.scope).toBe('core');
+    } else {
+      throw new Error('narrowing cassé');
+    }
+  });
+});
+
+describe('guildChannelUpdateSchema', () => {
+  const baseInput = {
+    type: 'guild.channelUpdate',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    nameBefore: 'général',
+    nameAfter: 'général-archive',
+    topicBefore: 'Discussions générales',
+    topicAfter: 'Archivé',
+    positionBefore: 0,
+    positionAfter: 5,
+    parentIdBefore: SNOWFLAKE_C,
+    parentIdAfter: SNOWFLAKE_D,
+    updatedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload enrichi complet', () => {
+    expect(guildChannelUpdateSchema.parse(baseInput)).toEqual(baseInput);
+  });
+
+  it('accepte topicBefore/topicAfter null (channel sans topic)', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      topicBefore: null,
+      topicAfter: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepte parentIdBefore/parentIdAfter null (hors catégorie)', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      parentIdBefore: null,
+      parentIdAfter: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('refuse nameBefore manquant', () => {
+    const { nameBefore, ...missingName } = baseInput;
+    void nameBefore;
+    const result = guildChannelUpdateSchema.safeParse(missingName);
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse positionBefore négatif', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      positionBefore: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse parentIdAfter non-snowflake', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      parentIdAfter: 'pas un snowflake',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('guildRoleUpdateSchema', () => {
+  const baseInput = {
+    type: 'guild.roleUpdate',
+    guildId: SNOWFLAKE_A,
+    roleId: SNOWFLAKE_B,
+    nameBefore: 'Membre',
+    nameAfter: 'Membre Vérifié',
+    colorBefore: 0,
+    colorAfter: 0xff0000,
+    hoistBefore: false,
+    hoistAfter: true,
+    mentionableBefore: true,
+    mentionableAfter: false,
+    permissionsBefore: '0',
+    permissionsAfter: '8',
+    updatedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload enrichi complet', () => {
+    expect(guildRoleUpdateSchema.parse(baseInput)).toEqual(baseInput);
+  });
+
+  it('refuse permissionsBefore number (doit rester string pour fidélité bitfield)', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      permissionsBefore: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse colorBefore négatif', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      colorBefore: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse hoistBefore non-booléen', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      hoistBefore: 'true',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('permet un narrowing exhaustif depuis coreEventSchema', () => {
+    const parsed = coreEventSchema.parse(baseInput);
+    if (parsed.type === 'guild.roleUpdate') {
+      expect(parsed.nameAfter).toBe('Membre Vérifié');
+      expect(parsed.permissionsAfter).toBe('8');
     } else {
       throw new Error('narrowing cassé');
     }

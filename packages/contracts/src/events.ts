@@ -116,6 +116,14 @@ export const guildChannelUpdateSchema = z.object({
   type: z.literal('guild.channelUpdate'),
   guildId: guildIdSchema,
   channelId: channelIdSchema,
+  nameBefore: z.string(),
+  nameAfter: z.string(),
+  topicBefore: z.string().nullable(),
+  topicAfter: z.string().nullable(),
+  positionBefore: z.number().int().nonnegative(),
+  positionAfter: z.number().int().nonnegative(),
+  parentIdBefore: channelIdSchema.nullable(),
+  parentIdAfter: channelIdSchema.nullable(),
   updatedAt: timestampSchema,
 });
 export type GuildChannelUpdateEvent = z.infer<typeof guildChannelUpdateSchema>;
@@ -142,6 +150,16 @@ export const guildRoleUpdateSchema = z.object({
   type: z.literal('guild.roleUpdate'),
   guildId: guildIdSchema,
   roleId: roleIdSchema,
+  nameBefore: z.string(),
+  nameAfter: z.string(),
+  colorBefore: z.number().int().nonnegative(),
+  colorAfter: z.number().int().nonnegative(),
+  hoistBefore: z.boolean(),
+  hoistAfter: z.boolean(),
+  mentionableBefore: z.boolean(),
+  mentionableAfter: z.boolean(),
+  permissionsBefore: z.string(),
+  permissionsAfter: z.string(),
   updatedAt: timestampSchema,
 });
 export type GuildRoleUpdateEvent = z.infer<typeof guildRoleUpdateSchema>;
