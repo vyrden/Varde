@@ -22,6 +22,8 @@ import type {
   EventBus,
   Logger,
   ModuleId,
+  PermissionId,
+  RoleId,
   UserId,
 } from '@varde/contracts';
 import {
@@ -318,6 +320,12 @@ export async function createServer<D extends DbDriver>(
           });
         },
         resolveLocalId: () => null,
+        permissions: {
+          bind: (permissionId, roleId) =>
+            permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+          unbind: (permissionId, roleId) =>
+            permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+        },
       };
     }
 
@@ -365,6 +373,12 @@ export async function createServer<D extends DbDriver>(
         });
       },
       resolveLocalId: () => null,
+      permissions: {
+        bind: (permissionId, roleId) =>
+          permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+        unbind: (permissionId, roleId) =>
+          permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+      },
     };
   };
 
