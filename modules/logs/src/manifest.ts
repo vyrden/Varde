@@ -7,11 +7,9 @@ import type { ManifestStatic, ModuleId, PermissionId } from '@varde/contracts';
  * un ou plusieurs salons Discord, sous forme d'embeds formatés par
  * route, configurables depuis le dashboard.
  *
- * PR 4.1c couvre 4 events pilotes (`memberJoin`, `memberLeave`,
- * `messageDelete`, `messageEdit`). PR 4.2 étendra la couverture aux
- * 8 events `guild.*` restants qui concernent une guild (les meta
- * `guild.join`/`guild.leave` restent hors scope — cf. spec
- * `jalon-4/logs.md`).
+ * PR 4.2 couvre les 12 events `guild.*` pertinents pour un log guild
+ * (exclus : `guild.join` et `guild.leave` qui sont des meta-events
+ * bot-level inutilisables pour un log puisque le bot quitte la guild).
  *
  * Aucune slash command en V1 : le test d'une route se fait via un
  * bouton dashboard qui appelle une action serveur (PR 4.1d).
@@ -40,7 +38,20 @@ export const manifest: ManifestStatic = {
     },
   ],
   events: {
-    listen: ['guild.memberJoin', 'guild.memberLeave', 'guild.messageDelete', 'guild.messageEdit'],
+    listen: [
+      'guild.memberJoin',
+      'guild.memberLeave',
+      'guild.memberUpdate',
+      'guild.messageCreate',
+      'guild.messageDelete',
+      'guild.messageEdit',
+      'guild.channelCreate',
+      'guild.channelUpdate',
+      'guild.channelDelete',
+      'guild.roleCreate',
+      'guild.roleUpdate',
+      'guild.roleDelete',
+    ],
     emit: [],
   },
 };

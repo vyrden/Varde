@@ -101,10 +101,18 @@ export function fieldOrAttachment(inputs: readonly FieldInput[]): {
 
 /** Couleurs par famille d'événement. Cf. spec logs.md § Formatage. */
 const COLOR_BY_EVENT: Readonly<Record<string, number>> = Object.freeze({
-  'guild.memberJoin': 0x2ecc71,
-  'guild.memberLeave': 0xe74c3c,
-  'guild.messageDelete': 0xc0392b,
-  'guild.messageEdit': 0xe67e22,
+  'guild.memberJoin': 0x2ecc71, // vert
+  'guild.memberLeave': 0xe74c3c, // rouge
+  'guild.memberUpdate': 0x3498db, // bleu
+  'guild.messageCreate': 0x95a5a6, // gris (bruyant par défaut)
+  'guild.messageDelete': 0xc0392b, // rouge foncé
+  'guild.messageEdit': 0xe67e22, // orange
+  'guild.channelCreate': 0x1abc9c, // vert-bleu
+  'guild.channelUpdate': 0xf39c12, // orange doré
+  'guild.channelDelete': 0x992d22, // rouge très foncé
+  'guild.roleCreate': 0x9b59b6, // violet
+  'guild.roleUpdate': 0x8e44ad, // violet foncé
+  'guild.roleDelete': 0x6c3483, // violet très foncé
 });
 const COLOR_DEFAULT = 0x7289da;
 
