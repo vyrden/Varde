@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@varde/contracts": "workspace:*",
+    "@varde/core": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {
