@@ -23,6 +23,34 @@ interface LogsPageProps {
 }
 
 /**
+ * Normalise la config brute retournée par l'API en un `LogsConfigClient`
+ * aux champs garantis. Nécessaire parce que `fetchModuleConfig` retourne
+ * le JSON stocké dans `guild_config` tel quel — pour une guild qui n'a
+ * jamais configuré le module, c'est `{}`, ce qui ferait planter
+ * l'éditeur sur `config.routes.find(...)`.
+ */
+function normalizeLogsConfig(raw: unknown): LogsConfigClient {
+  const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const routes = Array.isArray(obj['routes']) ? (obj['routes'] as LogsConfigClient['routes']) : [];
+  const exclusionsRaw =
+    typeof obj['exclusions'] === 'object' && obj['exclusions'] !== null
+      ? (obj['exclusions'] as Record<string, unknown>)
+      : {};
+  return {
+    version: 1,
+    routes,
+    exclusions: {
+      userIds: Array.isArray(exclusionsRaw['userIds']) ? (exclusionsRaw['userIds'] as string[]) : [],
+      roleIds: Array.isArray(exclusionsRaw['roleIds']) ? (exclusionsRaw['roleIds'] as string[]) : [],
+      channelIds: Array.isArray(exclusionsRaw['channelIds'])
+        ? (exclusionsRaw['channelIds'] as string[])
+        : [],
+      excludeBots: typeof exclusionsRaw['excludeBots'] === 'boolean' ? exclusionsRaw['excludeBots'] : true,
+    },
+  };
+}
+
+/**
  * Page de configuration du module logs pour une guild. Charge en
  * parallèle les données nécessaires : descripteur de module, config,
  * permissions non liées, routes cassées, salons texte et rôles Discord.
@@ -137,7 +165,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
         ) : (
           <LogsConfigEditor
             guildId={guildId}
-            initialConfig={moduleConfig.config as unknown as LogsConfigClient}
+            initialConfig={normalizeLogsConfig(moduleConfig.config)}
             brokenRoutes={brokenRoutes}
             channels={channels}
             roles={roles}
