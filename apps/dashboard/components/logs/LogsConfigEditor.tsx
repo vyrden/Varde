@@ -188,7 +188,7 @@ export function LogsConfigEditor(props: LogsConfigEditorProps) {
             guildId={props.guildId}
             config={config}
             setConfig={setConfig}
-            channels={props.channels}
+            channels={props.channels ?? []}
           />
         )}
       </div>
@@ -205,8 +205,8 @@ export function LogsConfigEditor(props: LogsConfigEditorProps) {
             guildId={props.guildId}
             config={config}
             setConfig={setConfig}
-            channels={props.channels}
-            roles={props.roles}
+            channels={props.channels ?? []}
+            roles={props.roles ?? []}
           />
         )}
       </div>
