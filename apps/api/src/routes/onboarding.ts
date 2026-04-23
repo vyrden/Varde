@@ -18,7 +18,7 @@ import {
   type Ulid,
   type UserId,
 } from '@varde/contracts';
-import { type CoreConfigService, deepMerge, type OnboardingExecutor } from '@varde/core';
+import type { CoreConfigService, OnboardingExecutor } from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
 import { type PresetDefinition, presetDefinitionSchema } from '@varde/presets';
 import type { FastifyInstance } from 'fastify';
@@ -76,6 +76,80 @@ import {
  */
 
 const DEFAULT_ROLLBACK_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Clés du draft qui sont des arrays d'objets additifs. Un patch qui
+ * en fournit une concatène au lieu de remplacer — contrairement au
+ * `deepMerge` générique de `@varde/core` qui écrase toute valeur
+ * non-object. Sans cette distinction, une suggestion IA qui renvoie
+ * `{ roles: [newRole] }` effaçait les rôles préexistants du preset.
+ *
+ * La concaténation filtre les doublons de `localId` : si le patch
+ * contient un élément avec un `localId` déjà présent, on garde
+ * l'élément patché (il remplace l'ancien).
+ */
+const ARRAY_KEYS_WITH_LOCAL_ID = new Set(['roles', 'categories', 'channels']);
+const ARRAY_KEYS_WITH_MODULE_ID = new Set(['modules']);
+const ARRAY_KEYS_UNKEYED = new Set(['permissionBindings']);
+
+const hasLocalId = (item: unknown): item is { readonly localId: string } =>
+  typeof item === 'object' &&
+  item !== null &&
+  typeof (item as { localId?: unknown }).localId === 'string';
+
+const hasModuleId = (item: unknown): item is { readonly moduleId: string } =>
+  typeof item === 'object' &&
+  item !== null &&
+  typeof (item as { moduleId?: unknown }).moduleId === 'string';
+
+const mergeArrayByLocalId = (
+  base: readonly unknown[],
+  patch: readonly unknown[],
+): readonly unknown[] => {
+  const patchIds = new Set(patch.filter(hasLocalId).map((item) => item.localId));
+  const kept = base.filter((item) => !hasLocalId(item) || !patchIds.has(item.localId));
+  return [...kept, ...patch];
+};
+
+const mergeArrayByModuleId = (
+  base: readonly unknown[],
+  patch: readonly unknown[],
+): readonly unknown[] => {
+  const patchIds = new Set(patch.filter(hasModuleId).map((item) => item.moduleId));
+  const kept = base.filter((item) => !hasModuleId(item) || !patchIds.has(item.moduleId));
+  return [...kept, ...patch];
+};
+
+/**
+ * Merger dédié aux patches d'`OnboardingDraft` : concatène les arrays
+ * d'objets identifiés (roles, categories, channels par `localId` ;
+ * modules par `moduleId` ; permissionBindings concat brut), écrase
+ * les scalaires (`locale`). Préserve les objets préexistants non
+ * mentionnés dans le patch.
+ */
+export function mergeOnboardingDraftPatch(
+  base: Readonly<Record<string, unknown>>,
+  patch: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const [key, next] of Object.entries(patch)) {
+    const current = result[key];
+    if (Array.isArray(current) && Array.isArray(next)) {
+      if (ARRAY_KEYS_WITH_LOCAL_ID.has(key)) {
+        result[key] = mergeArrayByLocalId(current, next);
+      } else if (ARRAY_KEYS_WITH_MODULE_ID.has(key)) {
+        result[key] = mergeArrayByModuleId(current, next);
+      } else if (ARRAY_KEYS_UNKEYED.has(key)) {
+        result[key] = [...current, ...next];
+      } else {
+        result[key] = next;
+      }
+    } else {
+      result[key] = next;
+    }
+  }
+  return result;
+}
 
 /** Factory d'`OnboardingActionContext` injectée au registre des routes. */
 export type OnboardingActionContextFactory = (args: {
@@ -480,7 +554,7 @@ export function registerOnboardingRoutes<D extends DbDriver>(
       }
 
       const body = (request.body ?? {}) as Readonly<Record<string, unknown>>;
-      const merged = deepMerge(session.draft, body);
+      const merged = mergeOnboardingDraftPatch(session.draft, body);
       const validated = onboardingDraftSchema.safeParse(merged);
       if (!validated.success) {
         throw httpError(
