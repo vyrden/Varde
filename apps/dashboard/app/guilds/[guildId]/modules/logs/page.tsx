@@ -69,14 +69,42 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
     <div className="min-h-screen bg-background text-foreground">
       <DashboardHeader userName={session.user.name ?? null} />
       <main className="mx-auto max-w-4xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← {guild.name}
-          </Link>
-        </div>
+        {/* Fil d'Ariane */}
+        <nav aria-label="Fil d'Ariane" className="text-sm text-muted-foreground">
+          <ol className="flex items-center gap-2">
+            <li>
+              <Link
+                href="/"
+                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
+              >
+                Mes serveurs
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li>
+              <Link
+                href={`/guilds/${guildId}`}
+                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
+              >
+                {guild.name}
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li>
+              <Link
+                href={`/guilds/${guildId}`}
+                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
+              >
+                Modules
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li className="font-medium text-foreground" aria-current="page">
+              {logsModule.name}
+            </li>
+          </ol>
+        </nav>
+
         <PageTitle
           title={logsModule.name}
           description={
@@ -90,13 +118,31 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
           configureHref={`/guilds/${guildId}/settings/permissions?focus=logs`}
         />
 
-        <LogsConfigEditor
-          guildId={guildId}
-          initialConfig={moduleConfig.config as unknown as LogsConfigClient}
-          brokenRoutes={brokenRoutes}
-          channels={channels}
-          roles={roles}
-        />
+        {/* Bandeau informatif si le module est désactivé sur la guild */}
+        {logsModule.enabled === false ? (
+          <div
+            role="status"
+            className="rounded-lg border border-blue-300 bg-blue-50 p-6 text-blue-900 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-100"
+          >
+            <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
+            <p className="mt-2 text-sm">
+              Tant que le module n'est pas activé, aucun événement ne sera capturé ni envoyé vers
+              un salon. L'activation se fait automatiquement lorsque le bot rejoint une nouvelle
+              guild (voir <code>DEFAULT_ENABLED_MODULES</code> dans{' '}
+              <code>apps/server/src/bin.ts</code>). Si tu as invité le bot avant que ce module
+              existe, redémarre le serveur après avoir ajouté l'ID de ta guild dans{' '}
+              <code>VARDE_SEED_GUILD_IDS</code>.
+            </p>
+          </div>
+        ) : (
+          <LogsConfigEditor
+            guildId={guildId}
+            initialConfig={moduleConfig.config as unknown as LogsConfigClient}
+            brokenRoutes={brokenRoutes}
+            channels={channels}
+            roles={roles}
+          />
+        )}
       </main>
     </div>
   );

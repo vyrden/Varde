@@ -727,6 +727,7 @@ export function LogsAdvancedMode({
             disabled={showAddForm}
             aria-expanded={showAddForm}
             aria-controls="add-route-form"
+            title="Crée une nouvelle route qui envoie un sous-ensemble d'événements dans un salon de logs dédié."
           >
             + Nouvelle route
           </Button>
@@ -743,9 +744,19 @@ export function LogsAdvancedMode({
                 <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Label</th>
-                    <th className="px-3 py-2">Événements</th>
+                    <th
+                      className="px-3 py-2 cursor-help"
+                      title="Types d'événements Discord captés par cette route. Cliquer sur Éditer pour modifier."
+                    >
+                      Événements
+                    </th>
                     <th className="px-3 py-2">Salon</th>
-                    <th className="px-3 py-2">Verbosité</th>
+                    <th
+                      className="px-3 py-2 cursor-help"
+                      title="Compact = 1 champ par événement (moins visuel, idéal pour archivage). Détaillé = tous les champs disponibles (auteur, avant/après, timestamps)."
+                    >
+                      Verbosité
+                    </th>
                     <th className="px-3 py-2">Actions</th>
                   </tr>
                 </thead>
