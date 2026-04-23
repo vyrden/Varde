@@ -148,3 +148,22 @@ export async function fetchModuleConfig(
     `/guilds/${encodeURIComponent(guildId)}/modules/${encodeURIComponent(moduleId)}/config`,
   );
 }
+
+/** Permission déclarée par un module mais non encore liée à un rôle guild. */
+export interface UnboundPermission {
+  readonly id: string;
+  readonly description: string;
+  readonly category: string;
+  readonly defaultLevel: 'admin' | 'moderator' | 'member' | 'nobody';
+}
+
+/** Liste des permissions non liées déclarées par un module pour une guild. */
+export async function fetchUnboundPermissions(
+  guildId: string,
+  moduleId: string,
+): Promise<readonly UnboundPermission[]> {
+  const body = await apiGet<{ permissions: UnboundPermission[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/modules/${encodeURIComponent(moduleId)}/unbound-permissions`,
+  );
+  return body.permissions;
+}
