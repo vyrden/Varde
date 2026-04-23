@@ -104,5 +104,5 @@ export const communityGamingSmall: PresetDefinition = {
       config: { welcomeDelayMs: 500 },
     },
   ],
-  permissionBindings: [],
+  permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
 };
