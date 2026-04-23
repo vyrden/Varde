@@ -10,6 +10,7 @@ import {
   reconcileOnboardingSessions,
   registerAiSettingsRoutes,
   registerAuditRoutes,
+  registerDiscordChannelsRoutes,
   registerGuildsRoutes,
   registerLogsRoutes,
   registerModulesRoutes,
@@ -414,6 +415,17 @@ export async function createServer<D extends DbDriver>(
   });
 
   registerGuildsRoutes(api, { client, discord });
+  registerDiscordChannelsRoutes(api, {
+    discord,
+    // Réutilise le bridge onboarding pour la création de salon.
+    // Absent si le bot n'est pas connecté (CI, dev sans token).
+    ...(onboardingBridge
+      ? {
+          createGuildChannel: (guildId, payload) =>
+            onboardingBridge.createChannel(guildId, { ...payload }),
+        }
+      : {}),
+  });
   registerLogsRoutes(api, {
     discord,
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),

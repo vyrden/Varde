@@ -26,6 +26,12 @@ export {
   registerAuditRoutes,
 } from './routes/audit.js';
 export {
+  type CreateGuildChannelPayload,
+  type CreateGuildChannelResult,
+  type RegisterDiscordChannelsRoutesOptions,
+  registerDiscordChannelsRoutes,
+} from './routes/discord-channels.js';
+export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,

@@ -3,9 +3,23 @@
 import { Button } from '@varde/ui';
 import { useState } from 'react';
 
-import type { TestLogsRouteError } from '../../lib/logs-actions';
-import { saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
+import type { CreateLogsChannelError, TestLogsRouteError } from '../../lib/logs-actions';
+import { createLogsChannel, saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
 import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsConfigEditor';
+
+/** Traduit un code d'erreur de la création de salon en phrase française. */
+function formatCreateReason(reason: CreateLogsChannelError['reason']): string {
+  switch (reason) {
+    case 'permission-denied':
+      return 'Permissions insuffisantes — le bot doit avoir Gérer les salons.';
+    case 'quota-exceeded':
+      return 'Nombre maximal de salons atteint sur cette guild.';
+    case 'discord-unavailable':
+      return "Le bot Discord n'est pas connecté, réessaie dans un instant.";
+    case 'unknown':
+      return 'Erreur inattendue, consulte les logs du serveur.';
+  }
+}
 
 /** Traduit un code d'erreur de la route test en phrase française. */
 function formatTestReason(reason: TestLogsRouteError['reason']): string {
@@ -90,6 +104,7 @@ export function LogsSimpleMode({
   const [excludeBots, setExcludeBots] = useState<boolean>(config.exclusions.excludeBots);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isTesting, setIsTesting] = useState<boolean>(false);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
     null,
   );
@@ -123,6 +138,26 @@ export function LogsSimpleMode({
   const handleExcludeBotsChange = (value: boolean) => {
     setExcludeBots(value);
     applyToConfig(channelId, preset, value);
+  };
+
+  const handleCreateChannel = async () => {
+    setIsCreating(true);
+    setFeedback(null);
+    const result = await createLogsChannel(guildId);
+    setIsCreating(false);
+    if (result.ok) {
+      setChannelId(result.channelId);
+      applyToConfig(result.channelId, preset, excludeBots);
+      setFeedback({
+        kind: 'success',
+        message: `Salon #${result.channelName} créé — pense à enregistrer.`,
+      });
+    } else {
+      setFeedback({
+        kind: 'error',
+        message: `Impossible de créer le salon : ${formatCreateReason(result.reason)}`,
+      });
+    }
   };
 
   const handleSubmit = async () => {
@@ -184,11 +219,10 @@ export function LogsSimpleMode({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => {
-              /* Création automatique de salon — hors scope Task 7 */
-            }}
+            disabled={isCreating}
+            onClick={() => void handleCreateChannel()}
           >
-            Créer #logs pour moi
+            {isCreating ? 'Création…' : 'Créer #logs pour moi'}
           </Button>
         </div>
       </fieldset>

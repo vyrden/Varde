@@ -104,6 +104,88 @@ export async function saveLogsConfig(
   }
 }
 
+export interface CreateLogsChannelResult {
+  readonly ok: true;
+  readonly channelId: string;
+  readonly channelName: string;
+}
+
+export interface CreateLogsChannelError {
+  readonly ok: false;
+  readonly reason: 'permission-denied' | 'quota-exceeded' | 'discord-unavailable' | 'unknown';
+}
+
+/** Raisons typées retournées par l'API /discord/channels. */
+const KNOWN_CREATE_REASONS = new Set([
+  'permission-denied',
+  'quota-exceeded',
+  'discord-unavailable',
+] as const);
+
+type KnownCreateReason = 'permission-denied' | 'quota-exceeded' | 'discord-unavailable';
+
+/** Extrait un reason typé depuis le body d'erreur de l'API (création salon). */
+function extractCreateReason(body: unknown): CreateLogsChannelError['reason'] {
+  if (
+    body !== null &&
+    typeof body === 'object' &&
+    'reason' in body &&
+    typeof (body as { reason: unknown }).reason === 'string' &&
+    KNOWN_CREATE_REASONS.has((body as { reason: KnownCreateReason }).reason)
+  ) {
+    return (body as { reason: KnownCreateReason }).reason;
+  }
+  return 'unknown';
+}
+
+/**
+ * Crée un salon #logs dans la guild cible via l'API.
+ * Utilisé par le bouton "Créer #logs pour moi" du mode simple.
+ */
+export async function createLogsChannel(
+  guildId: string,
+): Promise<CreateLogsChannelResult | CreateLogsChannelError> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/discord/channels`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify({
+          name: 'logs',
+          type: 'text',
+          topic: "Journal d'activité Varde",
+        }),
+      },
+    );
+
+    if (response.ok) {
+      const body = (await response.json()) as { channelId: string; channelName: string };
+      return { ok: true, channelId: body.channelId, channelName: body.channelName };
+    }
+
+    if (response.status === 503) {
+      return { ok: false, reason: 'discord-unavailable' };
+    }
+
+    let errorBody: unknown = null;
+    try {
+      errorBody = await response.json();
+    } catch {
+      /* réponse non-JSON */
+    }
+
+    return { ok: false, reason: extractCreateReason(errorBody) };
+  } catch {
+    return { ok: false, reason: 'unknown' };
+  }
+}
+
 /** Raisons typées retournées par l'API /test-route. */
 const KNOWN_REASONS = new Set([
   'channel-not-found',
