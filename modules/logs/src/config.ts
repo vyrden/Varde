@@ -64,6 +64,9 @@ export const logsConfigSchema = z
 
 export type LogsConfig = z.infer<typeof logsConfigSchema>;
 
+/** Alias normalisé utilisé par `defineModule` et les exports publics. */
+export const configSchema = logsConfigSchema;
+
 const MODULE_ID = 'logs' as ModuleId;
 
 /**
