@@ -44,6 +44,10 @@ export {
   registerOnboardingRoutes,
 } from './routes/onboarding.js';
 export {
+  type RegisterUnboundPermissionsRoutesOptions,
+  registerUnboundPermissionsRoutes,
+} from './routes/unbound-permissions.js';
+export {
   type Authenticator,
   type CreateApiServerOptions,
   createApiServer,

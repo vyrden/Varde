@@ -429,4 +429,30 @@ describe('createPermissionService — bind / unbind', () => {
       permissions.unbind(GUILD, BAN_PERMISSION, MODERATOR_ROLE),
     ).resolves.toBeUndefined();
   });
+
+  it('listBindings retourne les bindings posés pour la guild', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver(null),
+    });
+
+    await permissions.bind(GUILD, BAN_PERMISSION, MODERATOR_ROLE);
+    await permissions.bind(GUILD, BAN_PERMISSION, MEMBER_ROLE);
+
+    const bindings = await permissions.listBindings(GUILD);
+    expect(bindings).toHaveLength(2);
+    expect(bindings.map((b) => b.roleId)).toEqual(
+      expect.arrayContaining([MODERATOR_ROLE, MEMBER_ROLE]),
+    );
+  });
+
+  it('listBindings retourne une liste vide si aucun binding pour la guild', async () => {
+    const permissions = createPermissionService({
+      client,
+      resolveMemberContext: staticResolver(null),
+    });
+
+    const bindings = await permissions.listBindings(GUILD);
+    expect(bindings).toHaveLength(0);
+  });
 });
