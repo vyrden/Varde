@@ -35,13 +35,31 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
   }
 }
 
-/** Identifiant stable de la route générée en mode simple. */
-const SIMPLE_ROUTE_ID = 'simple-default';
+/**
+ * Identifiant stable de la route générée en mode simple. UUID v4
+ * déterministe (zéros + nybble `4` + variant `8`) pour passer
+ * `z.string().uuid()` côté module tout en restant identifiable d'un
+ * rendu à l'autre.
+ */
+const SIMPLE_ROUTE_ID = '00000000-0000-4000-8000-000000000001';
 
-/** Événements pilotes disponibles en V1. */
-const ALL_EVENTS = ['messageDelete', 'messageEdit', 'memberJoin', 'memberLeave'] as const;
-const MODERATION_EVENTS = ['messageDelete', 'messageEdit', 'memberLeave'] as const;
-const MEMBERS_EVENTS = ['memberJoin', 'memberLeave'] as const;
+/**
+ * Événements pilotes disponibles en V1. Les identifiants sont ceux du
+ * catalogue `CoreEvent` (préfixe `guild.`), cohérents avec la registry
+ * de formatters côté module logs.
+ */
+const ALL_EVENTS = [
+  'guild.messageDelete',
+  'guild.messageEdit',
+  'guild.memberJoin',
+  'guild.memberLeave',
+] as const;
+const MODERATION_EVENTS = [
+  'guild.messageDelete',
+  'guild.messageEdit',
+  'guild.memberLeave',
+] as const;
+const MEMBERS_EVENTS = ['guild.memberJoin', 'guild.memberLeave'] as const;
 
 type LogPreset = 'all' | 'moderation' | 'members';
 
