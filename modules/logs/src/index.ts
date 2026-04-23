@@ -117,7 +117,11 @@ async function deliverToRoute(
     await ctx.discord.sendEmbed(route.channelId as never, message);
   } catch (error) {
     if (error instanceof DiscordSendError) {
-      buffer.push(route.id, event, Date.now());
+      buffer.push(route.id, event, Date.now(), {
+        guildId: event.guildId,
+        channelId: route.channelId,
+        reason: error.reason,
+      });
       auditBrokenRoute(ctx, event.guildId, route, error.reason);
       return;
     }
@@ -153,6 +157,39 @@ function auditBrokenRoute(
       reason,
     },
   });
+}
+
+/** Informations d'une route cassée exposée via l'API dashboard. */
+export interface LogsBrokenRouteInfo {
+  readonly routeId: string;
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly droppedCount: number;
+  readonly bufferedCount: number;
+  readonly markedAt: number | null;
+  readonly reason: string;
+}
+
+/**
+ * Retourne la liste des routes cassées pour une guild donnée.
+ * Consommé par l'API dashboard pour afficher le bandeau de statut.
+ * Les routes cassées d'autres guilds sont filtrées.
+ */
+export function getBrokenRoutesFor(guildId: string): readonly LogsBrokenRouteInfo[] {
+  const result: LogsBrokenRouteInfo[] = [];
+  for (const [routeId, snap] of buffer.snapshotAll()) {
+    if (snap.guildId !== guildId) continue;
+    result.push({
+      routeId,
+      guildId: snap.guildId,
+      channelId: snap.channelId,
+      droppedCount: snap.droppedCount,
+      bufferedCount: snap.events.length,
+      markedAt: snap.markedAt,
+      reason: snap.reason,
+    });
+  }
+  return result;
 }
 
 export { configSchema, configUi, type LogsConfig, resolveConfig } from './config.js';

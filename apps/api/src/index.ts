@@ -31,6 +31,10 @@ export {
   registerGuildsRoutes,
 } from './routes/guilds.js';
 export {
+  type RegisterLogsRoutesOptions,
+  registerLogsRoutes,
+} from './routes/logs.js';
+export {
   type RegisterModulesRoutesOptions,
   registerModulesRoutes,
 } from './routes/modules.js';

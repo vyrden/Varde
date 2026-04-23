@@ -50,6 +50,9 @@ importers:
       '@varde/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@varde/module-logs':
+        specifier: workspace:*
+        version: link:../../modules/logs
       '@varde/presets':
         specifier: workspace:*
         version: link:../../packages/presets

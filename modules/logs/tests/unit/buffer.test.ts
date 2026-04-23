@@ -69,4 +69,47 @@ describe('createRouteBuffer', () => {
     b.drain('r1');
     expect(b.brokenRouteIds()).toEqual([]);
   });
+
+  it('push avec meta stocke guildId, channelId et reason', () => {
+    const b = createRouteBuffer();
+    b.push('r1', fakeEvent(0), 1000, { guildId: 'g1', channelId: 'c1', reason: 'missing' });
+    const snap = b.snapshotAll().get('r1');
+    expect(snap).toBeDefined();
+    expect(snap?.guildId).toBe('g1');
+    expect(snap?.channelId).toBe('c1');
+    expect(snap?.reason).toBe('missing');
+    expect(snap?.events).toHaveLength(1);
+  });
+
+  it('snapshotAll retourne uniquement les routes cassées', () => {
+    const b = createRouteBuffer();
+    b.push('r1', fakeEvent(0), 0, { guildId: 'g1', channelId: 'c1', reason: 'err' });
+    b.push('r2', fakeEvent(1), 0, { guildId: 'g2', channelId: 'c2', reason: 'err2' });
+    b.drain('r1');
+    const all = b.snapshotAll();
+    expect(all.has('r1')).toBe(false);
+    expect(all.has('r2')).toBe(true);
+  });
+
+  it('snapshotAll retourne une map vide si aucune route cassée', () => {
+    const b = createRouteBuffer();
+    expect(b.snapshotAll().size).toBe(0);
+  });
+
+  it('push sans meta laisse les champs méta à chaîne vide', () => {
+    const b = createRouteBuffer();
+    b.push('r1', fakeEvent(0), 0);
+    const snap = b.snapshotAll().get('r1');
+    expect(snap?.guildId).toBe('');
+    expect(snap?.channelId).toBe('');
+    expect(snap?.reason).toBe('');
+  });
+
+  it('push avec meta met à jour les méta sur une entry existante', () => {
+    const b = createRouteBuffer();
+    b.push('r1', fakeEvent(0), 0, { guildId: 'g1', channelId: 'c1', reason: 'first' });
+    b.push('r1', fakeEvent(1), 0, { guildId: 'g1', channelId: 'c1', reason: 'second' });
+    const snap = b.snapshotAll().get('r1');
+    expect(snap?.reason).toBe('second');
+  });
 });

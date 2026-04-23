@@ -11,7 +11,7 @@ import {
 import { createEventBus, createLogger, createUIService } from '@varde/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { logs } from '../../src/index.js';
+import { getBrokenRoutesFor, logs } from '../../src/index.js';
 import { locales } from '../../src/locales.js';
 
 // ---------------------------------------------------------------------------
@@ -218,5 +218,42 @@ describe('logs — intégration end-to-end', () => {
     expect(sendEmbedMock).not.toHaveBeenCalled();
 
     await logs.onUnload(ctxNoMatch);
+  });
+
+  it('getBrokenRoutesFor retourne les routes cassées de la guild après un DiscordSendError', async () => {
+    const sendEmbedMock = vi
+      .fn()
+      .mockRejectedValue(
+        new DiscordSendError('channel-not-found', 'Salon introuvable dans le test.'),
+      );
+
+    ctx = buildCtx({
+      discord: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        sendEmbed: sendEmbedMock,
+      },
+      audit: { log: vi.fn().mockResolvedValue(undefined) },
+    });
+    await logs.onLoad(ctx);
+
+    await ctx.events.emit(memberJoinEvent);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const broken = getBrokenRoutesFor(GUILD);
+    expect(broken.length).toBeGreaterThan(0);
+    const route = broken.find((r) => r.routeId === ROUTE_ID);
+    expect(route).toBeDefined();
+    expect(route?.guildId).toBe(GUILD);
+    expect(route?.channelId).toBe(CHANNEL);
+    expect(route?.reason).toBe('channel-not-found');
+    // Le buffer est module-level et peut accumuler des events d'autres tests.
+    expect(route?.bufferedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it('getBrokenRoutesFor ne retourne rien pour une autre guild', async () => {
+    const broken = getBrokenRoutesFor('autre-guild-id');
+    // Le buffer peut contenir des routes d'autres guilds — cette guild n'est pas concernée.
+    expect(broken.every((r) => r.guildId === 'autre-guild-id')).toBe(true);
   });
 });

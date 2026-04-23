@@ -167,3 +167,21 @@ export async function fetchUnboundPermissions(
   );
   return body.permissions;
 }
+
+/** Route Discord cassée exposée par le module logs. */
+export interface LogsBrokenRoute {
+  readonly routeId: string;
+  readonly channelId: string;
+  readonly droppedCount: number;
+  readonly bufferedCount: number;
+  readonly markedAt: string | null;
+  readonly reason: string;
+}
+
+/** Liste des routes Discord cassées pour une guild (module logs). */
+export async function fetchLogsBrokenRoutes(guildId: string): Promise<readonly LogsBrokenRoute[]> {
+  const body = await apiGet<{ routes: LogsBrokenRoute[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/modules/logs/broken-routes`,
+  );
+  return body.routes;
+}
