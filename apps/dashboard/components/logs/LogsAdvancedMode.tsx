@@ -3,6 +3,7 @@
 import { Button } from '@varde/ui';
 import { useState } from 'react';
 
+import { saveLogsConfig } from '../../lib/logs-actions';
 import type {
   ChannelOption,
   LogsConfigClient,
@@ -197,7 +198,7 @@ const MAX_ROUTES = 10;
  * placeholders câblés aux Tasks 7-8.
  */
 export function LogsAdvancedMode({
-  guildId: _guildId,
+  guildId,
   config,
   setConfig,
   channels,
@@ -205,6 +206,8 @@ export function LogsAdvancedMode({
   onSwitchSimple,
 }: LogsAdvancedModeProps) {
   const [routes, setRoutes] = useState<readonly LogsRouteClient[]>(config.routes);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const syncRoutes = (next: readonly LogsRouteClient[]) => {
     setRoutes(next);
@@ -227,6 +230,18 @@ export function LogsAdvancedMode({
 
   const handleExclusionsChange = (exclusions: LogsExclusionsClient) => {
     setConfig({ ...config, exclusions });
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setFeedback(null);
+    const result = await saveLogsConfig(guildId, config);
+    setIsSaving(false);
+    if (!result.ok) {
+      setFeedback(result.issues[0]?.message ?? 'Erreur inconnue');
+    } else {
+      setFeedback('Configuration enregistrée.');
+    }
   };
 
   return (
@@ -295,6 +310,27 @@ export function LogsAdvancedMode({
 
       {/* Limites techniques */}
       <LimitsNotice />
+
+      {/* Retour d'action */}
+      {feedback !== null && (
+        <p
+          role="status"
+          className={
+            feedback === 'Configuration enregistrée.'
+              ? 'text-sm text-green-700 dark:text-green-400'
+              : 'text-sm text-destructive'
+          }
+        >
+          {feedback}
+        </p>
+      )}
+
+      {/* Action globale Enregistrer */}
+      <div className="flex items-center gap-3">
+        <Button type="button" disabled={isSaving} onClick={() => void handleSave()}>
+          {isSaving ? 'Enregistrement…' : 'Enregistrer'}
+        </Button>
+      </div>
 
       {/* Lien mode simple */}
       <p className="text-sm">

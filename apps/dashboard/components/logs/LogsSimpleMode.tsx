@@ -3,6 +3,7 @@
 import { Button } from '@varde/ui';
 import { useState } from 'react';
 
+import { saveLogsConfig } from '../../lib/logs-actions';
 import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsConfigEditor';
 
 /** Identifiant stable de la route générée en mode simple. */
@@ -61,7 +62,7 @@ export interface LogsSimpleModeProps {
  * câblés aux server actions aux Tasks 7-8.
  */
 export function LogsSimpleMode({
-  guildId: _guildId,
+  guildId,
   config,
   setConfig,
   channels,
@@ -72,6 +73,8 @@ export function LogsSimpleMode({
   const [channelId, setChannelId] = useState<string>(existingRoute?.channelId ?? '');
   const [preset, setPreset] = useState<LogPreset>('all');
   const [excludeBots, setExcludeBots] = useState<boolean>(config.exclusions.excludeBots);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   const canSave = channelId !== '';
 
@@ -104,9 +107,17 @@ export function LogsSimpleMode({
     applyToConfig(channelId, preset, value);
   };
 
-  /** Placeholder — câblé à la Task 7. */
-  const handleSubmit = () => {
-    console.warn('LogsSimpleMode.handleSubmit non câblé — Task 7');
+  const handleSubmit = async () => {
+    if (!canSave) return;
+    setIsSaving(true);
+    setFeedback(null);
+    const result = await saveLogsConfig(guildId, config);
+    setIsSaving(false);
+    if (!result.ok) {
+      setFeedback(result.issues[0]?.message ?? 'Erreur inconnue');
+    } else {
+      setFeedback('Configuration enregistrée.');
+    }
   };
 
   /** Placeholder — câblé à la Task 8. */
@@ -148,8 +159,7 @@ export function LogsSimpleMode({
             variant="outline"
             size="sm"
             onClick={() => {
-              /* Placeholder — câblé à la Task 7 */
-              console.warn('Créer #logs non câblé — Task 7');
+              /* Création automatique de salon — hors scope Task 7 */
             }}
           >
             Créer #logs pour moi
@@ -201,10 +211,24 @@ export function LogsSimpleMode({
         </label>
       </fieldset>
 
+      {/* Retour d'action */}
+      {feedback !== null && (
+        <p
+          role="status"
+          className={
+            feedback === 'Configuration enregistrée.'
+              ? 'text-sm text-green-700 dark:text-green-400'
+              : 'text-sm text-destructive'
+          }
+        >
+          {feedback}
+        </p>
+      )}
+
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <Button type="button" disabled={!canSave} onClick={handleSubmit}>
-          Enregistrer
+        <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSubmit()}>
+          {isSaving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
         <Button type="button" variant="ghost" disabled={!canSave} onClick={handleTest}>
           Tester
