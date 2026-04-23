@@ -28,6 +28,8 @@ export {
 export {
   type CreateGuildChannelPayload,
   type CreateGuildChannelResult,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
   type RegisterDiscordChannelsRoutesOptions,
   registerDiscordChannelsRoutes,
 } from './routes/discord-channels.js';

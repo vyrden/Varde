@@ -18,6 +18,18 @@ export interface CreateGuildChannelResult {
   readonly id: string;
 }
 
+/** Salon texte Discord retourné par la liste (GET). */
+export interface GuildTextChannelDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** Rôle Discord retourné par la liste (GET). */
+export interface GuildRoleDto {
+  readonly id: string;
+  readonly name: string;
+}
+
 /**
  * Dépendances injectées pour les routes de gestion des salons Discord.
  * Le bridge vers discord.js est optionnel : si absent (CI, dev sans
@@ -37,6 +49,16 @@ export interface RegisterDiscordChannelsRoutesOptions {
     guildId: string,
     payload: CreateGuildChannelPayload,
   ) => Promise<CreateGuildChannelResult>;
+  /**
+   * Liste les salons texte Discord de la guild. Fournie par le serveur
+   * lorsque le bot est connecté. Absente → la route répond 503.
+   */
+  readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /**
+   * Liste les rôles Discord de la guild. Fournie par le serveur
+   * lorsque le bot est connecté. Absente → la route répond 503.
+   */
+  readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
 }
 
 /**
@@ -105,4 +127,52 @@ export function registerDiscordChannelsRoutes(
       return reply.code(500).send({ reason: 'unknown' });
     }
   });
+
+  /**
+   * Route : GET /guilds/:guildId/discord/text-channels
+   *
+   * Retourne la liste des salons texte Discord de la guild, pour peupler
+   * les sélecteurs du module logs (choix du salon de destination des routes).
+   *
+   * Accès restreint : MANAGE_GUILD requis.
+   * Absente du bridge → 503.
+   */
+  app.get<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/discord/text-channels',
+    async (request, reply: FastifyReply) => {
+      const { guildId } = request.params;
+      await requireGuildAdmin(app, request, guildId, options.discord);
+
+      if (!options.listGuildTextChannels) {
+        return reply.code(503).send({ reason: 'discord_bridge_unavailable' });
+      }
+
+      const channels = await options.listGuildTextChannels(guildId);
+      return { channels };
+    },
+  );
+
+  /**
+   * Route : GET /guilds/:guildId/discord/roles
+   *
+   * Retourne la liste des rôles Discord de la guild, pour peupler les
+   * sélecteurs d'exclusion du mode avancé du module logs.
+   *
+   * Accès restreint : MANAGE_GUILD requis.
+   * Absente du bridge → 503.
+   */
+  app.get<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/discord/roles',
+    async (request, reply: FastifyReply) => {
+      const { guildId } = request.params;
+      await requireGuildAdmin(app, request, guildId, options.discord);
+
+      if (!options.listGuildRoles) {
+        return reply.code(503).send({ reason: 'discord_bridge_unavailable' });
+      }
+
+      const roles = await options.listGuildRoles(guildId);
+      return { roles };
+    },
+  );
 }

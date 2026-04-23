@@ -23,6 +23,7 @@
  * via l'API REST : à livrer quand la surface commandes sera stable.
  */
 
+import type { GuildRoleDto, GuildTextChannelDto } from '@varde/api';
 import {
   attachDiscordClient,
   createDiscordJsChannelSender,
@@ -34,7 +35,7 @@ import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
 
 import { createServer } from './server.js';
 
@@ -180,6 +181,10 @@ interface DiscordAttachment {
   readonly bridge: OnboardingDiscordBridge;
   /** Service Discord concret à passer à `createServer` via `discordService`. */
   readonly discordService: DiscordService;
+  /** Liste les salons texte d'une guild depuis le cache discord.js. */
+  readonly listGuildTextChannels: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Liste les rôles d'une guild depuis le cache discord.js. */
+  readonly listGuildRoles: (guildId: string) => Promise<readonly GuildRoleDto[]>;
 }
 
 interface DiscordBinding {
@@ -207,7 +212,34 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const bridge = createOnboardingDiscordBridge(client);
   const sender = createDiscordJsChannelSender(client);
   const discordService = createDiscordService({ sender, logger });
-  return { client, bridge, discordService };
+
+  const listGuildTextChannels = async (
+    guildId: string,
+  ): Promise<readonly GuildTextChannelDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    // On préfère `guild.channels.fetch()` pour couvrir les cas où le cache
+    // n'est pas encore peuplé (redémarrage rapide post-reconnexion).
+    const channels = await guild.channels.fetch();
+    return Array.from(channels.values())
+      .filter(
+        (ch): ch is NonNullable<typeof ch> => ch !== null && ch.type === ChannelType.GuildText,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((ch) => ({ id: ch.id, name: ch.name }));
+  };
+
+  const listGuildRoles = async (guildId: string): Promise<readonly GuildRoleDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    const roles = await guild.roles.fetch();
+    return Array.from(roles.values())
+      .filter((r) => !r.managed && r.name !== '@everyone')
+      .sort((a, b) => b.position - a.position)
+      .map((r) => ({ id: r.id, name: r.name }));
+  };
+
+  return { client, bridge, discordService, listGuildTextChannels, listGuildRoles };
 }
 
 function attachDiscordToHandle(
@@ -264,6 +296,10 @@ async function main(): Promise<void> {
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -271,6 +307,10 @@ async function main(): Promise<void> {
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
         });
 
   handle.loader.register(helloWorld);

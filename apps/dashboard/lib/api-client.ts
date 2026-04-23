@@ -185,3 +185,53 @@ export async function fetchLogsBrokenRoutes(guildId: string): Promise<readonly L
   );
   return body.routes;
 }
+
+/** Salon texte Discord retourné par la liste (GET /discord/text-channels). */
+export interface GuildTextChannelDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** Rôle Discord retourné par la liste (GET /discord/roles). */
+export interface GuildRoleDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * Liste les salons texte Discord d'une guild. Retourne un tableau vide
+ * si le bot n'est pas connecté (503 bridge indisponible est silencé).
+ */
+export async function fetchGuildTextChannels(
+  guildId: string,
+): Promise<readonly GuildTextChannelDto[]> {
+  try {
+    const body = await apiGet<{ channels: GuildTextChannelDto[] }>(
+      `/guilds/${encodeURIComponent(guildId)}/discord/text-channels`,
+    );
+    return body.channels;
+  } catch (error) {
+    // 503 = bot non connecté : on retourne une liste vide plutôt que de
+    // faire sauter toute la page.
+    if (error instanceof ApiError && error.status === 503) return [];
+    throw error;
+  }
+}
+
+/**
+ * Liste les rôles Discord d'une guild. Retourne un tableau vide si le
+ * bot n'est pas connecté (503 bridge indisponible est silencé).
+ */
+export async function fetchGuildRoles(guildId: string): Promise<readonly GuildRoleDto[]> {
+  try {
+    const body = await apiGet<{ roles: GuildRoleDto[] }>(
+      `/guilds/${encodeURIComponent(guildId)}/discord/roles`,
+    );
+    return body.roles;
+  } catch (error) {
+    // 503 = bot non connecté : on retourne une liste vide plutôt que de
+    // faire sauter toute la page.
+    if (error instanceof ApiError && error.status === 503) return [];
+    throw error;
+  }
+}

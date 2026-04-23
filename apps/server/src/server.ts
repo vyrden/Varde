@@ -6,6 +6,8 @@ import {
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
   registerAiSettingsRoutes,
@@ -150,6 +152,14 @@ export interface CreateServerOptions<D extends DbDriver> {
    * sans `VARDE_DISCORD_TOKEN`.
    */
   readonly onboardingBridge?: OnboardingDiscordBridge;
+  /**
+   * Fonction listant les salons texte Discord d'une guild. Fournie par
+   * `bin.ts` lorsque le bot est connecté. Absente → les routes GET
+   * /discord/text-channels et /discord/roles répondent 503.
+   */
+  readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Fonction listant les rôles Discord d'une guild. Voir `listGuildTextChannels`. */
+  readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
   /**
    * Service Discord concret câblé par `bin.ts` quand le token est
    * présent. Omis → `createCtxFactory` utilise son stub interne
@@ -425,6 +435,10 @@ export async function createServer<D extends DbDriver>(
             onboardingBridge.createChannel(guildId, { ...payload }),
         }
       : {}),
+    ...(options.listGuildTextChannels
+      ? { listGuildTextChannels: options.listGuildTextChannels }
+      : {}),
+    ...(options.listGuildRoles ? { listGuildRoles: options.listGuildRoles } : {}),
   });
   registerLogsRoutes(api, {
     discord,
