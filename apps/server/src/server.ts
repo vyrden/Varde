@@ -250,11 +250,36 @@ export async function createServer<D extends DbDriver>(
     coreVersion,
     logger,
     ctxFactory: ctxBundle.factory,
-    // Branche la persistance des permissions du manifest dans
-    // `permissions_registry` au chargement, sans quoi l'action
-    // `core.bindPermission` (ADR 0008 seeding A) échoue par FK
-    // violation sur le premier onboarding qui apply des bindings.
-    registerPermissions: (entries) => permissions.registerPermissions(entries),
+    // Persiste module + permissions dans la DB au chargement.
+    // Ordre FK : upsert `modules_registry` d'abord (sinon la FK
+    // `permissions_registry.module_id` viole), puis `permissions_registry`
+    // (sinon la FK `permission_bindings.permission_id` viole au premier
+    // onboarding apply — ADR 0008).
+    persistModuleRegistration: async ({ moduleId, version, manifest, permissions: perms }) => {
+      if (client.driver === 'pg') {
+        const pg = client as DbClient<'pg'>;
+        await pg.db
+          .insert(pgSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: pgSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          });
+      } else {
+        const sqlite = client as DbClient<'sqlite'>;
+        sqlite.db
+          .insert(sqliteSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: sqliteSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          })
+          .run();
+      }
+      if (perms.length > 0) {
+        await permissions.registerPermissions(perms);
+      }
+    },
   });
   const commandRegistry = createCommandRegistry();
 

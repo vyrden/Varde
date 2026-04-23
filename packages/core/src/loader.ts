@@ -54,17 +54,22 @@ export interface ModuleRef {
 export type CtxFactory = (ref: ModuleRef, guildId?: GuildId) => ModuleContext;
 
 /**
- * Enregistre les permissions déclarées dans les manifests des modules
- * chargés dans `permissions_registry`. Injectable par le server
- * (`apps/server`) via les options du loader. Si omis, les permissions
- * ne sont **pas** enregistrées — utile pour les tests unitaires qui
- * ne touchent pas la DB, mais en prod doit toujours être fourni
- * sinon l'action `core.bindPermission` (ADR 0008) échoue par FK
- * violation sur `permission_id`.
+ * Persiste un module dans `modules_registry` (upsert idempotent) et
+ * ses permissions dans `permissions_registry`. Appelé par le loader
+ * juste avant `onLoad` de chaque module pour satisfaire la FK
+ * `permissions_registry.module_id → modules_registry.id`, elle-même
+ * requise par `permission_bindings.permission_id` (ADR 0008).
+ *
+ * Injectable par le server (`apps/server`). Absent = skip — utile
+ * pour les tests unitaires qui ne touchent pas la DB, mais en prod
+ * doit toujours être fourni.
  */
-export type RegisterManifestPermissions = (
-  entries: readonly PermissionRegistryRecord[],
-) => Promise<void>;
+export type PersistModuleRegistration = (args: {
+  readonly moduleId: ModuleId;
+  readonly version: string;
+  readonly manifest: ModuleDefinition['manifest'];
+  readonly permissions: readonly PermissionRegistryRecord[];
+}) => Promise<void>;
 
 /** Options de construction. */
 export interface CreatePluginLoaderOptions {
@@ -72,12 +77,12 @@ export interface CreatePluginLoaderOptions {
   readonly logger: Logger;
   readonly ctxFactory: CtxFactory;
   /**
-   * Callback pour persister les permissions du manifest dans
-   * `permissions_registry` au chargement du module. Typiquement :
-   * `(entries) => permissionService.registerPermissions(entries)`.
-   * Absent = skip (voir JSDoc de `RegisterManifestPermissions`).
+   * Callback pour upsert module_registry + permissions_registry au
+   * chargement du module. Typiquement : upsert `modules_registry` puis
+   * appel `permissionService.registerPermissions(permissions)`.
+   * Absent = skip (voir JSDoc de `PersistModuleRegistration`).
    */
-  readonly registerPermissions?: RegisterManifestPermissions;
+  readonly persistModuleRegistration?: PersistModuleRegistration;
 }
 
 interface ModuleRecord {
@@ -165,7 +170,7 @@ const sortByDependencies = (modules: ReadonlyMap<ModuleId, ModuleDefinition>): M
 };
 
 export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLoader {
-  const { coreVersion, ctxFactory, registerPermissions } = options;
+  const { coreVersion, ctxFactory, persistModuleRegistration } = options;
   const logger = options.logger.child({ component: 'loader' });
   const registry = new Map<ModuleId, ModuleRecord>();
   let computedOrder: ModuleId[] | null = null;
@@ -235,15 +240,21 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
         const record = requireRecord(id);
         if (record.loaded) continue;
 
-        // Persiste les permissions déclarées dans `permissions_registry`
-        // AVANT le `onLoad` du module, pour que toute action qui lie
-        // une permission à un rôle (action onboarding
-        // `core.bindPermission`, écran dashboard de binding) puisse
-        // satisfaire la FK `permission_bindings.permission_id`.
-        // Invariant ADR 0008 : toute permission déclarée par un
-        // manifest est présente dans le registre au moment où le
-        // module est chargé.
-        if (registerPermissions && record.definition.manifest.permissions.length > 0) {
+        // Persiste le module dans `modules_registry` + ses permissions
+        // dans `permissions_registry` AVANT le `onLoad`. Deux invariants
+        // ADR 0008 satisfaits ici :
+        //
+        //   1. `permissions_registry.module_id` → `modules_registry.id`
+        //      (FK) : le module doit exister avant ses permissions.
+        //   2. `permission_bindings.permission_id` →
+        //      `permissions_registry.id` (FK) : les permissions doivent
+        //      exister avant qu'une action onboarding
+        //      `core.bindPermission` ou un bind manuel via dashboard
+        //      puisse les lier à un rôle.
+        //
+        // Le callback est injecté par `apps/server` ; sans lui, pas de
+        // persistance (tests unitaires par défaut).
+        if (persistModuleRegistration) {
           const createdAt = new Date().toISOString() as Iso8601DateTime;
           const entries: PermissionRegistryRecord[] = record.definition.manifest.permissions.map(
             (perm) => ({
@@ -256,14 +267,19 @@ export function createPluginLoader(options: CreatePluginLoaderOptions): PluginLo
             }),
           );
           try {
-            await registerPermissions(entries);
-            logger.debug('permissions du manifest enregistrées', {
+            await persistModuleRegistration({
               moduleId: id,
-              count: entries.length,
+              version: record.definition.manifest.version,
+              manifest: record.definition.manifest,
+              permissions: entries,
+            });
+            logger.debug('module enregistré en DB', {
+              moduleId: id,
+              permissionsCount: entries.length,
             });
           } catch (error) {
-            const moduleError = toModuleError(id, 'registerPermissions', error);
-            logger.error('registerPermissions en échec', moduleError, { moduleId: id });
+            const moduleError = toModuleError(id, 'persistModuleRegistration', error);
+            logger.error('persistModuleRegistration en échec', moduleError, { moduleId: id });
             throw moduleError;
           }
         }
