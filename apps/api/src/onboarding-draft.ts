@@ -54,6 +54,10 @@ export function presetToDraft(preset: PresetDefinition): OnboardingDraft {
       enabled: m.enabled,
       config: { ...m.config },
     })),
+    permissionBindings: preset.permissionBindings.map((b) => ({
+      permissionId: b.permissionId,
+      roleLocalId: b.roleLocalId,
+    })),
   };
 }
 
@@ -64,6 +68,7 @@ export function emptyDraft(locale: 'fr' | 'en' = 'fr'): OnboardingDraft {
     categories: [],
     channels: [],
     modules: [],
+    permissionBindings: [],
   };
 }
 

@@ -79,6 +79,20 @@ export const draftModuleConfigSchema = z.object({
 export type DraftModuleConfig = z.infer<typeof draftModuleConfigSchema>;
 
 /**
+ * Binding initial d'une permission applicative vers un rôle local.
+ * Forme parallèle à `PresetPermissionBinding` mais vit dans les
+ * contracts pour que le dashboard et l'executor partagent le même
+ * vocabulaire. La résolution du `roleLocalId` vers le snowflake
+ * Discord se fait à l'apply via `ctx.resolveLocalId`, comme pour
+ * les overwrites de salons.
+ */
+export const draftPermissionBindingSchema = z.object({
+  permissionId: z.string().min(1),
+  roleLocalId: z.string().min(1),
+});
+export type DraftPermissionBinding = z.infer<typeof draftPermissionBindingSchema>;
+
+/**
  * État interne d'une session onboarding côté builder. Ce qu'un
  * preset produit, ce qu'un patch modifie, ce qu'un preview
  * transforme en liste d'actions.
@@ -89,6 +103,7 @@ export const onboardingDraftSchema = z.object({
   categories: z.array(draftCategorySchema).default([]),
   channels: z.array(draftChannelSchema).default([]),
   modules: z.array(draftModuleConfigSchema).default([]),
+  permissionBindings: z.array(draftPermissionBindingSchema).default([]),
 });
 export type OnboardingDraft = z.infer<typeof onboardingDraftSchema>;
 
