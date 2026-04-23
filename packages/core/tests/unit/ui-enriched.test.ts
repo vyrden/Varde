@@ -35,10 +35,9 @@ describe('createUIService — embed enrichi', () => {
 
   it('attache les attachments passés en deuxième argument', () => {
     const buf = Buffer.from('hello');
-    const message = ui.embed(
-      { title: 'Avec pj' },
-      [{ filename: 'content.txt', contentType: 'text/plain; charset=utf-8', data: buf }],
-    );
+    const message = ui.embed({ title: 'Avec pj' }, [
+      { filename: 'content.txt', contentType: 'text/plain; charset=utf-8', data: buf },
+    ]);
     if (message.kind !== 'embed') throw new Error('type guard');
     expect(message.attachments).toHaveLength(1);
     expect(message.attachments?.[0]?.filename).toBe('content.txt');

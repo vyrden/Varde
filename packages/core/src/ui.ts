@@ -31,9 +31,8 @@ const freezeEmbed = (source: UIEmbed): UIEmbed => {
   return frozen(payload) as UIEmbed;
 };
 
-const freezeAttachments = (
-  attachments: readonly UIAttachment[],
-): readonly UIAttachment[] => frozen(attachments.map((a) => frozen({ ...a })));
+const freezeAttachments = (attachments: readonly UIAttachment[]): readonly UIAttachment[] =>
+  frozen(attachments.map((a) => frozen({ ...a })));
 
 export function createUIService(): UIService {
   return {
