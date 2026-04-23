@@ -80,23 +80,16 @@ export interface LogsSimpleModeProps {
   readonly config: LogsConfigClient;
   readonly setConfig: (c: LogsConfigClient) => void;
   readonly channels: readonly ChannelOption[];
-  readonly onSwitchAdvanced: () => void;
 }
 
 /**
  * Mode simple : 3 contrôles (salon, preset, bots) + bouton Enregistrer
- * + bouton Tester + lien vers le mode avancé.
+ * + bouton Tester.
  *
  * Les callbacks onSubmit et onTest sont des placeholders — ils seront
  * câblés aux server actions aux Tasks 7-8.
  */
-export function LogsSimpleMode({
-  guildId,
-  config,
-  setConfig,
-  channels,
-  onSwitchAdvanced,
-}: LogsSimpleModeProps) {
+export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSimpleModeProps) {
   /** Salon sélectionné : on lit la première route ou rien. */
   const existingRoute = config.routes.find((r) => r.id === SIMPLE_ROUTE_ID) ?? config.routes[0];
   const [channelId, setChannelId] = useState<string>(existingRoute?.channelId ?? '');
@@ -299,17 +292,6 @@ export function LogsSimpleMode({
           {isTesting ? 'Test en cours…' : 'Tester'}
         </Button>
       </div>
-
-      {/* Lien mode avancé */}
-      <p className="text-sm">
-        <button
-          type="button"
-          onClick={onSwitchAdvanced}
-          className="text-primary underline-offset-4 hover:underline"
-        >
-          Mode avancé →
-        </button>
-      </p>
     </div>
   );
 }

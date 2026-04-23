@@ -33,7 +33,6 @@ export interface LogsAdvancedModeProps {
   readonly setConfig: (c: LogsConfigClient) => void;
   readonly channels: readonly ChannelOption[];
   readonly roles: readonly RoleOption[];
-  readonly onSwitchSimple: () => void;
 }
 
 /**
@@ -194,20 +193,30 @@ function LimitsNotice() {
     <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
       <p className="font-semibold text-foreground">Limites techniques</p>
       <ul className="mt-2 list-inside list-disc space-y-1">
-        <li>Maximum 10 routes par guild.</li>
         <li>
-          En cas de salon inaccessible, les événements sont bufferisés 5 minutes puis abandonnés.
+          Un champ d'embed Discord ne peut contenir que 1024 caractères. Au-delà, le contenu part
+          automatiquement en pièce jointe <code>.txt</code> (jamais tronqué silencieusement).
         </li>
         <li>
-          Verbosité compacte : 1 champ par événement. Détaillée : tous les champs disponibles.
+          Un embed ne peut dépasser 6000 caractères au total (titre + description + champs + footer
+          + author). Les champs les plus longs passent en pièce jointe prioritairement.
         </li>
-        <li>Les exclusions s'appliquent à toutes les routes.</li>
+        <li>
+          Les pièces jointes sont limitées à 25 MB par Discord (tout plan guild confondu, borne
+          conservatrice du bot).
+        </li>
+        <li>
+          Les médias d'un message supprimé ne sont pas récupérables — les URLs CDN Discord expirent
+          dès la suppression. L'embed contient le lien original, qui peut être mort.
+        </li>
+        <li>
+          Si un salon cible devient indisponible, les événements sont bufferisés en RAM (100 par
+          route max), puis perdus si le bot redémarre. La persistance Redis arrive en V1.2.
+        </li>
       </ul>
     </div>
   );
 }
-
-const MAX_ROUTES = 10;
 
 /**
  * Mode avancé : tableau des routes + exclusions + encart limites.
@@ -220,7 +229,6 @@ export function LogsAdvancedMode({
   setConfig,
   channels,
   roles,
-  onSwitchSimple,
 }: LogsAdvancedModeProps) {
   const [routes, setRoutes] = useState<readonly LogsRouteClient[]>(config.routes);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -289,15 +297,8 @@ export function LogsAdvancedMode({
       {/* Tableau des routes */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">
-            Routes ({routes.length} / {MAX_ROUTES})
-          </h3>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleAddRoute}
-            disabled={routes.length >= MAX_ROUTES}
-          >
+          <h3 className="text-sm font-semibold">Routes ({routes.length})</h3>
+          <Button type="button" size="sm" onClick={handleAddRoute}>
             + Nouvelle route
           </Button>
         </div>
@@ -365,17 +366,6 @@ export function LogsAdvancedMode({
           {isSaving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </div>
-
-      {/* Lien mode simple */}
-      <p className="text-sm">
-        <button
-          type="button"
-          onClick={onSwitchSimple}
-          className="text-primary underline-offset-4 hover:underline"
-        >
-          ← Mode simple
-        </button>
-      </p>
     </div>
   );
 }

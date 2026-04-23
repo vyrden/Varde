@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { LogsBrokenRoute } from '../../lib/api-client';
 import { LogsAdvancedMode } from './LogsAdvancedMode';
@@ -47,6 +47,84 @@ export interface LogsConfigEditorProps {
   readonly roles: readonly RoleOption[];
 }
 
+/** IDs ARIA des panneaux associés aux onglets. */
+const TAB_PANEL_SIMPLE = 'logs-panel-simple';
+const TAB_PANEL_ADVANCED = 'logs-panel-advanced';
+
+/**
+ * Barre d'onglets Simple / Avancé accessible (WCAG AA).
+ * Navigation clavier : flèche gauche/droite entre les onglets.
+ */
+function ModeTabs({
+  mode,
+  onSelect,
+}: {
+  readonly mode: 'simple' | 'advanced';
+  readonly onSelect: (m: 'simple' | 'advanced') => void;
+}) {
+  const tabSimpleRef = useRef<HTMLButtonElement>(null);
+  const tabAdvancedRef = useRef<HTMLButtonElement>(null);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLButtonElement>, current: 'simple' | 'advanced') => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const next = current === 'simple' ? 'advanced' : 'simple';
+        onSelect(next);
+        /* Déplace le focus sur l'onglet activé */
+        const ref = next === 'simple' ? tabSimpleRef : tabAdvancedRef;
+        ref.current?.focus();
+      }
+    },
+    [onSelect],
+  );
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Mode d'édition"
+      className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 w-fit"
+    >
+      <button
+        ref={tabSimpleRef}
+        role="tab"
+        type="button"
+        id="logs-tab-simple"
+        aria-selected={mode === 'simple'}
+        aria-controls={TAB_PANEL_SIMPLE}
+        tabIndex={mode === 'simple' ? 0 : -1}
+        onClick={() => onSelect('simple')}
+        onKeyDown={(e) => handleKeyDown(e, 'simple')}
+        className={
+          mode === 'simple'
+            ? 'rounded-md px-4 py-1.5 text-sm font-medium bg-background text-foreground shadow-sm'
+            : 'rounded-md px-4 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground'
+        }
+      >
+        Mode simple
+      </button>
+      <button
+        ref={tabAdvancedRef}
+        role="tab"
+        type="button"
+        id="logs-tab-advanced"
+        aria-selected={mode === 'advanced'}
+        aria-controls={TAB_PANEL_ADVANCED}
+        tabIndex={mode === 'advanced' ? 0 : -1}
+        onClick={() => onSelect('advanced')}
+        onKeyDown={(e) => handleKeyDown(e, 'advanced')}
+        className={
+          mode === 'advanced'
+            ? 'rounded-md px-4 py-1.5 text-sm font-medium bg-background text-foreground shadow-sm'
+            : 'rounded-md px-4 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground'
+        }
+      >
+        Mode avancé
+      </button>
+    </div>
+  );
+}
+
 /**
  * Coordinateur éditeur de config logs. Gère le switch simple/avancé
  * via le paramètre URL `?mode=advanced` et tient l'état local de la
@@ -58,15 +136,18 @@ export function LogsConfigEditor(props: LogsConfigEditorProps) {
   const mode = searchParams.get('mode') === 'advanced' ? 'advanced' : 'simple';
   const [config, setConfig] = useState<LogsConfigClient>(props.initialConfig);
 
-  const setMode = (next: 'simple' | 'advanced') => {
-    const params = new URLSearchParams(searchParams);
-    if (next === 'advanced') {
-      params.set('mode', 'advanced');
-    } else {
-      params.delete('mode');
-    }
-    router.replace(`?${params.toString()}`);
-  };
+  const setMode = useCallback(
+    (next: 'simple' | 'advanced') => {
+      const params = new URLSearchParams(searchParams);
+      if (next === 'advanced') {
+        params.set('mode', 'advanced');
+      } else {
+        params.delete('mode');
+      }
+      router.replace(`?${params.toString()}`);
+    },
+    [searchParams, router],
+  );
 
   return (
     <section className="space-y-6">
@@ -92,24 +173,43 @@ export function LogsConfigEditor(props: LogsConfigEditorProps) {
         </div>
       )}
 
-      {mode === 'simple' ? (
-        <LogsSimpleMode
-          guildId={props.guildId}
-          config={config}
-          setConfig={setConfig}
-          channels={props.channels}
-          onSwitchAdvanced={() => setMode('advanced')}
-        />
-      ) : (
-        <LogsAdvancedMode
-          guildId={props.guildId}
-          config={config}
-          setConfig={setConfig}
-          channels={props.channels}
-          roles={props.roles}
-          onSwitchSimple={() => setMode('simple')}
-        />
-      )}
+      {/* Onglets Simple / Avancé */}
+      <ModeTabs mode={mode} onSelect={setMode} />
+
+      {/* Panneau simple */}
+      <div
+        role="tabpanel"
+        id={TAB_PANEL_SIMPLE}
+        aria-labelledby="logs-tab-simple"
+        hidden={mode !== 'simple'}
+      >
+        {mode === 'simple' && (
+          <LogsSimpleMode
+            guildId={props.guildId}
+            config={config}
+            setConfig={setConfig}
+            channels={props.channels}
+          />
+        )}
+      </div>
+
+      {/* Panneau avancé */}
+      <div
+        role="tabpanel"
+        id={TAB_PANEL_ADVANCED}
+        aria-labelledby="logs-tab-advanced"
+        hidden={mode !== 'advanced'}
+      >
+        {mode === 'advanced' && (
+          <LogsAdvancedMode
+            guildId={props.guildId}
+            config={config}
+            setConfig={setConfig}
+            channels={props.channels}
+            roles={props.roles}
+          />
+        )}
+      </div>
     </section>
   );
 }

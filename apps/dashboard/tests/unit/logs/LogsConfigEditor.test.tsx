@@ -99,7 +99,7 @@ describe('LogsConfigEditor', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('navigue en mode avancé au clic sur "Mode avancé"', () => {
+  it('navigue en mode avancé au clic sur l\'onglet "Mode avancé"', () => {
     render(
       <LogsConfigEditor
         guildId="g1"
@@ -109,7 +109,7 @@ describe('LogsConfigEditor', () => {
         roles={[]}
       />,
     );
-    fireEvent.click(screen.getByText(/mode avancé/i));
+    fireEvent.click(screen.getByRole('tab', { name: /mode avancé/i }));
     expect(routerReplace).toHaveBeenCalledWith('?mode=advanced');
   });
 });
@@ -122,7 +122,6 @@ describe('LogsSimpleMode', () => {
         config={emptyConfig}
         setConfig={() => undefined}
         channels={[{ id: 'c1', name: 'logs' }]}
-        onSwitchAdvanced={() => undefined}
       />,
     );
     expect(screen.getByRole('combobox', { name: /salon de logs/i })).toBeDefined();
@@ -136,7 +135,6 @@ describe('LogsSimpleMode', () => {
         config={emptyConfig}
         setConfig={() => undefined}
         channels={[]}
-        onSwitchAdvanced={() => undefined}
       />,
     );
     const btn = screen.getByRole('button', { name: /enregistrer/i });
@@ -150,27 +148,11 @@ describe('LogsSimpleMode', () => {
         config={emptyConfig}
         setConfig={() => undefined}
         channels={[{ id: 'c1', name: 'logs' }]}
-        onSwitchAdvanced={() => undefined}
       />,
     );
     const select = screen.getByRole('combobox', { name: /salon de logs/i });
     fireEvent.change(select, { target: { value: 'c1' } });
     const btn = screen.getByRole('button', { name: /enregistrer/i });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('appelle onSwitchAdvanced au clic sur "Mode avancé"', () => {
-    const onSwitch = vi.fn();
-    render(
-      <LogsSimpleMode
-        guildId="g1"
-        config={emptyConfig}
-        setConfig={() => undefined}
-        channels={[]}
-        onSwitchAdvanced={onSwitch}
-      />,
-    );
-    fireEvent.click(screen.getByText(/mode avancé/i));
-    expect(onSwitch).toHaveBeenCalledTimes(1);
   });
 });
