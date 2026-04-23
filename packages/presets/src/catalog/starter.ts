@@ -71,4 +71,5 @@ export const communityGenericStarter: PresetDefinition = {
     },
   ],
   modules: [],
+  permissionBindings: [],
 };

@@ -97,4 +97,5 @@ export const communityStudyGroup: PresetDefinition = {
     },
   ],
   modules: [],
+  permissionBindings: [],
 };

@@ -6,17 +6,32 @@ import {
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
   registerAiSettingsRoutes,
   registerAuditRoutes,
+  registerDiscordChannelsRoutes,
   registerGuildsRoutes,
+  registerLogsRoutes,
+  registerModulePermissionsRoutes,
   registerModulesRoutes,
   registerOnboardingRoutes,
+  registerUnboundPermissionsRoutes,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { ActionId, EventBus, Logger, ModuleId, UserId } from '@varde/contracts';
+import type {
+  ActionId,
+  DiscordService,
+  EventBus,
+  Logger,
+  ModuleId,
+  PermissionId,
+  RoleId,
+  UserId,
+} from '@varde/contracts';
 import {
   CORE_ACTIONS,
   type CoreAuditService,
@@ -139,6 +154,20 @@ export interface CreateServerOptions<D extends DbDriver> {
    * sans `VARDE_DISCORD_TOKEN`.
    */
   readonly onboardingBridge?: OnboardingDiscordBridge;
+  /**
+   * Fonction listant les salons texte Discord d'une guild. Fournie par
+   * `bin.ts` lorsque le bot est connecté. Absente → les routes GET
+   * /discord/text-channels et /discord/roles répondent 503.
+   */
+  readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Fonction listant les rôles Discord d'une guild. Voir `listGuildTextChannels`. */
+  readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Service Discord concret câblé par `bin.ts` quand le token est
+   * présent. Omis → `createCtxFactory` utilise son stub interne
+   * (lève une erreur explicite si un module tente de l'appeler).
+   */
+  readonly discordService?: DiscordService;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -214,9 +243,44 @@ export async function createServer<D extends DbDriver>(
     ...(options.keystore?.previousMasterKey
       ? { keystorePreviousMasterKey: options.keystore.previousMasterKey }
       : {}),
+    ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
   });
 
-  const loader = createPluginLoader({ coreVersion, logger, ctxFactory: ctxBundle.factory });
+  const loader = createPluginLoader({
+    coreVersion,
+    logger,
+    ctxFactory: ctxBundle.factory,
+    // Persiste module + permissions dans la DB au chargement.
+    // Ordre FK : upsert `modules_registry` d'abord (sinon la FK
+    // `permissions_registry.module_id` viole), puis `permissions_registry`
+    // (sinon la FK `permission_bindings.permission_id` viole au premier
+    // onboarding apply — ADR 0008).
+    persistModuleRegistration: async ({ moduleId, version, manifest, permissions: perms }) => {
+      if (client.driver === 'pg') {
+        const pg = client as DbClient<'pg'>;
+        await pg.db
+          .insert(pgSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: pgSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          });
+      } else {
+        const sqlite = client as DbClient<'sqlite'>;
+        sqlite.db
+          .insert(sqliteSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: sqliteSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          })
+          .run();
+      }
+      if (perms.length > 0) {
+        await permissions.registerPermissions(perms);
+      }
+    },
+  });
   const commandRegistry = createCommandRegistry();
 
   const dispatcher = createDispatcher({
@@ -304,6 +368,12 @@ export async function createServer<D extends DbDriver>(
           });
         },
         resolveLocalId: () => null,
+        permissions: {
+          bind: (permissionId, roleId) =>
+            permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+          unbind: (permissionId, roleId) =>
+            permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+        },
       };
     }
 
@@ -351,6 +421,12 @@ export async function createServer<D extends DbDriver>(
         });
       },
       resolveLocalId: () => null,
+      permissions: {
+        bind: (permissionId, roleId) =>
+          permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+        unbind: (permissionId, roleId) =>
+          permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+      },
     };
   };
 
@@ -385,7 +461,28 @@ export async function createServer<D extends DbDriver>(
   });
 
   registerGuildsRoutes(api, { client, discord });
+  registerDiscordChannelsRoutes(api, {
+    discord,
+    // Réutilise le bridge onboarding pour la création de salon.
+    // Absent si le bot n'est pas connecté (CI, dev sans token).
+    ...(onboardingBridge
+      ? {
+          createGuildChannel: (guildId, payload) =>
+            onboardingBridge.createChannel(guildId, { ...payload }),
+        }
+      : {}),
+    ...(options.listGuildTextChannels
+      ? { listGuildTextChannels: options.listGuildTextChannels }
+      : {}),
+    ...(options.listGuildRoles ? { listGuildRoles: options.listGuildRoles } : {}),
+  });
+  registerLogsRoutes(api, {
+    discord,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+  });
   registerModulesRoutes(api, { loader, config, discord });
+  registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
+  registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });
   registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });
   registerOnboardingRoutes(api, {

@@ -80,9 +80,19 @@ export function createDiscordClient(options: CreateDiscordClientOptions = {}): D
         const stale = cache.get(accessToken);
         if (stale) return stale.guilds;
       }
+      // Lire le corps pour logger le message Discord (code + message),
+      // essentiel pour diagnostiquer 401 (token invalide), 403 (scope
+      // manquant), 429 (rate limit), etc. Discord renvoie toujours
+      // `{ message, code }` sur les erreurs REST.
+      let body = '';
+      try {
+        body = await response.text();
+      } catch {
+        /* ignore */
+      }
       throw new DependencyFailureError(
-        `DiscordClient : /users/@me/guilds a répondu ${response.status}`,
-        { metadata: { status: response.status } },
+        `DiscordClient : /users/@me/guilds a répondu ${response.status} — ${body || '<body vide>'}`,
+        { metadata: { status: response.status, body } },
       );
     }
     const body = (await response.json()) as readonly DiscordGuild[];

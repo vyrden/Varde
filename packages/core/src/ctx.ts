@@ -82,6 +82,11 @@ const discordStub: DiscordService = Object.freeze({
   sendMessage: async () => {
     throw new Error('DiscordService non câblé (arrivée prévue PR 1.6)');
   },
+  sendEmbed: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.sendEmbed` nécessite un host (apps/bot).',
+    );
+  },
 });
 
 const modulesStub: ModulesService = Object.freeze({

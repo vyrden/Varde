@@ -36,12 +36,20 @@ import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
  * permission).
  */
 
+interface PermissionDefinitionDto {
+  readonly id: string;
+  readonly category: string;
+  readonly defaultLevel: string;
+  readonly description: string;
+}
+
 interface ModuleListItemDto {
   readonly id: string;
   readonly version: string;
   readonly name: string;
   readonly description: string;
   readonly enabled: boolean;
+  readonly permissions: readonly PermissionDefinitionDto[];
 }
 
 interface ModuleConfigDto {
@@ -102,6 +110,12 @@ export function registerModulesRoutes(
         name: def.manifest.name,
         description: def.manifest.description,
         enabled: options.loader.isEnabled(id, guildId as GuildId),
+        permissions: def.manifest.permissions.map((p) => ({
+          id: p.id,
+          category: p.category,
+          defaultLevel: p.defaultLevel,
+          description: p.description,
+        })),
       });
     }
     return items;

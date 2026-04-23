@@ -115,15 +115,52 @@ Format de sortie STRICTEMENT JSON, tableau d'objets, pas de markdown :
 [
   {
     "label": "Libellé affichable",
-    "patch": { /* objet partiel d'un OnboardingDraft */ },
+    "patch": { /* objet ADDITIF à fusionner dans OnboardingDraft */ },
     "rationale": "Pourquoi cette suggestion"
   }
 ]
 
-Contraintes :
+Contraintes globales :
 - Entre 1 et 5 suggestions.
-- \`patch\` est un objet partiel OnboardingDraft (roles/categories/channels/modules), jamais un champ racine comme "locale".
-- Tu réponds uniquement en JSON valide, sans commentaire.`;
+- \`patch\` contient UNIQUEMENT des clés parmi : roles, categories, channels, modules, permissionBindings. Jamais de champ racine comme "locale" ou "id".
+- Chaque array est ADDITIF : la fusion concatène avec l'existant (dédupliqué par localId/moduleId). Ne re-déclare donc PAS les éléments déjà présents dans le draft fourni.
+- Tu réponds uniquement en JSON valide, sans commentaire, sans markdown.
+
+Schéma EXACT de chaque élément (tous les champs listés sont obligatoires sauf indication contraire) :
+
+roles[] : {
+  "localId": "string unique dans le draft (ex: 'role-contributor')",
+  "name": "Nom affiché (≤100 chars)",
+  "color": entier 0..0xFFFFFF (ex: 0x3498db),
+  "permissionPreset": "moderator-full" | "moderator-minimal" | "member-default" | "member-restricted",
+  "hoist": boolean,
+  "mentionable": boolean
+}
+
+categories[] : {
+  "localId": "string unique",
+  "name": "Nom (≤100 chars)",
+  "position": entier ≥ 0
+}
+
+channels[] : {
+  "localId": "string unique",
+  "categoryLocalId": "localId d'une catégorie (existante ou dans ce même patch) OU null",
+  "name": "nom-de-salon-minuscules-tirets (≤100 chars)",
+  "type": "text" | "voice" | "forum",
+  "topic": "description (≤1024 chars, optionnel)",
+  "slowmodeSeconds": entier 0..21600,
+  "readableBy": ["localId1", ...] (vide = tout le monde),
+  "writableBy": ["localId1", ...] (vide = tout le monde)
+}
+
+modules[] : { "moduleId": "string", "enabled": boolean, "config": { /* clés module */ } }
+
+permissionBindings[] : { "permissionId": "module.scope.verb", "roleLocalId": "localId d'un rôle du draft" }
+
+Règles d'exhaustivité :
+- Si tu ajoutes un rôle/catégorie/salon, remplis TOUS les champs requis listés ci-dessus.
+- Si tu omets un champ requis, ta suggestion sera rejetée et l'utilisateur ne la verra pas.`;
 
 /**
  * Construit le couple (system, user) pour `suggestCompletion`. Le

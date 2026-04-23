@@ -28,7 +28,7 @@ export type MessageId = string & IdBrand<'MessageId'>;
  * par l'auteur (`author/module-name`).
  */
 export type ModuleId = string & IdBrand<'ModuleId'>;
-/** Identifiant d'une permission applicative. Format `module.action`. */
+/** Identifiant d'une permission applicative. Format `module.action` ou `module.category.action`. */
 export type PermissionId = string & IdBrand<'PermissionId'>;
 /** Identifiant d'une action d'audit. Format `module.action.verb`. */
 export type ActionId = string & IdBrand<'ActionId'>;
@@ -39,8 +39,8 @@ const SNOWFLAKE_REGEX = /^[0-9]{17,20}$/;
 /** Module id : kebab-case, optionnellement préfixé `author/`. */
 const MODULE_ID_REGEX = /^([a-z0-9][a-z0-9-]*\/)?[a-z0-9][a-z0-9-]*$/;
 
-/** Permission id : deux segments kebab-case séparés par un point. */
-const PERMISSION_ID_REGEX = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/;
+/** Permission id : deux à trois segments kebab-case séparés par un point (`module.action` ou `module.category.action`). */
+const PERMISSION_ID_REGEX = /^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*){1,2}$/;
 
 /** Action id : trois segments kebab-case séparés par des points. */
 const ACTION_ID_REGEX = /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/;

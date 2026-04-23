@@ -85,6 +85,31 @@ export const presetChannelSchema = z.object({
 });
 export type PresetChannel = z.infer<typeof presetChannelSchema>;
 
+/**
+ * Binding initial d'une permission applicative vers un rôle local
+ * du preset. Résolu à l'apply : le serializer du builder transforme
+ * `roleLocalId` en snowflake Discord une fois que le `createRole`
+ * correspondant a émis son résultat, puis émet une action
+ * `core.bindPermission` qui écrit dans `permission_bindings`.
+ *
+ * Format du `permissionId` : `<moduleId>.<path>` (cf. règle de
+ * namespace du meta-schema manifeste). Pas de validation sémantique
+ * ici — on vérifie seulement la forme. La validation "le module
+ * référencé existe et a déclaré cette permission" est faite au
+ * chargement du module par le core.
+ */
+export const presetPermissionBindingSchema = z.object({
+  permissionId: z
+    .string()
+    .min(1)
+    .regex(
+      /^[a-z0-9-]+\.[a-zA-Z0-9_.-]+$/,
+      'permissionId doit contenir un point (format <moduleId>.<path>)',
+    ),
+  roleLocalId: z.string().min(1),
+});
+export type PresetPermissionBinding = z.infer<typeof presetPermissionBindingSchema>;
+
 export const presetModuleConfigSchema = z.object({
   moduleId: z.string().min(1),
   enabled: z.boolean().default(true),
@@ -106,6 +131,7 @@ export const presetDefinitionSchema = z.object({
   categories: z.array(presetCategorySchema).default([]),
   channels: z.array(presetChannelSchema).default([]),
   modules: z.array(presetModuleConfigSchema).default([]),
+  permissionBindings: z.array(presetPermissionBindingSchema).default([]),
 });
 export type PresetDefinition = z.infer<typeof presetDefinitionSchema>;
 

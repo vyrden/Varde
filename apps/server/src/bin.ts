@@ -23,22 +23,36 @@
  * via l'API REST : à livrer quand la surface commandes sera stable.
  */
 
+import type { GuildRoleDto, GuildTextChannelDto } from '@varde/api';
 import {
   attachDiscordClient,
+  createDiscordJsChannelSender,
+  createDiscordService,
   createOnboardingDiscordBridge,
   type OnboardingDiscordBridge,
 } from '@varde/bot';
-import type { GuildId, Logger, ModuleId } from '@varde/contracts';
+import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { logs } from '@varde/module-logs';
+import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
 
 import { createServer } from './server.js';
 
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
+const LOGS_ID = 'logs' as ModuleId;
+
+/**
+ * Modules activés par défaut sur toute guild connue. `hello-world`
+ * reste dans la liste tant qu'il sert de témoin ; `logs` est le
+ * premier vrai module officiel (jalon 4). Les quatre autres
+ * (`welcome`, `roles`, `moderation`, `onboarding-presets`) s'y
+ * ajouteront à mesure de leur livraison.
+ */
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID, LOGS_ID];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -63,6 +77,42 @@ const readOptional = (name: string, fallback: string): string => {
 const readOptionalRaw = (name: string): string | null => {
   const value = process.env[name];
   return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+/**
+ * Lit la master key keystore depuis l'environnement. Fail fast si la
+ * variable est vide ou mal formée — sans master key stable entre
+ * redémarrages, toutes les clés chiffrées (API keys IA, secrets
+ * modules) deviennent illisibles au prochain boot, ce qui casse
+ * silencieusement le produit. Mieux vaut refuser de démarrer.
+ *
+ * Format attendu : 32 octets encodés en base64 (génération :
+ * `openssl rand -base64 32`). L'utilisateur voit un message clair
+ * si la valeur manque.
+ */
+const readKeystoreMasterKey = (): Buffer => {
+  const raw = process.env['VARDE_KEYSTORE_MASTER_KEY'];
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return die(
+      [
+        'VARDE_KEYSTORE_MASTER_KEY est vide ou manquante.',
+        '',
+        'Sans cette clé, le keystore chiffre les secrets (clés API IA, etc.) avec une',
+        'clé aléatoire différente à chaque démarrage — tous les secrets stockés',
+        'deviennent illisibles au prochain boot.',
+        '',
+        'Génère-en une (32 octets base64) et ajoute-la à .env.local :',
+        '  openssl rand -base64 32',
+      ].join('\n'),
+    );
+  }
+  const buf = Buffer.from(raw, 'base64');
+  if (buf.length !== 32) {
+    return die(
+      `VARDE_KEYSTORE_MASTER_KEY doit décoder en 32 octets (reçu ${buf.length}). Regénère avec : openssl rand -base64 32`,
+    );
+  }
+  return buf;
 };
 
 const parsePort = (raw: string, name: string): number => {
@@ -129,18 +179,21 @@ async function upsertGuild(
   }
 }
 
-async function enableHelloWorldOn(
+async function enableDefaultModulesOn(
   handle: ServerHandle,
   guildId: string,
   logger: Logger,
 ): Promise<void> {
-  try {
-    await handle.loader.enable(guildId as GuildId, HELLO_WORLD_ID);
-  } catch (error) {
-    logger.warn('enable hello-world échoué', {
-      err: error instanceof Error ? error.message : String(error),
-      guildId,
-    });
+  for (const moduleId of DEFAULT_ENABLED_MODULES) {
+    try {
+      await handle.loader.enable(guildId as GuildId, moduleId);
+    } catch (error) {
+      logger.warn('enable module par défaut échoué', {
+        err: error instanceof Error ? error.message : String(error),
+        guildId,
+        moduleId,
+      });
+    }
   }
 }
 
@@ -152,7 +205,7 @@ async function seedFromEnv(
   if (ids.length === 0) return;
   for (const id of ids) {
     await upsertGuild(handle, id, `seed-${id}`, logger);
-    await enableHelloWorldOn(handle, id, logger);
+    await enableDefaultModulesOn(handle, id, logger);
   }
   logger.info('seed guilds depuis env appliqué', { count: ids.length });
 }
@@ -168,14 +221,20 @@ async function seedFromEnv(
 function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void {
   return handle.eventBus.on('guild.join', async (event) => {
     await upsertGuild(handle, event.guildId, event.guildId, logger);
-    await enableHelloWorldOn(handle, event.guildId, logger);
-    logger.info('guild rejointe, hello-world activé', { guildId: event.guildId });
+    await enableDefaultModulesOn(handle, event.guildId, logger);
+    logger.info('guild rejointe, modules par défaut activés', { guildId: event.guildId });
   });
 }
 
 interface DiscordAttachment {
   readonly client: Client;
   readonly bridge: OnboardingDiscordBridge;
+  /** Service Discord concret à passer à `createServer` via `discordService`. */
+  readonly discordService: DiscordService;
+  /** Liste les salons texte d'une guild depuis le cache discord.js. */
+  readonly listGuildTextChannels: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Liste les rôles d'une guild depuis le cache discord.js. */
+  readonly listGuildRoles: (guildId: string) => Promise<readonly GuildRoleDto[]>;
 }
 
 interface DiscordBinding {
@@ -191,13 +250,46 @@ interface DiscordBinding {
  * permet à `createServer()` d'enregistrer les routes onboarding avec
  * un bridge vivant tout en gardant `.login()` sous le contrôle du
  * caller (bin.ts l'appelle après `attachDiscordToHandle`).
+ *
+ * Le `ChannelSender` concret est construit ici à partir du Client ;
+ * il est wrappé dans un `DiscordService` (rate limiter + traçabilité)
+ * et passé à `createServer` pour alimenter `ctx.discord` des modules.
  */
-function createDiscordAttachment(): DiscordAttachment {
+function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
   const bridge = createOnboardingDiscordBridge(client);
-  return { client, bridge };
+  const sender = createDiscordJsChannelSender(client);
+  const discordService = createDiscordService({ sender, logger });
+
+  const listGuildTextChannels = async (
+    guildId: string,
+  ): Promise<readonly GuildTextChannelDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    // On préfère `guild.channels.fetch()` pour couvrir les cas où le cache
+    // n'est pas encore peuplé (redémarrage rapide post-reconnexion).
+    const channels = await guild.channels.fetch();
+    return Array.from(channels.values())
+      .filter(
+        (ch): ch is NonNullable<typeof ch> => ch !== null && ch.type === ChannelType.GuildText,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((ch) => ({ id: ch.id, name: ch.name }));
+  };
+
+  const listGuildRoles = async (guildId: string): Promise<readonly GuildRoleDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    const roles = await guild.roles.fetch();
+    return Array.from(roles.values())
+      .filter((r) => !r.managed && r.name !== '@everyone')
+      .sort((a, b) => b.position - a.position)
+      .map((r) => ({ id: r.id, name: r.name }));
+  };
+
+  return { client, bridge, discordService, listGuildTextChannels, listGuildRoles };
 }
 
 function attachDiscordToHandle(
@@ -210,7 +302,7 @@ function attachDiscordToHandle(
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
-      await enableHelloWorldOn(handle, guild.id, logger);
+      await enableDefaultModulesOn(handle, guild.id, logger);
     }
   });
   const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
@@ -235,6 +327,7 @@ async function main(): Promise<void> {
     | 'fatal';
   const seedIds = seedGuildIds(readOptional('VARDE_SEED_GUILD_IDS', ''));
   const discordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
+  const keystoreMasterKey = readKeystoreMasterKey();
 
   const logger = createLogger({ level: logLevel });
 
@@ -243,7 +336,7 @@ async function main(): Promise<void> {
   // directement le vrai bridge (PR 3.12d). `.login()` est repoussé
   // jusqu'après `createServer()` pour que le dispatcher soit prêt à
   // recevoir les events gateway.
-  const discordAttachment = discordToken !== null ? createDiscordAttachment() : null;
+  const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
 
   const driver = pickDriver(databaseUrl);
   const handle =
@@ -251,17 +344,30 @@ async function main(): Promise<void> {
       ? await createServer({
           database: { driver: 'pg', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
         });
 
   handle.loader.register(helloWorld);
+  handle.loader.register(logs);
   await handle.loader.loadAll();
 
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);

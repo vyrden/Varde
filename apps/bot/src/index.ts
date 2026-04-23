@@ -1,3 +1,8 @@
+export {
+  createDiscordJsChannelSender,
+  type DiscordJsSendPayload,
+  mapEmbedToDiscordJsPayload,
+} from './channel-sender-mapper.js';
 export { attachDiscordClient } from './client-adapter.js';
 export {
   type CommandCtxFactory,

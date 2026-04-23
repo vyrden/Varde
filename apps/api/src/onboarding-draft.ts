@@ -54,6 +54,10 @@ export function presetToDraft(preset: PresetDefinition): OnboardingDraft {
       enabled: m.enabled,
       config: { ...m.config },
     })),
+    permissionBindings: preset.permissionBindings.map((b) => ({
+      permissionId: b.permissionId,
+      roleLocalId: b.roleLocalId,
+    })),
   };
 }
 
@@ -64,6 +68,7 @@ export function emptyDraft(locale: 'fr' | 'en' = 'fr'): OnboardingDraft {
     categories: [],
     channels: [],
     modules: [],
+    permissionBindings: [],
   };
 }
 
@@ -108,6 +113,24 @@ export function serializeDraftToActions(draft: OnboardingDraft): OnboardingActio
     requests.push({
       type: 'core.patchModuleConfig',
       payload: { moduleId: modCfg.moduleId, config: modCfg.config },
+    });
+  }
+  // Les bindings de permission sont émis en dernier, après tous les
+  // core.createRole, pour que resolveLocalId trouve le rôle dans la map
+  // de l'executor au moment de l'apply.
+  const knownRoleLocalIds = new Set(draft.roles.map((r) => r.localId));
+  for (const binding of draft.permissionBindings) {
+    if (!knownRoleLocalIds.has(binding.roleLocalId)) {
+      throw new Error(
+        `serializeDraftToActions : binding permissionId="${binding.permissionId}" roleLocalId="${binding.roleLocalId}" introuvable dans le draft`,
+      );
+    }
+    requests.push({
+      type: 'core.bindPermission',
+      payload: {
+        permissionId: binding.permissionId,
+        roleLocalId: binding.roleLocalId,
+      },
     });
   }
   return requests;

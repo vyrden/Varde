@@ -39,6 +39,7 @@ const samplePreset: PresetDefinition = {
     },
   ],
   modules: [],
+  permissionBindings: [],
 };
 
 describe('PresetPicker', () => {

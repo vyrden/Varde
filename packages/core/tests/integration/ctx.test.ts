@@ -155,6 +155,32 @@ describe('createCtxFactory — composition minimale', () => {
       await shutdown();
     }
   });
+
+  it("discord.sendEmbed throw explicitement quand aucun DiscordService n'est câblé", async () => {
+    const logger = silentLogger();
+    const { factory, shutdown } = createCtxFactory({
+      client,
+      loggerRoot: logger,
+      eventBus: createEventBus({ logger }),
+      config: createConfigService({ client }),
+      permissions: createPermissionService({
+        client,
+        resolveMemberContext: async () => null,
+      }),
+      keystoreMasterKey: randomBytes(32),
+    });
+    try {
+      const ctx = factory({ id: HELLO, version: '1.0.0' });
+      await expect(
+        ctx.discord.sendEmbed('channel-id' as never, {
+          kind: 'embed',
+          payload: { title: 'test' },
+        }),
+      ).rejects.toThrowError(/DiscordService non câblé/);
+    } finally {
+      await shutdown();
+    }
+  });
 });
 
 describe('createCtxFactory — bout en bout avec le loader', () => {

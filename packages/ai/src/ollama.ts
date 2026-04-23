@@ -88,16 +88,29 @@ const presetProposalResponseSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.5),
 });
 
+const suggestionItemSchema = z.object({
+  label: z.string().min(1).max(200),
+  patch: z.record(z.string(), z.unknown()),
+  rationale: z.string().min(1).max(500),
+});
+
+/**
+ * Accepte array direct ou object wrapper (`suggestions`, `completions`,
+ * `items`) — cohérent avec le parser OpenAI-compat. Voir
+ * `openai-compat.ts` pour l'explication détaillée.
+ */
 const suggestionArrayResponseSchema = z
-  .array(
-    z.object({
-      label: z.string().min(1).max(200),
-      patch: z.record(z.string(), z.unknown()),
-      rationale: z.string().min(1).max(500),
-    }),
-  )
-  .min(1)
-  .max(5);
+  .union([
+    z.array(suggestionItemSchema).min(1).max(5),
+    z
+      .object({ suggestions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.suggestions),
+    z
+      .object({ completions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.completions),
+    z.object({ items: z.array(suggestionItemSchema).min(1).max(5) }).transform((o) => o.items),
+  ])
+  .transform((arr) => arr as readonly z.infer<typeof suggestionItemSchema>[]);
 
 // ─── Helpers ───────────────────────────────────────────────────────
 

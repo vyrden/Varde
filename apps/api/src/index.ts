@@ -26,10 +26,26 @@ export {
   registerAuditRoutes,
 } from './routes/audit.js';
 export {
+  type CreateGuildChannelPayload,
+  type CreateGuildChannelResult,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
+  type RegisterDiscordChannelsRoutesOptions,
+  registerDiscordChannelsRoutes,
+} from './routes/discord-channels.js';
+export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,
 } from './routes/guilds.js';
+export {
+  type RegisterLogsRoutesOptions,
+  registerLogsRoutes,
+} from './routes/logs.js';
+export {
+  type RegisterModulePermissionsRoutesOptions,
+  registerModulePermissionsRoutes,
+} from './routes/module-permissions.js';
 export {
   type RegisterModulesRoutesOptions,
   registerModulesRoutes,
@@ -43,6 +59,10 @@ export {
   type RegisterOnboardingRoutesOptions,
   registerOnboardingRoutes,
 } from './routes/onboarding.js';
+export {
+  type RegisterUnboundPermissionsRoutesOptions,
+  registerUnboundPermissionsRoutes,
+} from './routes/unbound-permissions.js';
 export {
   type Authenticator,
   type CreateApiServerOptions,

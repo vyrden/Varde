@@ -131,4 +131,5 @@ export const communityTechSmall: PresetDefinition = {
       config: { welcomeDelayMs: 1000 },
     },
   ],
+  permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
 };

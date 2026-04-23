@@ -195,6 +195,10 @@ describe('routes /guilds/:guildId/onboarding', () => {
           await config.setWith(guildId, patch, { scope: 'onboarding', updatedBy: actorId });
         },
         resolveLocalId: () => null,
+        permissions: {
+          bind: async () => undefined,
+          unbind: async () => undefined,
+        },
       }),
     });
     return { app, config, mock, executor, scheduler, logger };
@@ -641,6 +645,10 @@ describe('routes /guilds/:guildId/onboarding', () => {
         logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
         discord: mock,
         configPatch: async () => undefined,
+        permissions: {
+          bind: async () => undefined,
+          unbind: async () => undefined,
+        },
       }),
     });
 

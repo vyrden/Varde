@@ -25,12 +25,22 @@ export interface AdminGuildDto {
   readonly iconUrl: string | null;
 }
 
+/** Définition d'une permission telle qu'exposée dans le manifeste d'un module. */
+export interface PermissionDefinitionDto {
+  readonly id: string;
+  readonly category: string;
+  readonly defaultLevel: 'admin' | 'moderator' | 'member' | 'nobody';
+  readonly description: string;
+}
+
 export interface ModuleListItemDto {
   readonly id: string;
   readonly version: string;
   readonly name: string;
   readonly description: string;
   readonly enabled: boolean;
+  /** Permissions déclarées dans le manifeste du module. */
+  readonly permissions: readonly PermissionDefinitionDto[];
 }
 
 export interface ModuleConfigDto {
@@ -147,4 +157,111 @@ export async function fetchModuleConfig(
   return apiGet<ModuleConfigDto>(
     `/guilds/${encodeURIComponent(guildId)}/modules/${encodeURIComponent(moduleId)}/config`,
   );
+}
+
+/** Permission déclarée par un module mais non encore liée à un rôle guild. */
+export interface UnboundPermission {
+  readonly id: string;
+  readonly description: string;
+  readonly category: string;
+  readonly defaultLevel: 'admin' | 'moderator' | 'member' | 'nobody';
+}
+
+/** Liste des permissions non liées déclarées par un module pour une guild. */
+export async function fetchUnboundPermissions(
+  guildId: string,
+  moduleId: string,
+): Promise<readonly UnboundPermission[]> {
+  const body = await apiGet<{ permissions: UnboundPermission[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/modules/${encodeURIComponent(moduleId)}/unbound-permissions`,
+  );
+  return body.permissions;
+}
+
+/** Route Discord cassée exposée par le module logs. */
+export interface LogsBrokenRoute {
+  readonly routeId: string;
+  readonly channelId: string;
+  readonly droppedCount: number;
+  readonly bufferedCount: number;
+  readonly markedAt: string | null;
+  readonly reason: string;
+}
+
+/** Liste des routes Discord cassées pour une guild (module logs). */
+export async function fetchLogsBrokenRoutes(guildId: string): Promise<readonly LogsBrokenRoute[]> {
+  const body = await apiGet<{ routes: LogsBrokenRoute[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/modules/logs/broken-routes`,
+  );
+  return body.routes;
+}
+
+/** Salon texte Discord retourné par la liste (GET /discord/text-channels). */
+export interface GuildTextChannelDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** Rôle Discord retourné par la liste (GET /discord/roles). */
+export interface GuildRoleDto {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * Liste les salons texte Discord d'une guild. Retourne un tableau vide
+ * si le bot n'est pas connecté (503 bridge indisponible est silencé).
+ */
+export async function fetchGuildTextChannels(
+  guildId: string,
+): Promise<readonly GuildTextChannelDto[]> {
+  try {
+    const body = await apiGet<{ channels: GuildTextChannelDto[] }>(
+      `/guilds/${encodeURIComponent(guildId)}/discord/text-channels`,
+    );
+    return body.channels;
+  } catch (error) {
+    // 503 = bot non connecté : on retourne une liste vide plutôt que de
+    // faire sauter toute la page.
+    if (error instanceof ApiError && error.status === 503) return [];
+    throw error;
+  }
+}
+
+/**
+ * Liste les rôles Discord d'une guild. Retourne un tableau vide si le
+ * bot n'est pas connecté (503 bridge indisponible est silencé).
+ */
+export async function fetchGuildRoles(guildId: string): Promise<readonly GuildRoleDto[]> {
+  try {
+    const body = await apiGet<{ roles: GuildRoleDto[] }>(
+      `/guilds/${encodeURIComponent(guildId)}/discord/roles`,
+    );
+    return body.roles;
+  } catch (error) {
+    // 503 = bot non connecté : on retourne une liste vide plutôt que de
+    // faire sauter toute la page.
+    if (error instanceof ApiError && error.status === 503) return [];
+    throw error;
+  }
+}
+
+/** Binding permission → rôle tel que renvoyé par l'API. */
+export interface PermissionBindingDto {
+  readonly permissionId: string;
+  readonly roleId: string;
+}
+
+/**
+ * Liste tous les bindings permission → rôle actifs pour une guild.
+ * Utilisé par la page `settings/permissions` pour initialiser l'état
+ * de l'éditeur sans appel réseau supplémentaire côté client.
+ */
+export async function fetchPermissionBindings(
+  guildId: string,
+): Promise<readonly PermissionBindingDto[]> {
+  const body = await apiGet<{ bindings: PermissionBindingDto[] }>(
+    `/guilds/${encodeURIComponent(guildId)}/permissions/bindings`,
+  );
+  return body.bindings;
 }

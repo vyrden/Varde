@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import type { DiscordSendErrorReason } from '../../src/errors.js';
 import {
   AppError,
   ConflictError,
   DependencyFailureError,
+  DiscordSendError,
   ModuleError,
   NotFoundError,
   PermissionDeniedError,
@@ -115,5 +117,42 @@ describe('Hiérarchie', () => {
 
   it('AppError n est pas une instance d une sous-classe', () => {
     expect(new AppError('x', 'y')).not.toBeInstanceOf(ValidationError);
+  });
+});
+
+describe('DiscordSendError', () => {
+  it('expose un code stable et la raison dans les métadonnées', () => {
+    const err = new DiscordSendError('channel-not-found', 'Salon disparu', {
+      metadata: { channelId: '123' },
+    });
+    expect(err.code).toBe('discord_send_failed');
+    expect(err.reason).toBe<DiscordSendErrorReason>('channel-not-found');
+    expect(err.metadata).toMatchObject({ reason: 'channel-not-found', channelId: '123' });
+    expect(err.httpStatus).toBe(502);
+  });
+
+  it('toJSON expose la raison sans fuite de stack', () => {
+    const err = new DiscordSendError('missing-permission', 'Perm manquante');
+    const json = err.toJSON();
+    expect(json).toMatchObject({
+      name: 'DiscordSendError',
+      code: 'discord_send_failed',
+      message: 'Perm manquante',
+    });
+    expect(json.metadata).toMatchObject({ reason: 'missing-permission' });
+    expect(json).not.toHaveProperty('stack');
+  });
+
+  it('accepte les 4 raisons documentées', () => {
+    const reasons: readonly DiscordSendErrorReason[] = [
+      'channel-not-found',
+      'missing-permission',
+      'rate-limit-exhausted',
+      'unknown',
+    ];
+    for (const reason of reasons) {
+      const err = new DiscordSendError(reason, 'msg');
+      expect(err.reason).toBe(reason);
+    }
   });
 });

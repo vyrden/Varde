@@ -11,6 +11,7 @@ import type {
   UserId,
 } from './ids.js';
 import type { OnboardingActionDefinition } from './onboarding.js';
+import type { UIAttachment, UIEmbed } from './ui.js';
 
 /**
  * Interfaces des services exposés aux modules via `ctx`. Types
@@ -124,6 +125,21 @@ export interface KeystoreService {
  */
 export interface DiscordService {
   readonly sendMessage: (channelId: ChannelId, content: string) => Promise<void>;
+  /**
+   * Envoi proactif d'un `UIMessage` de kind `'embed'` dans un salon.
+   * Lève `TypeError` si `message.kind !== 'embed'` (fail fast,
+   * pas de no-op).
+   *
+   * Mapping des échecs vers `DiscordSendError.reason` :
+   * - `channel-not-found` : le salon n'existe pas ou le bot n'y a
+   *   pas accès au niveau guild.
+   * - `missing-permission` : le bot n'a pas `SendMessages` ou
+   *   `EmbedLinks` sur le salon.
+   * - `rate-limit-exhausted` : les tentatives de retry ont été
+   *   épuisées.
+   * - `unknown` : toute autre erreur réseau / API.
+   */
+  readonly sendEmbed: (channelId: ChannelId, message: UIMessage) => Promise<void>;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */
@@ -193,11 +209,36 @@ export interface AIService {
 /** Type de message UI normalisé. */
 export type UIMessageKind = 'embed' | 'success' | 'error' | 'confirm';
 
-/** Message UI normalisé, retourné par le module au handler d'interaction. */
-export interface UIMessage {
-  readonly kind: UIMessageKind;
-  readonly payload: unknown;
+/** Payload "message simple" (success, error). */
+export interface UITextPayload {
+  readonly message: string;
 }
+
+/** Payload d'une demande de confirmation interactive. */
+export interface UIConfirmPayload {
+  readonly message: string;
+  readonly confirmLabel: string;
+  readonly cancelLabel: string;
+}
+
+/**
+ * Message UI normalisé. Union discriminée par `kind`. Les consommateurs
+ * narrow avec un `switch (message.kind)` ou un `if (message.kind === ...)`
+ * et obtiennent le type concret du payload sans cast.
+ *
+ * Le kind `'embed'` accepte des attachments optionnels pour les cas où
+ * un contenu utilisateur trop long ne rentre pas dans l'embed (cf.
+ * `UIAttachment` et le module `logs`).
+ */
+export type UIMessage =
+  | {
+      readonly kind: 'embed';
+      readonly payload: UIEmbed;
+      readonly attachments?: readonly UIAttachment[];
+    }
+  | { readonly kind: 'success'; readonly payload: UITextPayload }
+  | { readonly kind: 'error'; readonly payload: UITextPayload }
+  | { readonly kind: 'confirm'; readonly payload: UIConfirmPayload };
 
 /**
  * Factory d'UI standard (embeds, réponses, confirmations). Seule
@@ -206,10 +247,13 @@ export interface UIMessage {
  * comme violation (prod).
  */
 export interface UIService {
-  readonly embed: (options: {
-    readonly title?: string;
-    readonly description?: string;
-  }) => UIMessage;
+  /**
+   * Construit un `UIMessage` de kind `'embed'`. Rétro-compatible
+   * avec l'ancien appel `ctx.ui.embed({ title, description })` — les
+   * nouveaux champs (color, fields, author, footer, attachments) sont
+   * optionnels.
+   */
+  readonly embed: (options: UIEmbed, attachments?: readonly UIAttachment[]) => UIMessage;
   readonly success: (message: string) => UIMessage;
   readonly error: (message: string) => UIMessage;
   readonly confirm: (options: {
