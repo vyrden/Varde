@@ -150,6 +150,17 @@ export interface OnboardingActionContext {
    * les `permissionOverwrites` à partir des `roleLocalId`.
    */
   readonly resolveLocalId: (localId: string) => string | null;
+  /**
+   * Gestion programmatique des bindings `permission → rôle`. Utilisé
+   * par l'action `core.bindPermission`. `bind` est idempotent
+   * (insert-if-not-exists). `unbind` supprime uniquement la ligne
+   * exacte `(guildId, permissionId, roleId)` — pas d'effet de bord
+   * sur d'autres bindings de la même permission.
+   */
+  readonly permissions: {
+    readonly bind: (permissionId: string, roleId: string) => Promise<void>;
+    readonly unbind: (permissionId: string, roleId: string) => Promise<void>;
+  };
 }
 
 export interface DiscordCreateRolePayload {
@@ -197,6 +208,31 @@ export interface OnboardingActionDefinition<Payload, Result> {
   ) => Promise<void>;
   readonly canUndo: boolean | ((result: Result) => boolean);
 }
+
+/**
+ * Action `core.bindPermission` : associe une permission applicative
+ * à un rôle Discord résolu à partir du draft.
+ *
+ * Pas de `localId` propre : un binding n'est pas référencé par
+ * d'autres actions, donc il n'a pas besoin d'être nommé dans la
+ * map de résolution locale.
+ */
+const bindPermissionRequestSchema = z.object({
+  type: z.literal('core.bindPermission'),
+  payload: z.object({
+    permissionId: z.string().min(1),
+    roleLocalId: z.string().min(1),
+  }),
+});
+
+/**
+ * Schéma de validation d'une paire `(type, payload)` attendue par
+ * l'executor. Chaque variant est discriminé sur `type`.
+ */
+export const onboardingActionRequestSchema = z.discriminatedUnion('type', [
+  bindPermissionRequestSchema,
+]);
+export type OnboardingActionRequestParsed = z.infer<typeof onboardingActionRequestSchema>;
 
 /** Paire (type, payload) attendue par l'executor pour une action. */
 export interface OnboardingActionRequest {

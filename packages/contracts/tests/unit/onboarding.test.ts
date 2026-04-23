@@ -4,6 +4,7 @@ import {
   draftChannelSchema,
   draftPermissionBindingSchema,
   draftRoleSchema,
+  onboardingActionRequestSchema,
   onboardingDraftSchema,
 } from '../../src/onboarding.js';
 
@@ -112,5 +113,18 @@ describe('OnboardingDraft permissionBindings', () => {
       permissionBindings: [{ permissionId: 'x.y', roleLocalId: 'r' }],
     });
     expect(draft.permissionBindings).toHaveLength(1);
+  });
+});
+
+describe('OnboardingActionRequest — core.bindPermission', () => {
+  it('accepte un request de type core.bindPermission avec payload', () => {
+    const request = onboardingActionRequestSchema.parse({
+      type: 'core.bindPermission',
+      payload: {
+        permissionId: 'logs.config.manage',
+        roleLocalId: 'role-mod',
+      },
+    });
+    expect(request.type).toBe('core.bindPermission');
   });
 });
