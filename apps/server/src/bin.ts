@@ -79,6 +79,42 @@ const readOptionalRaw = (name: string): string | null => {
   return typeof value === 'string' && value.length > 0 ? value : null;
 };
 
+/**
+ * Lit la master key keystore depuis l'environnement. Fail fast si la
+ * variable est vide ou mal formée — sans master key stable entre
+ * redémarrages, toutes les clés chiffrées (API keys IA, secrets
+ * modules) deviennent illisibles au prochain boot, ce qui casse
+ * silencieusement le produit. Mieux vaut refuser de démarrer.
+ *
+ * Format attendu : 32 octets encodés en base64 (génération :
+ * `openssl rand -base64 32`). L'utilisateur voit un message clair
+ * si la valeur manque.
+ */
+const readKeystoreMasterKey = (): Buffer => {
+  const raw = process.env['VARDE_KEYSTORE_MASTER_KEY'];
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return die(
+      [
+        'VARDE_KEYSTORE_MASTER_KEY est vide ou manquante.',
+        '',
+        'Sans cette clé, le keystore chiffre les secrets (clés API IA, etc.) avec une',
+        'clé aléatoire différente à chaque démarrage — tous les secrets stockés',
+        'deviennent illisibles au prochain boot.',
+        '',
+        'Génère-en une (32 octets base64) et ajoute-la à .env.local :',
+        '  openssl rand -base64 32',
+      ].join('\n'),
+    );
+  }
+  const buf = Buffer.from(raw, 'base64');
+  if (buf.length !== 32) {
+    return die(
+      `VARDE_KEYSTORE_MASTER_KEY doit décoder en 32 octets (reçu ${buf.length}). Regénère avec : openssl rand -base64 32`,
+    );
+  }
+  return buf;
+};
+
 const parsePort = (raw: string, name: string): number => {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 1 || value > 65_535) {
@@ -291,6 +327,7 @@ async function main(): Promise<void> {
     | 'fatal';
   const seedIds = seedGuildIds(readOptional('VARDE_SEED_GUILD_IDS', ''));
   const discordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
+  const keystoreMasterKey = readKeystoreMasterKey();
 
   const logger = createLogger({ level: logLevel });
 
@@ -307,6 +344,7 @@ async function main(): Promise<void> {
       ? await createServer({
           database: { driver: 'pg', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
@@ -318,6 +356,7 @@ async function main(): Promise<void> {
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),

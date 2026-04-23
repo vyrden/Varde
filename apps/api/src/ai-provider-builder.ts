@@ -86,7 +86,16 @@ export async function buildAiProviderForGuild(
     });
   }
   if (stored.providerId === 'openai-compat' && stored.endpoint && stored.model) {
-    const apiKey = await keystore.get(guildId, KEYSTORE_API_KEY_SLOT);
+    // Lecture défensive du keystore : une clé corrompue (master key
+    // changée, migration loupée) ne doit pas casser l'onboarding. On
+    // retombe sur le stub et on laisse l'admin re-poser une clé via
+    // /settings/ai, qui écrasera la corrompue.
+    let apiKey: string | null = null;
+    try {
+      apiKey = await keystore.get(guildId, KEYSTORE_API_KEY_SLOT);
+    } catch {
+      /* clé illisible : fallback stub silencieux ci-dessous. */
+    }
     if (apiKey !== null && apiKey.length > 0) {
       return createOpenAICompatibleProvider({
         baseUrl: stored.endpoint,
@@ -95,7 +104,7 @@ export async function buildAiProviderForGuild(
         fetch: fetchImpl,
       });
     }
-    // Provider configuré mais clé absente : retour au stub silencieux.
+    // Provider configuré mais clé absente ou corrompue : stub silencieux.
   }
   return createStubProvider();
 }
