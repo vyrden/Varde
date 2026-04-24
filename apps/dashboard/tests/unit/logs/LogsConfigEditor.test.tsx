@@ -1,12 +1,24 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const routerReplace = vi.fn();
+const routerRefresh = vi.fn();
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: routerReplace }),
+  useRouter: () => ({ replace: routerReplace, refresh: routerRefresh }),
   useSearchParams: () => new URLSearchParams(),
 }));
+
+const replayBrokenRouteMock = vi.fn();
+vi.mock('../../../lib/logs-actions', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/logs-actions')>(
+    '../../../lib/logs-actions',
+  );
+  return {
+    ...actual,
+    replayBrokenRoute: (...args: unknown[]) => replayBrokenRouteMock(...args),
+  };
+});
 
 import { LogsAdvancedMode } from '../../../components/logs/LogsAdvancedMode';
 import { LogsConfigEditor } from '../../../components/logs/LogsConfigEditor';
@@ -85,6 +97,116 @@ describe('LogsConfigEditor', () => {
       />,
     );
     expect(screen.getByText(/2 routes cassées/i)).toBeDefined();
+  });
+
+  it('affiche un bouton "Rejouer" par route cassée', () => {
+    render(
+      <LogsConfigEditor
+        guildId="g1"
+        initialConfig={emptyConfig}
+        brokenRoutes={[
+          {
+            routeId: 'r1',
+            channelId: 'c-dead-1',
+            droppedCount: 0,
+            bufferedCount: 3,
+            markedAt: null,
+            reason: 'channel-not-found',
+          },
+          {
+            routeId: 'r2',
+            channelId: 'c-dead-2',
+            droppedCount: 0,
+            bufferedCount: 5,
+            markedAt: null,
+            reason: 'unknown',
+          },
+        ]}
+        channels={[]}
+        roles={[]}
+      />,
+    );
+    const buttons = screen.getAllByRole('button', { name: /rejouer/i });
+    expect(buttons).toHaveLength(2);
+  });
+
+  it('clic sur "Rejouer" appelle replayBrokenRoute avec (guildId, routeId) et rafraîchit la page', async () => {
+    replayBrokenRouteMock.mockResolvedValueOnce({ ok: true, replayed: 3, failed: 0 });
+    render(
+      <LogsConfigEditor
+        guildId="guild-42"
+        initialConfig={emptyConfig}
+        brokenRoutes={[
+          {
+            routeId: 'route-1',
+            channelId: 'c-dead',
+            droppedCount: 0,
+            bufferedCount: 3,
+            markedAt: null,
+            reason: 'channel-not-found',
+          },
+        ]}
+        channels={[]}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
+    await waitFor(() => expect(replayBrokenRouteMock).toHaveBeenCalledWith('guild-42', 'route-1'));
+    await waitFor(() => expect(screen.getByText(/3 events rejoués/i)).toBeDefined());
+    expect(routerRefresh).toHaveBeenCalled();
+  });
+
+  it('affiche le message partiel quand replay retourne failed > 0', async () => {
+    replayBrokenRouteMock.mockResolvedValueOnce({
+      ok: true,
+      replayed: 1,
+      failed: 2,
+      firstError: { reason: 'channel-not-found' },
+    });
+    render(
+      <LogsConfigEditor
+        guildId="g"
+        initialConfig={emptyConfig}
+        brokenRoutes={[
+          {
+            routeId: 'r1',
+            channelId: 'c1',
+            droppedCount: 0,
+            bufferedCount: 3,
+            markedAt: null,
+            reason: 'channel-not-found',
+          },
+        ]}
+        channels={[]}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
+    await waitFor(() => expect(screen.getByText(/1 rejoué.*2 encore en échec/i)).toBeDefined());
+  });
+
+  it('affiche une erreur quand replay retourne ok:false', async () => {
+    replayBrokenRouteMock.mockResolvedValueOnce({ ok: false, reason: 'service-unavailable' });
+    render(
+      <LogsConfigEditor
+        guildId="g"
+        initialConfig={emptyConfig}
+        brokenRoutes={[
+          {
+            routeId: 'r1',
+            channelId: 'c1',
+            droppedCount: 0,
+            bufferedCount: 3,
+            markedAt: null,
+            reason: 'channel-not-found',
+          },
+        ]}
+        channels={[]}
+        roles={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
+    await waitFor(() => expect(screen.getByText(/service indisponible/i)).toBeDefined());
   });
 
   it("n'affiche pas le banner quand brokenRoutes est vide", () => {

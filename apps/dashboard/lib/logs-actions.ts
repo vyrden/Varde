@@ -209,6 +209,70 @@ function extractReason(body: unknown): TestLogsRouteError['reason'] {
   return 'unknown';
 }
 
+export interface ReplayBrokenRouteSuccess {
+  readonly ok: true;
+  readonly replayed: number;
+  readonly failed: number;
+  readonly firstError?: {
+    readonly reason:
+      | 'channel-not-found'
+      | 'missing-permission'
+      | 'rate-limit-exhausted'
+      | 'unknown';
+  };
+}
+
+export interface ReplayBrokenRouteError {
+  readonly ok: false;
+  readonly reason: 'service-unavailable' | 'permission-denied' | 'unknown';
+}
+
+/**
+ * Rejoue les events bufferisés d'une route cassée. Retourne ok=true
+ * avec les compteurs de succès/échec (partial accepté — Discord peut
+ * encore refuser certains envois). Retourne ok=false pour les erreurs
+ * structurelles (service indisponible, pas les permissions).
+ */
+export async function replayBrokenRoute(
+  guildId: string,
+  routeId: string,
+): Promise<ReplayBrokenRouteSuccess | ReplayBrokenRouteError> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/logs/broken-routes/${encodeURIComponent(routeId)}/replay`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+      },
+    );
+
+    if (response.ok) {
+      const body = (await response.json()) as {
+        replayed: number;
+        failed: number;
+        firstError?: { reason: string };
+      };
+      return {
+        ok: true,
+        replayed: body.replayed,
+        failed: body.failed,
+        ...(body.firstError ? { firstError: { reason: extractReason(body.firstError) } } : {}),
+      };
+    }
+
+    if (response.status === 503) return { ok: false, reason: 'service-unavailable' };
+    if (response.status === 403) return { ok: false, reason: 'permission-denied' };
+    return { ok: false, reason: 'unknown' };
+  } catch {
+    return { ok: false, reason: 'unknown' };
+  }
+}
+
 /**
  * Envoie un embed factice dans le salon cible pour valider qu'une
  * route fonctionne. Retourne ok=true si Discord a accepté l'envoi,

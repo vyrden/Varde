@@ -1,6 +1,6 @@
 import type { DiscordService } from '@varde/contracts';
 import { assertChannelId, DiscordSendError } from '@varde/contracts';
-import { getBrokenRoutesFor } from '@varde/module-logs';
+import { getBrokenRoutesFor, replayBrokenRouteFor } from '@varde/module-logs';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { DiscordClient } from '../discord-client.js';
 import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
@@ -93,6 +93,39 @@ export function registerLogsRoutes(app: FastifyInstance, options: RegisterLogsRo
         }
         return reply.code(500).send({ reason: 'unknown' });
       }
+    },
+  );
+
+  /**
+   * Route : POST /guilds/:guildId/modules/logs/broken-routes/:routeId/replay
+   *
+   * Rejoue les events bufferisés d'une route Discord cassée. Synchrone
+   * côté HTTP ; borne ~5s (100 events × 50ms). Retourne le nombre
+   * d'events rejoués, le nombre encore en échec, et la première
+   * `DiscordSendError` rencontrée (le cas échéant).
+   *
+   * Accès restreint : MANAGE_GUILD Discord requis.
+   */
+  app.post<{ Params: { guildId: string; routeId: string } }>(
+    '/guilds/:guildId/modules/logs/broken-routes/:routeId/replay',
+    async (request, reply: FastifyReply) => {
+      const { guildId, routeId } = request.params;
+      await requireGuildAdmin(app, request, guildId, options.discord);
+
+      if (!options.discordService) {
+        return reply.code(503).send({ reason: 'service-indisponible' });
+      }
+
+      const service = options.discordService;
+      const result = await replayBrokenRouteFor(guildId, routeId, (channelId, message) =>
+        service.sendEmbed(assertChannelId(channelId), message),
+      );
+
+      return {
+        replayed: result.replayed,
+        failed: result.failed,
+        ...(result.firstError ? { firstError: { reason: result.firstError.reason } } : {}),
+      };
     },
   );
 }

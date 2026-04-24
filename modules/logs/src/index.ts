@@ -1,11 +1,13 @@
 import {
   type ActionId,
+  type ChannelId,
   type CoreEvent,
   DiscordSendError,
   defineModule,
   type GuildId,
   type ModuleContext,
   type ModuleId,
+  type UIMessage,
 } from '@varde/contracts';
 import { createRouteBuffer } from './buffer.js';
 import type { LogsConfig, LogsRoute } from './config.js';
@@ -191,6 +193,118 @@ export function getBrokenRoutesFor(guildId: string): readonly LogsBrokenRouteInf
   }
   return result;
 }
+
+/** Résultat d'un `replayBrokenRouteFor`. */
+export interface ReplayResult {
+  /** Nombre d'events ré-envoyés avec succès. */
+  readonly replayed: number;
+  /** Nombre d'events encore en échec (réinjectés dans le buffer). */
+  readonly failed: number;
+  /** Première `DiscordSendError` rencontrée lors du replay, le cas échéant. */
+  readonly firstError?: DiscordSendError;
+}
+
+/** Options du replay. Test-friendly (`delayMs: 0` évite les timers en tests). */
+export interface ReplayOptions {
+  readonly delayMs?: number;
+}
+
+const DEFAULT_REPLAY_DELAY_MS = 50;
+
+const localT = (key: string, params?: Record<string, string | number>): string => {
+  const template = (locales.fr as Record<string, string>)[key] ?? key;
+  if (!params) return template;
+  let out = template;
+  for (const [k, v] of Object.entries(params)) {
+    out = out.replace(`{${k}}`, String(v));
+  }
+  return out;
+};
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/**
+ * Rejoue les events bufferisés d'une route Discord cassée. Synchrone
+ * côté HTTP (pas de SSE), borné par le plafond buffer (100 events) et
+ * le délai inter-envois (50ms par défaut) → au plus ~5s.
+ *
+ * Sécurité inter-guild : si la route bufferisée n'appartient pas à la
+ * `guildId` demandée, renvoie `{replayed:0, failed:0}` sans rien faire.
+ *
+ * Atomicité : `buffer.drain` sort les events en une seule opération.
+ * Un envoi concurrent (nouvel event qui arrive pendant le replay) se
+ * re-bufferise normalement — on ne les écrase pas. En cas d'échec
+ * partiel, on réinjecte les events restants dans le buffer.
+ */
+export async function replayBrokenRouteFor(
+  guildId: string,
+  routeId: string,
+  sender: (channelId: ChannelId, message: UIMessage) => Promise<void>,
+  options?: ReplayOptions,
+): Promise<ReplayResult> {
+  const snap = buffer.snapshotAll().get(routeId);
+  if (!snap) return { replayed: 0, failed: 0 };
+  if (snap.guildId !== guildId) return { replayed: 0, failed: 0 };
+  if (snap.events.length === 0) return { replayed: 0, failed: 0 };
+
+  const delayMs = options?.delayMs ?? DEFAULT_REPLAY_DELAY_MS;
+  const events = buffer.drain(routeId);
+
+  let replayed = 0;
+  let firstError: DiscordSendError | undefined;
+  for (let i = 0; i < events.length; i += 1) {
+    const event = events[i];
+    if (event === undefined) continue;
+    if (i > 0 && delayMs > 0) await sleep(delayMs);
+
+    const formatter = FORMATTERS[event.type];
+    if (!formatter) {
+      // Pas de formatter : event drop, ne compte ni replayed ni failed.
+      continue;
+    }
+    const output = formatter(event, { t: localT, verbosity: 'detailed' });
+    const message: UIMessage = {
+      kind: 'embed',
+      payload: output.embed,
+      ...(output.attachments.length > 0 ? { attachments: output.attachments } : {}),
+    };
+
+    try {
+      await sender(snap.channelId as ChannelId, message);
+      replayed += 1;
+    } catch (error) {
+      if (error instanceof DiscordSendError) {
+        firstError = error;
+        // Réinjecte cet event + tous les restants dans le buffer avec la même meta.
+        const meta = { guildId: snap.guildId, channelId: snap.channelId, reason: error.reason };
+        const now = Date.now();
+        for (let j = i; j < events.length; j += 1) {
+          const pending = events[j];
+          if (pending) buffer.push(routeId, pending, now, meta);
+        }
+        return {
+          replayed,
+          failed: events.length - replayed,
+          firstError,
+        };
+      }
+      throw error;
+    }
+  }
+  return { replayed, failed: 0 };
+}
+
+/**
+ * Accès au buffer module-level, exclusivement pour les tests unitaires
+ * de replay. N'EST PAS exporté via `dist/index.d.ts` pour la prod — le
+ * nom en `__` signale l'intention interne. Ne jamais appeler depuis le
+ * code de prod : le buffer doit être alimenté via le cycle normal
+ * `handleEvent` → `deliverToRoute`.
+ */
+export const __bufferForTests = buffer;
 
 export { configSchema, configUi, type LogsConfig, resolveConfig } from './config.js';
 export { locales, manifest };

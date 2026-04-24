@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 
 import type { LogsBrokenRoute } from '../../lib/api-client';
+import { replayBrokenRoute } from '../../lib/logs-actions';
 import { LogsAdvancedMode } from './LogsAdvancedMode';
 import { LogsSimpleMode } from './LogsSimpleMode';
 
@@ -130,6 +131,112 @@ function ModeTabs({
  * via le paramètre URL `?mode=advanced` et tient l'état local de la
  * config avant enregistrement.
  */
+/** Feedback inline du replay pour une route donnée. */
+type ReplayFeedback =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'pending' }
+  | {
+      readonly kind: 'success';
+      readonly replayed: number;
+      readonly failed: number;
+    }
+  | { readonly kind: 'error'; readonly message: string };
+
+const reasonLabel = (reason: 'service-unavailable' | 'permission-denied' | 'unknown'): string => {
+  switch (reason) {
+    case 'service-unavailable':
+      return 'Service indisponible côté bot. Réessaie quand le bot sera reconnecté.';
+    case 'permission-denied':
+      return 'Permissions manquantes pour rejouer cette route.';
+    case 'unknown':
+      return 'Erreur inattendue. Consulte les logs côté serveur.';
+  }
+};
+
+function BrokenRouteRow({
+  guildId,
+  route,
+}: {
+  readonly guildId: string;
+  readonly route: LogsBrokenRoute;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [feedback, setFeedback] = useState<ReplayFeedback>({ kind: 'idle' });
+
+  const handleReplay = () => {
+    setFeedback({ kind: 'pending' });
+    startTransition(async () => {
+      const result = await replayBrokenRoute(guildId, route.routeId);
+      if (!result.ok) {
+        setFeedback({ kind: 'error', message: reasonLabel(result.reason) });
+        return;
+      }
+      setFeedback({ kind: 'success', replayed: result.replayed, failed: result.failed });
+      if (result.failed === 0) router.refresh();
+    });
+  };
+
+  return (
+    <li className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          Salon <code className="rounded bg-red-100 px-1 dark:bg-red-900">{route.channelId}</code>,{' '}
+          {route.bufferedCount} bufferisés, {route.droppedCount} perdus
+          {route.reason !== null ? ` — ${route.reason}` : ''}
+        </span>
+        <button
+          type="button"
+          onClick={handleReplay}
+          disabled={pending || feedback.kind === 'pending'}
+          aria-label={`Rejouer les events bufferisés de la route ${route.routeId}`}
+          className="rounded border border-red-400 bg-white px-2 py-1 text-sm font-medium hover:bg-red-100 disabled:opacity-50 dark:bg-red-900 dark:text-red-100 dark:hover:bg-red-800"
+        >
+          {pending || feedback.kind === 'pending' ? 'Rejeu…' : 'Rejouer'}
+        </button>
+      </div>
+      {feedback.kind === 'success' && feedback.failed === 0 && (
+        <p className="text-sm text-green-700 dark:text-green-300">
+          {feedback.replayed} events rejoués avec succès.
+        </p>
+      )}
+      {feedback.kind === 'success' && feedback.failed > 0 && (
+        <p className="text-sm text-orange-700 dark:text-orange-300">
+          {feedback.replayed} rejoué{feedback.replayed > 1 ? 's' : ''}, {feedback.failed} encore en
+          échec. Vérifie les permissions et retente plus tard.
+        </p>
+      )}
+      {feedback.kind === 'error' && (
+        <p className="text-sm text-red-700 dark:text-red-300">{feedback.message}</p>
+      )}
+    </li>
+  );
+}
+
+function BrokenRoutesBanner({
+  guildId,
+  brokenRoutes,
+}: {
+  readonly guildId: string;
+  readonly brokenRoutes: readonly LogsBrokenRoute[];
+}) {
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
+    >
+      <p className="font-semibold">
+        {brokenRoutes.length === 1 ? '1 route cassée' : `${brokenRoutes.length} routes cassées`}
+      </p>
+      <ul className="mt-2 space-y-2 text-sm">
+        {brokenRoutes.map((r) => (
+          <BrokenRouteRow key={r.routeId} guildId={guildId} route={r} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function LogsConfigEditor(props: LogsConfigEditorProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -152,25 +259,7 @@ export function LogsConfigEditor(props: LogsConfigEditorProps) {
   return (
     <section className="space-y-6">
       {props.brokenRoutes.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-600 dark:bg-red-950 dark:text-red-100"
-        >
-          <p className="font-semibold">
-            {props.brokenRoutes.length === 1
-              ? '1 route cassée'
-              : `${props.brokenRoutes.length} routes cassées`}
-          </p>
-          <ul className="mt-2 space-y-1 text-sm">
-            {props.brokenRoutes.map((r) => (
-              <li key={r.routeId}>
-                Salon <code className="rounded bg-red-100 px-1 dark:bg-red-900">{r.channelId}</code>
-                , {r.bufferedCount} bufferisés, {r.droppedCount} perdus
-                {r.reason !== null ? ` — ${r.reason}` : ''}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <BrokenRoutesBanner guildId={props.guildId} brokenRoutes={props.brokenRoutes} />
       )}
 
       {/* Onglets Simple / Avancé */}

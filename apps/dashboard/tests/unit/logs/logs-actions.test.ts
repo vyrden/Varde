@@ -18,7 +18,12 @@ const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
 import type { LogsConfigClient } from '../../../lib/logs-actions';
-import { createLogsChannel, saveLogsConfig, testLogsRoute } from '../../../lib/logs-actions';
+import {
+  createLogsChannel,
+  replayBrokenRoute,
+  saveLogsConfig,
+  testLogsRoute,
+} from '../../../lib/logs-actions';
 
 const minimalConfig: LogsConfigClient = {
   version: 1,
@@ -219,6 +224,78 @@ describe('createLogsChannel', () => {
     fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
     const result = await createLogsChannel('guild-1');
+    expect(result).toEqual({ ok: false, reason: 'unknown' });
+  });
+});
+
+describe('replayBrokenRoute', () => {
+  it('POST /guilds/:guildId/modules/logs/broken-routes/:routeId/replay avec le bon cookie', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ replayed: 3, failed: 0 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await replayBrokenRoute('guild-42', 'route-1');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/guilds/guild-42/modules/logs/broken-routes/route-1/replay');
+    expect(init.method).toBe('POST');
+  });
+
+  it('renvoie { ok: true, replayed, failed: 0 } sur succès total', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ replayed: 7, failed: 0 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await replayBrokenRoute('g1', 'r1');
+    expect(result).toEqual({ ok: true, replayed: 7, failed: 0 });
+  });
+
+  it('propage le partial avec firstError.reason', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ replayed: 1, failed: 2, firstError: { reason: 'channel-not-found' } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const result = await replayBrokenRoute('g1', 'r1');
+    expect(result).toEqual({
+      ok: true,
+      replayed: 1,
+      failed: 2,
+      firstError: { reason: 'channel-not-found' },
+    });
+  });
+
+  it('renvoie { ok: false, reason: service-unavailable } quand API répond 503', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ reason: 'service-indisponible' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await replayBrokenRoute('g1', 'r1');
+    expect(result).toEqual({ ok: false, reason: 'service-unavailable' });
+  });
+
+  it('renvoie { ok: false, reason: permission-denied } quand API répond 403', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    const result = await replayBrokenRoute('g1', 'r1');
+    expect(result).toEqual({ ok: false, reason: 'permission-denied' });
+  });
+
+  it('renvoie { ok: false, reason: unknown } sur exception réseau', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('boom'));
+    const result = await replayBrokenRoute('g1', 'r1');
     expect(result).toEqual({ ok: false, reason: 'unknown' });
   });
 });
