@@ -216,7 +216,7 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
                   type="button"
                   onClick={() => toggleGroup(groupEventIds)}
                   className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                  aria-label={`Tout cocher le groupe ${group.label}`}
+                  aria-label={`${allChecked ? 'Tout décocher' : 'Tout cocher'} le groupe ${group.label}`}
                 >
                   {allChecked ? 'Tout décocher' : 'Tout cocher'}
                 </button>

@@ -166,7 +166,7 @@ describe('LogsSimpleMode — raccourci "Tout cocher" par groupe', () => {
     const membersSection = screen
       .getByText('Membres')
       .closest('[data-testid="event-group"]') as HTMLElement;
-    fireEvent.click(within(membersSection).getByRole('button', { name: /tout cocher/i }));
+    fireEvent.click(within(membersSection).getByRole('button', { name: /cocher/i }));
     expect((screen.getByLabelText(/Arrivée membre/i) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(/Départ membre/i) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText(/Modification membre/i) as HTMLInputElement).checked).toBe(true);
@@ -192,7 +192,7 @@ describe('LogsSimpleMode — raccourci "Tout cocher" par groupe', () => {
     const membersSection = screen
       .getByText('Membres')
       .closest('[data-testid="event-group"]') as HTMLElement;
-    fireEvent.click(within(membersSection).getByRole('button', { name: /tout cocher/i }));
+    fireEvent.click(within(membersSection).getByRole('button', { name: /cocher/i }));
     expect((screen.getByLabelText(/Arrivée membre/i) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByLabelText(/Départ membre/i) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByLabelText(/Modification membre/i) as HTMLInputElement).checked).toBe(false);
