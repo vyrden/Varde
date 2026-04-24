@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { TestLogsRouteError } from '../../lib/logs-actions';
 import { saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
+import { ALL_EVENT_IDS, EVENT_LABEL } from './event-catalog';
 import type {
   ChannelOption,
   LogsConfigClient,
@@ -12,6 +13,10 @@ import type {
   LogsRouteClient,
   RoleOption,
 } from './LogsConfigEditor';
+
+/** Alias locaux non-exportés — évitent une réécriture massive du JSX qui référence EVENT_LABELS[ev] et EVENTS.map(...). */
+const EVENT_LABELS = EVENT_LABEL;
+const EVENTS = ALL_EVENT_IDS;
 
 /** Traduit un code d'erreur de la route test en phrase française. */
 function formatTestReason(reason: TestLogsRouteError['reason']): string {
@@ -26,28 +31,6 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
       return 'Erreur inattendue, consulte les logs du serveur.';
   }
 }
-
-/**
- * Labels français des 12 événements `guild.*` couverts par le module
- * logs. Ordre d'insertion = ordre d'affichage du multi-select, groupé
- * par famille (membres, messages, salons, rôles).
- */
-export const EVENT_LABELS: Record<string, string> = {
-  'guild.memberJoin': 'Arrivée membre',
-  'guild.memberLeave': 'Départ membre',
-  'guild.memberUpdate': 'Modification membre',
-  'guild.messageCreate': 'Message envoyé',
-  'guild.messageDelete': 'Message supprimé',
-  'guild.messageEdit': 'Message édité',
-  'guild.channelCreate': 'Salon créé',
-  'guild.channelUpdate': 'Salon modifié',
-  'guild.channelDelete': 'Salon supprimé',
-  'guild.roleCreate': 'Rôle créé',
-  'guild.roleUpdate': 'Rôle modifié',
-  'guild.roleDelete': 'Rôle supprimé',
-};
-
-export const EVENTS = Object.keys(EVENT_LABELS) as readonly string[];
 
 /** Brouillon de route pour le formulaire d'ajout. */
 interface RouteDraft {
@@ -485,8 +468,6 @@ function ExclusionsEditor({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold">Exclusions</h3>
-
       {/* Utilisateurs */}
       <div className="space-y-1">
         <label htmlFor="excl-users" className="block text-sm font-medium">
@@ -602,32 +583,34 @@ function ExclusionsEditor({
 /** Encart informatif sur les limites techniques du module logs. */
 function LimitsNotice() {
   return (
-    <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-      <p className="font-semibold text-foreground">Limites techniques</p>
-      <ul className="mt-2 list-inside list-disc space-y-1">
+    <details className="rounded-md border border-border p-3">
+      <summary className="cursor-pointer select-none text-sm font-semibold text-muted-foreground">
+        ⓘ Limites techniques du module
+      </summary>
+      <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
         <li>
-          Un champ d'embed Discord ne peut contenir que 1024 caractères. Au-delà, le contenu part
-          automatiquement en pièce jointe <code>.txt</code> (jamais tronqué silencieusement).
+          Contenu &gt; 1024 caractères → pièce jointe <code>.txt</code>.
         </li>
-        <li>
-          Un embed ne peut dépasser 6000 caractères au total (titre + description + champs + footer
-          + author). Les champs les plus longs passent en pièce jointe prioritairement.
-        </li>
-        <li>
-          Les pièces jointes sont limitées à 25 MB par Discord (tout plan guild confondu, borne
-          conservatrice du bot).
-        </li>
-        <li>
-          Les médias d'un message supprimé ne sont pas récupérables — les URLs CDN Discord expirent
-          dès la suppression. L'embed contient le lien original, qui peut être mort.
-        </li>
-        <li>
-          Si un salon cible devient indisponible, les événements sont bufferisés en RAM (100 par
-          route max), puis perdus si le bot redémarre. La persistance Redis arrive en V1.2.
-        </li>
+        <li>100 events bufferisés max par route cassée (bouton Rejouer pour vider).</li>
+        <li>Rate-limit Discord appliqué automatiquement (50 msg/s/bot).</li>
       </ul>
-    </div>
+    </details>
   );
+}
+
+/** Compte le nombre de filtres actifs dans les exclusions pour l'affichage du récapitulatif. */
+function activeFilterCount(ex: {
+  readonly userIds: readonly string[];
+  readonly roleIds: readonly string[];
+  readonly channelIds: readonly string[];
+  readonly excludeBots: boolean;
+}): number {
+  let n = 0;
+  if (ex.userIds.length > 0) n += 1;
+  if (ex.roleIds.length > 0) n += 1;
+  if (ex.channelIds.length > 0) n += 1;
+  if (ex.excludeBots) n += 1;
+  return n;
 }
 
 /**
@@ -731,7 +714,13 @@ export function LogsAdvancedMode({
       {/* Tableau des routes */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Routes ({routes.length})</h3>
+          <div>
+            <h3 className="text-base font-semibold">Routes de destination</h3>
+            <p className="text-sm text-muted-foreground">
+              Dispatche différents events vers différents salons. Utile pour séparer modération et
+              activité.
+            </p>
+          </div>
           <Button
             type="button"
             size="sm"
@@ -739,7 +728,6 @@ export function LogsAdvancedMode({
             disabled={showAddForm}
             aria-expanded={showAddForm}
             aria-controls="add-route-form"
-            title="Crée une nouvelle route qui envoie un sous-ensemble d'événements dans un salon de logs dédié."
           >
             + Nouvelle route
           </Button>
@@ -798,13 +786,22 @@ export function LogsAdvancedMode({
         )}
       </div>
 
-      {/* Exclusions */}
-      <ExclusionsEditor
-        exclusions={config.exclusions}
-        roles={roles}
-        channels={channels}
-        onChange={handleExclusionsChange}
-      />
+      {/* Filtres globaux */}
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-base font-semibold">Filtres globaux</h3>
+          <p className="text-sm text-muted-foreground">
+            S'appliquent à toutes les routes. Un event lié à un utilisateur, rôle ou salon filtré
+            sera ignoré.
+          </p>
+        </div>
+        <ExclusionsEditor
+          exclusions={config.exclusions}
+          roles={roles}
+          channels={channels}
+          onChange={handleExclusionsChange}
+        />
+      </div>
 
       {/* Limites techniques */}
       <LimitsNotice />
@@ -824,10 +821,16 @@ export function LogsAdvancedMode({
       )}
 
       {/* Action globale Enregistrer */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 border-t border-border pt-4">
         <Button type="button" disabled={isSaving} onClick={() => void handleSave()}>
-          {isSaving ? 'Enregistrement…' : 'Enregistrer'}
+          {isSaving ? 'Enregistrement…' : 'Enregistrer la configuration'}
         </Button>
+        <span className="text-xs text-muted-foreground">
+          {routes.length} route{routes.length > 1 ? 's' : ''} ·{' '}
+          {activeFilterCount(config.exclusions)} filtre
+          {activeFilterCount(config.exclusions) > 1 ? 's' : ''} actif
+          {activeFilterCount(config.exclusions) > 1 ? 's' : ''}
+        </span>
       </div>
     </div>
   );
