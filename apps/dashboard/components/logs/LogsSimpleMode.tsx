@@ -44,22 +44,38 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
 const SIMPLE_ROUTE_ID = '00000000-0000-4000-8000-000000000001';
 
 /**
- * Événements pilotes disponibles en V1. Les identifiants sont ceux du
- * catalogue `CoreEvent` (préfixe `guild.`), cohérents avec la registry
- * de formatters côté module logs.
+ * Presets du mode simple. Les identifiants sont ceux du catalogue
+ * `CoreEvent` (préfixe `guild.`), cohérents avec la registry de
+ * formatters côté module logs.
+ *
+ * `guild.messageCreate` est volontairement exclu de tous les presets :
+ * événement bruyant par nature, opt-in explicite via le mode avancé.
  */
-const ALL_EVENTS = [
-  'guild.messageDelete',
-  'guild.messageEdit',
+export const ALL_EVENTS = [
   'guild.memberJoin',
   'guild.memberLeave',
+  'guild.memberUpdate',
+  'guild.messageDelete',
+  'guild.messageEdit',
+  'guild.channelCreate',
+  'guild.channelUpdate',
+  'guild.channelDelete',
+  'guild.roleCreate',
+  'guild.roleUpdate',
+  'guild.roleDelete',
 ] as const;
-const MODERATION_EVENTS = [
+export const MODERATION_EVENTS = [
   'guild.messageDelete',
   'guild.messageEdit',
   'guild.memberLeave',
+  'guild.memberUpdate',
+  'guild.roleUpdate',
 ] as const;
-const MEMBERS_EVENTS = ['guild.memberJoin', 'guild.memberLeave'] as const;
+export const MEMBERS_EVENTS = [
+  'guild.memberJoin',
+  'guild.memberLeave',
+  'guild.memberUpdate',
+] as const;
 
 type LogPreset = 'all' | 'moderation' | 'members';
 

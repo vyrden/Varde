@@ -27,15 +27,27 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
   }
 }
 
-/** Labels français des 4 événements pilotes V1. */
-const EVENT_LABELS: Record<string, string> = {
+/**
+ * Labels français des 12 événements `guild.*` couverts par le module
+ * logs. Ordre d'insertion = ordre d'affichage du multi-select, groupé
+ * par famille (membres, messages, salons, rôles).
+ */
+export const EVENT_LABELS: Record<string, string> = {
   'guild.memberJoin': 'Arrivée membre',
   'guild.memberLeave': 'Départ membre',
+  'guild.memberUpdate': 'Modification membre',
+  'guild.messageCreate': 'Message envoyé',
   'guild.messageDelete': 'Message supprimé',
   'guild.messageEdit': 'Message édité',
+  'guild.channelCreate': 'Salon créé',
+  'guild.channelUpdate': 'Salon modifié',
+  'guild.channelDelete': 'Salon supprimé',
+  'guild.roleCreate': 'Rôle créé',
+  'guild.roleUpdate': 'Rôle modifié',
+  'guild.roleDelete': 'Rôle supprimé',
 };
 
-const EVENTS = Object.keys(EVENT_LABELS) as readonly string[];
+export const EVENTS = Object.keys(EVENT_LABELS) as readonly string[];
 
 /** Brouillon de route pour le formulaire d'ajout. */
 interface RouteDraft {

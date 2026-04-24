@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseUserIdInput, parseUserIdList } from '../../../components/logs/LogsAdvancedMode';
+import {
+  EVENT_LABELS,
+  EVENTS,
+  parseUserIdInput,
+  parseUserIdList,
+} from '../../../components/logs/LogsAdvancedMode';
 
 describe('parseUserIdInput', () => {
   it('accepte une mention standard <@123456789012345678>', () => {
@@ -37,6 +42,43 @@ describe('parseUserIdInput', () => {
 
   it('retourne null pour une mention malformee sans chiffres', () => {
     expect(parseUserIdInput('<@abc>')).toBeNull();
+  });
+});
+
+describe('EVENT_LABELS et EVENTS (catalogue 12 events guild.*)', () => {
+  it('liste exactement les 12 events guild.* couverts par le module logs', () => {
+    const expectedKeys = [
+      'guild.memberJoin',
+      'guild.memberLeave',
+      'guild.memberUpdate',
+      'guild.messageCreate',
+      'guild.messageDelete',
+      'guild.messageEdit',
+      'guild.channelCreate',
+      'guild.channelUpdate',
+      'guild.channelDelete',
+      'guild.roleCreate',
+      'guild.roleUpdate',
+      'guild.roleDelete',
+    ];
+    expect(Object.keys(EVENT_LABELS)).toHaveLength(expectedKeys.length);
+    expect(Object.keys(EVENT_LABELS).sort()).toEqual(expectedKeys.slice().sort());
+  });
+
+  it('fournit un libellé FR non-vide pour chaque event', () => {
+    for (const [key, label] of Object.entries(EVENT_LABELS)) {
+      expect(label, `libellé manquant pour ${key}`).toBeTruthy();
+      expect(typeof label, `libellé non-string pour ${key}`).toBe('string');
+    }
+  });
+
+  it('expose EVENTS dans le meme ordre que EVENT_LABELS pour un rendu groupé par famille', () => {
+    expect(EVENTS).toEqual(Object.keys(EVENT_LABELS));
+  });
+
+  it('les events meta-lifecycle guild.join/leave sont exclus (hors scope module logs)', () => {
+    expect(EVENT_LABELS['guild.join']).toBeUndefined();
+    expect(EVENT_LABELS['guild.leave']).toBeUndefined();
   });
 });
 
