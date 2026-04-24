@@ -43,7 +43,7 @@ describe('LogsConfigEditor', () => {
         roles={[]}
       />,
     );
-    expect(screen.getByText(/que logger/i)).toBeDefined();
+    expect(screen.getByText(/events à surveiller/i)).toBeDefined();
   });
 
   it('affiche les routes cassées avec banner quand brokenRoutes non vide', () => {
@@ -386,7 +386,7 @@ describe('LogsSimpleMode', () => {
         channels={[{ id: 'c1', name: 'logs' }]}
       />,
     );
-    expect(screen.getByRole('combobox', { name: /salon de logs/i })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: /salon de destination/i })).toBeDefined();
     expect(screen.getByText('#logs')).toBeDefined();
   });
 
@@ -403,7 +403,7 @@ describe('LogsSimpleMode', () => {
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('bouton Enregistrer activé une fois un salon sélectionné', () => {
+  it('bouton Enregistrer activé une fois un salon et un event sélectionnés', () => {
     render(
       <LogsSimpleMode
         guildId="g1"
@@ -412,8 +412,9 @@ describe('LogsSimpleMode', () => {
         channels={[{ id: 'c1', name: 'logs' }]}
       />,
     );
-    const select = screen.getByRole('combobox', { name: /salon de logs/i });
+    const select = screen.getByRole('combobox', { name: /salon de destination/i });
     fireEvent.change(select, { target: { value: 'c1' } });
+    fireEvent.click(screen.getByLabelText(/arrivée membre/i));
     const btn = screen.getByRole('button', { name: /enregistrer/i });
     expect((btn as HTMLButtonElement).disabled).toBe(false);
   });

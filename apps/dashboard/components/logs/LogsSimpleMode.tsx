@@ -1,28 +1,22 @@
 'use client';
 
 import { Button } from '@varde/ui';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import type { CreateLogsChannelError, TestLogsRouteError } from '../../lib/logs-actions';
 import { createLogsChannel, saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
+import { EVENT_GROUPS } from './event-catalog';
 import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsConfigEditor';
 
-/** Traduit un code d'erreur de la création de salon en phrase française. */
-function formatCreateReason(reason: CreateLogsChannelError['reason']): string {
-  switch (reason) {
-    case 'permission-denied':
-      return 'Permissions insuffisantes — le bot doit avoir Gérer les salons.';
-    case 'quota-exceeded':
-      return 'Nombre maximal de salons atteint sur cette guild.';
-    case 'discord-unavailable':
-      return "Le bot Discord n'est pas connecté, réessaie dans un instant.";
-    case 'unknown':
-      return 'Erreur inattendue, consulte les logs du serveur.';
-  }
-}
+/**
+ * UUID v4 réservé à la route unique produite par le mode simple.
+ * Permet au mode simple et au mode avancé de se partager la même
+ * config sans conflit : save simple upsert cet id, save avancé gère
+ * ses propres routes.
+ */
+const SIMPLE_ROUTE_ID = '00000000-0000-4000-8000-000000000001';
 
-/** Traduit un code d'erreur de la route test en phrase française. */
-function formatTestReason(reason: TestLogsRouteError['reason']): string {
+/** Sous-ensemble de reason qu'on traduit en français pour l'utilisateur. */
+function formatTestReason(reason: string): string {
   switch (reason) {
     case 'channel-not-found':
       return 'Salon introuvable ou inaccessible par le bot.';
@@ -30,82 +24,21 @@ function formatTestReason(reason: TestLogsRouteError['reason']): string {
       return 'Permissions manquantes (SendMessages ou EmbedLinks).';
     case 'rate-limit-exhausted':
       return 'Limite de débit Discord atteinte, réessaie dans quelques secondes.';
-    case 'unknown':
+    default:
       return 'Erreur inattendue, consulte les logs du serveur.';
   }
 }
 
-/**
- * Identifiant stable de la route générée en mode simple. UUID v4
- * déterministe (zéros + nybble `4` + variant `8`) pour passer
- * `z.string().uuid()` côté module tout en restant identifiable d'un
- * rendu à l'autre.
- */
-const SIMPLE_ROUTE_ID = '00000000-0000-4000-8000-000000000001';
-
-/**
- * Presets du mode simple. Les identifiants sont ceux du catalogue
- * `CoreEvent` (préfixe `guild.`), cohérents avec la registry de
- * formatters côté module logs.
- *
- * `guild.messageCreate` est volontairement exclu de tous les presets :
- * événement bruyant par nature, opt-in explicite via le mode avancé.
- */
-export const ALL_EVENTS = [
-  'guild.memberJoin',
-  'guild.memberLeave',
-  'guild.memberUpdate',
-  'guild.messageDelete',
-  'guild.messageEdit',
-  'guild.channelCreate',
-  'guild.channelUpdate',
-  'guild.channelDelete',
-  'guild.roleCreate',
-  'guild.roleUpdate',
-  'guild.roleDelete',
-] as const;
-export const MODERATION_EVENTS = [
-  'guild.messageDelete',
-  'guild.messageEdit',
-  'guild.memberLeave',
-  'guild.memberUpdate',
-  'guild.roleUpdate',
-] as const;
-export const MEMBERS_EVENTS = [
-  'guild.memberJoin',
-  'guild.memberLeave',
-  'guild.memberUpdate',
-] as const;
-
-type LogPreset = 'all' | 'moderation' | 'members';
-
-/** Dérive une route unique depuis le preset choisi et le salon sélectionné. */
-function buildRouteFromPreset(preset: LogPreset, channelId: string): LogsRouteClient {
-  switch (preset) {
-    case 'all':
-      return {
-        id: SIMPLE_ROUTE_ID,
-        label: 'Tout',
-        events: ALL_EVENTS,
-        channelId,
-        verbosity: 'detailed',
-      };
-    case 'moderation':
-      return {
-        id: SIMPLE_ROUTE_ID,
-        label: 'Modération',
-        events: MODERATION_EVENTS,
-        channelId,
-        verbosity: 'detailed',
-      };
-    case 'members':
-      return {
-        id: SIMPLE_ROUTE_ID,
-        label: 'Membres',
-        events: MEMBERS_EVENTS,
-        channelId,
-        verbosity: 'compact',
-      };
+function formatCreateReason(reason: string): string {
+  switch (reason) {
+    case 'permission-denied':
+      return 'permissions Discord manquantes pour créer un salon.';
+    case 'quota-exceeded':
+      return 'quota de salons atteint.';
+    case 'discord-unavailable':
+      return 'Discord indisponible, réessaie plus tard.';
+    default:
+      return 'erreur inattendue.';
   }
 }
 
@@ -117,87 +50,89 @@ export interface LogsSimpleModeProps {
 }
 
 /**
- * Mode simple : 3 contrôles (salon, preset, bots) + bouton Enregistrer
- * + bouton Tester.
- *
- * Les callbacks onSubmit et onTest sont des placeholders — ils seront
- * câblés aux server actions aux Tasks 7-8.
+ * Mode simple : une grille de cases à cocher groupée par famille
+ * d'events, un salon cible unique, un toggle "ignorer les bots".
+ * Sauvegarde non-destructive : remplace la route SIMPLE_ROUTE_ID
+ * existante ou l'ajoute, préserve les autres routes avancées.
  */
 export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSimpleModeProps) {
-  /** Salon sélectionné : on lit la première route ou rien. */
-  const existingRoute = config.routes.find((r) => r.id === SIMPLE_ROUTE_ID) ?? config.routes[0];
-  const [channelId, setChannelId] = useState<string>(existingRoute?.channelId ?? '');
-  const [preset, setPreset] = useState<LogPreset>('all');
+  const existingSimpleRoute = useMemo(
+    () => config.routes.find((r) => r.id === SIMPLE_ROUTE_ID) ?? null,
+    [config.routes],
+  );
+
+  const [channelId, setChannelId] = useState<string>(existingSimpleRoute?.channelId ?? '');
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(
+    () => new Set(existingSimpleRoute?.events ?? []),
+  );
   const [excludeBots, setExcludeBots] = useState<boolean>(config.exclusions.excludeBots);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isTesting, setIsTesting] = useState<boolean>(false);
-  const [isCreating, setIsCreating] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
     null,
   );
 
-  const canSave = channelId !== '';
+  const canSave = channelId !== '' && selectedEventIds.size > 0;
 
-  const applyToConfig = (
-    nextChannelId: string,
-    nextPreset: LogPreset,
-    nextExcludeBots: boolean,
-  ) => {
-    if (!nextChannelId) return;
-    const route = buildRouteFromPreset(nextPreset, nextChannelId);
-    setConfig({
-      ...config,
-      routes: [route],
-      exclusions: { ...config.exclusions, excludeBots: nextExcludeBots },
+  const toggleEvent = (eventId: string) => {
+    setSelectedEventIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
     });
   };
 
-  const handleChannelChange = (value: string) => {
-    setChannelId(value);
-    applyToConfig(value, preset, excludeBots);
+  const toggleGroup = (groupEventIds: readonly string[]) => {
+    setSelectedEventIds((prev) => {
+      const next = new Set(prev);
+      const allChecked = groupEventIds.every((id) => next.has(id));
+      if (allChecked) {
+        for (const id of groupEventIds) next.delete(id);
+      } else {
+        for (const id of groupEventIds) next.add(id);
+      }
+      return next;
+    });
   };
 
-  const handlePresetChange = (value: LogPreset) => {
-    setPreset(value);
-    applyToConfig(channelId, value, excludeBots);
-  };
-
-  const handleExcludeBotsChange = (value: boolean) => {
-    setExcludeBots(value);
-    applyToConfig(channelId, preset, value);
-  };
-
-  const handleCreateChannel = async () => {
-    setIsCreating(true);
-    setFeedback(null);
-    const result = await createLogsChannel(guildId);
-    setIsCreating(false);
-    if (result.ok) {
-      setChannelId(result.channelId);
-      applyToConfig(result.channelId, preset, excludeBots);
-      setFeedback({
-        kind: 'success',
-        message: `Salon #${result.channelName} créé — pense à enregistrer.`,
-      });
-    } else {
-      setFeedback({
-        kind: 'error',
-        message: `Impossible de créer le salon : ${formatCreateReason(result.reason)}`,
-      });
-    }
+  /**
+   * Calcule la config à envoyer à l'API, en upsertant la route
+   * SIMPLE_ROUTE_ID dans `config.routes` (préserve les autres routes).
+   */
+  const buildConfigForSave = (): LogsConfigClient => {
+    const simpleRoute: LogsRouteClient = {
+      id: SIMPLE_ROUTE_ID,
+      label: 'Logs',
+      events: Array.from(selectedEventIds),
+      channelId,
+      verbosity: 'detailed',
+    };
+    const others = config.routes.filter((r) => r.id !== SIMPLE_ROUTE_ID);
+    return {
+      ...config,
+      routes: [...others, simpleRoute],
+      exclusions: { ...config.exclusions, excludeBots },
+    };
   };
 
   const handleSubmit = async () => {
     if (!canSave) return;
     setIsSaving(true);
     setFeedback(null);
-    const result = await saveLogsConfig(guildId, config);
+    const toSave = buildConfigForSave();
+    const result = await saveLogsConfig(guildId, toSave);
     setIsSaving(false);
     if (!result.ok) {
-      setFeedback({ kind: 'error', message: result.issues[0]?.message ?? 'Erreur inconnue' });
-    } else {
-      setFeedback({ kind: 'success', message: 'Configuration enregistrée.' });
+      setFeedback({
+        kind: 'error',
+        message: result.issues[0]?.message ?? 'Erreur inconnue',
+      });
+      return;
     }
+    setConfig(toSave);
+    setFeedback({ kind: 'success', message: 'Configuration enregistrée.' });
   };
 
   const handleTest = async () => {
@@ -213,29 +148,41 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
     }
   };
 
+  const handleCreateChannel = async () => {
+    setIsCreating(true);
+    setFeedback(null);
+    const result = await createLogsChannel(guildId);
+    setIsCreating(false);
+    if (result.ok) {
+      setChannelId(result.channelId);
+      setFeedback({
+        kind: 'success',
+        message: `Salon #${result.channelName} créé — pense à enregistrer.`,
+      });
+    } else {
+      setFeedback({
+        kind: 'error',
+        message: `Impossible de créer le salon : ${formatCreateReason(result.reason)}`,
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Configuration des logs</h2>
-        <p className="text-sm text-muted-foreground">
-          Choisissez le salon de destination et ce que vous souhaitez enregistrer.
-        </p>
-      </div>
-
-      {/* Salon de logs */}
-      <fieldset className="space-y-2">
-        <label htmlFor="logs-channel" className="block text-sm font-medium">
-          Salon de logs
+      {/* Salon */}
+      <div className="space-y-2">
+        <label htmlFor="simple-channel" className="block text-sm font-semibold">
+          Salon de destination
         </label>
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <select
-            id="logs-channel"
+            id="simple-channel"
             value={channelId}
-            onChange={(e) => handleChannelChange(e.target.value)}
-            className="flex h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Salon de logs"
+            onChange={(e) => setChannelId(e.target.value)}
+            className="h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Salon de destination"
           >
-            <option value="">— Choisir un salon —</option>
+            <option value="">— Sélectionne un salon —</option>
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
                 #{c.name}
@@ -244,86 +191,96 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
           </select>
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="secondary"
             disabled={isCreating}
             onClick={() => void handleCreateChannel()}
           >
-            {isCreating ? 'Création…' : 'Créer #logs pour moi'}
+            {isCreating ? 'Création…' : '+ Créer un salon #logs'}
           </Button>
         </div>
-      </fieldset>
+      </div>
 
-      {/* Que logger */}
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Que logger</legend>
-        <div className="space-y-2" role="radiogroup" aria-label="Que logger">
-          {(
-            [
-              { value: 'all', label: 'Tout (messages, modération, membres)' },
-              {
-                value: 'moderation',
-                label: 'Modération seulement (suppressions, éditions, départs)',
-              },
-              { value: 'members', label: 'Activité des membres (arrivées, départs)' },
-            ] as { value: LogPreset; label: string }[]
-          ).map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="log-preset"
-                value={opt.value}
-                checked={preset === opt.value}
-                onChange={() => handlePresetChange(opt.value)}
-                className="h-4 w-4 text-primary"
-              />
-              {opt.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {/* Events groupés */}
+      <div className="space-y-3">
+        <div className="block text-sm font-semibold">Events à surveiller</div>
+        {EVENT_GROUPS.map((group) => {
+          const groupEventIds = group.events.map((e) => e.id);
+          const allChecked = groupEventIds.every((id) => selectedEventIds.has(id));
+          return (
+            <div key={group.id} data-testid="event-group" className="space-y-2">
+              <div className="flex items-center justify-between border-b border-border pb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(groupEventIds)}
+                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  aria-label={`Tout cocher le groupe ${group.label}`}
+                >
+                  {allChecked ? 'Tout décocher' : 'Tout cocher'}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 pl-2 sm:grid-cols-2">
+                {group.events.map((event) => (
+                  <label key={event.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedEventIds.has(event.id)}
+                      onChange={() => toggleEvent(event.id)}
+                      aria-label={event.label}
+                    />
+                    <span>{event.label}</span>
+                    {event.hint ? (
+                      <span className="text-xs text-muted-foreground">({event.hint})</span>
+                    ) : null}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Exclure les bots */}
-      <fieldset className="space-y-2">
-        <legend className="sr-only">Options d'exclusion</legend>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
+      {/* Options */}
+      <div>
+        <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={excludeBots}
-            onChange={(e) => handleExcludeBotsChange(e.target.checked)}
-            className="h-4 w-4 rounded text-primary"
-            aria-label="Exclure les bots des logs"
+            onChange={(e) => setExcludeBots(e.target.checked)}
           />
-          Exclure les bots des logs
+          <span>Ignorer les messages de bots</span>
+          <span className="text-xs text-muted-foreground">(recommandé)</span>
         </label>
-      </fieldset>
+      </div>
 
-      {/* Retour d'action */}
-      {feedback !== null && (
+      {/* Feedback */}
+      {feedback ? (
         <p
-          role="status"
+          role={feedback.kind === 'error' ? 'alert' : 'status'}
           className={
-            feedback.kind === 'success'
-              ? 'text-sm text-green-700 dark:text-green-400'
-              : 'text-sm text-destructive'
+            feedback.kind === 'error'
+              ? 'text-sm text-destructive'
+              : 'text-sm text-emerald-600 dark:text-emerald-400'
           }
         >
           {feedback.message}
         </p>
-      )}
+      ) : null}
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
-        <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSubmit()}>
-          {isSaving ? 'Enregistrement…' : 'Enregistrer'}
-        </Button>
+      <div className="flex items-center gap-3 border-t border-border pt-4">
         <Button
           type="button"
-          variant="ghost"
-          disabled={!canSave || isTesting}
+          variant="secondary"
+          disabled={isTesting || !channelId}
           onClick={() => void handleTest()}
         >
-          {isTesting ? 'Test en cours…' : 'Tester'}
+          {isTesting ? 'Test…' : "Tester l'envoi"}
+        </Button>
+        <Button type="button" disabled={!canSave || isSaving} onClick={() => void handleSubmit()}>
+          {isSaving ? 'Enregistrement…' : 'Enregistrer'}
         </Button>
       </div>
     </div>
