@@ -315,6 +315,45 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
     }
   });
 
+  it('espace les appels addReaction d au moins 45ms (rate-limit Discord)', async () => {
+    const addReactionTimes: number[] = [];
+    const discordService = makeDiscordService({
+      addReaction: vi.fn().mockImplementation(async () => {
+        addReactionTimes.push(Date.now());
+      }),
+    });
+    const { app } = await build(adminFetch, discordService);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/modules/reaction-roles/publish`,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          label: 'Throttle Test',
+          channelId: CHANNEL,
+          message: 'Choose',
+          mode: 'normal',
+          pairs: [
+            { emoji: { type: 'unicode', value: '🎉' }, roleId: ROLE_ID },
+            { emoji: { type: 'unicode', value: '🔥' }, roleId: ROLE_ID },
+            { emoji: { type: 'unicode', value: '💯' }, roleId: ROLE_ID },
+          ],
+        }),
+      });
+      expect(res.statusCode).toBe(201);
+      // 3 emojis → 3 appels addReaction
+      expect(addReactionTimes).toHaveLength(3);
+      // 2 intervalles entre les 3 appels — chacun doit être ≥ 45ms
+      for (let i = 1; i < addReactionTimes.length; i += 1) {
+        const t1 = addReactionTimes[i] ?? 0;
+        const t0 = addReactionTimes[i - 1] ?? 0;
+        expect(t1 - t0).toBeGreaterThanOrEqual(45);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   it('502 avec reason role-creation-failed si createRole échoue', async () => {
     const discordService = makeDiscordService({
       createRole: vi

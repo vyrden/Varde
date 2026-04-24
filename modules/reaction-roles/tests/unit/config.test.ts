@@ -106,9 +106,22 @@ describe('resolveConfig', () => {
     expect(resolveConfig(null)).toEqual({ version: 1, messages: [] });
   });
 
-  it('extrait la section reaction-roles depuis un snapshot', () => {
-    const snap = { 'reaction-roles': { version: 1, messages: [validMessage] } };
+  it('retourne la config par défaut si modules est absent', () => {
+    expect(resolveConfig({})).toEqual({ version: 1, messages: [] });
+  });
+
+  it("retourne la config par défaut si modules['reaction-roles'] est absent", () => {
+    expect(resolveConfig({ modules: {} })).toEqual({ version: 1, messages: [] });
+  });
+
+  it("extrait la config depuis le chemin modules['reaction-roles']", () => {
+    const snap = { modules: { 'reaction-roles': { version: 1, messages: [validMessage] } } };
     expect(resolveConfig(snap).messages).toHaveLength(1);
+  });
+
+  it("ignore les données posées au top-level 'reaction-roles' (chemin incorrect)", () => {
+    const wrongPath = { 'reaction-roles': { version: 1, messages: [validMessage] } };
+    expect(resolveConfig(wrongPath)).toEqual({ version: 1, messages: [] });
   });
 });
 

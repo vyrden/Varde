@@ -26,7 +26,7 @@ interface RoleOption {
 }
 
 /** Paire locale (brouillon) — l'emoji est un texte brut avant parsing. */
-type PairDraft =
+export type PairDraft =
   | { uid: string; emoji: string; roleMode: 'existing'; roleId: string }
   | { uid: string; emoji: string; roleMode: 'create'; roleName: string };
 
@@ -73,8 +73,10 @@ function serializeEmoji(emoji: ReactionRoleMessageClient['pairs'][number]['emoji
  * Accepte :
  *  - Forme custom Discord : `<:name:id>` ou `<a:name:id>`
  *  - Tout autre texte : traité comme unicode (trimmed).
+ *
+ * @public Exportée pour les tests unitaires.
  */
-function parseEmoji(raw: string): PublishReactionRoleInput['pairs'][number]['emoji'] | null {
+export function parseEmoji(raw: string): PublishReactionRoleInput['pairs'][number]['emoji'] | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
 
@@ -100,8 +102,12 @@ function buildClientEmoji(raw: string): ReactionRoleMessageClient['pairs'][numbe
   return { type: 'custom', id: parsed.id, name: parsed.name, animated: parsed.animated ?? false };
 }
 
-/** Valide qu'un brouillon de paire est complet. */
-function isPairValid(p: PairDraft): boolean {
+/**
+ * Valide qu'un brouillon de paire est complet.
+ *
+ * @public Exportée pour les tests unitaires.
+ */
+export function isPairValid(p: PairDraft): boolean {
   if (!parseEmoji(p.emoji)) return false;
   if (p.roleMode === 'existing') return p.roleId.length > 0;
   return p.roleName.trim().length > 0;

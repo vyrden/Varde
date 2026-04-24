@@ -81,12 +81,22 @@ export const configUi: ConfigUi = {
   fields: [],
 };
 
+const MODULE_ID = 'reaction-roles';
+
 /**
  * Extrait la section `reaction-roles` d'un snapshot guild_config
  * et la valide via le schéma. Retourne la config par défaut si absente.
+ *
+ * Le snapshot a la forme `{ core: ..., modules: { 'reaction-roles': ... } }`.
+ * Il faut donc lire `modules['reaction-roles']`, pas le top-level.
  */
 export function resolveConfig(raw: unknown): ReactionRolesConfig {
   const asObj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  const own = asObj['reaction-roles'];
-  return reactionRolesConfigSchema.parse(own ?? {});
+  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for index signatures
+  const modules = asObj['modules'];
+  const moduleConfig =
+    modules !== undefined && modules !== null && typeof modules === 'object'
+      ? (modules as Record<string, unknown>)[MODULE_ID]
+      : undefined;
+  return reactionRolesConfigSchema.parse(moduleConfig ?? {});
 }

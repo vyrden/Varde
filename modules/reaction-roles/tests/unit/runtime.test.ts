@@ -18,7 +18,7 @@ const ROLE_AS = '666666666666666666' as never;
 const makeCtx = (configForGuild: unknown): ModuleContext => {
   return {
     logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
-    config: { get: vi.fn().mockResolvedValue({ 'reaction-roles': configForGuild }) },
+    config: { get: vi.fn().mockResolvedValue({ modules: { 'reaction-roles': configForGuild } }) },
     discord: {
       addMemberRole: vi.fn().mockResolvedValue(undefined),
       removeMemberRole: vi.fn().mockResolvedValue(undefined),
@@ -149,6 +149,24 @@ describe('runtime — mode unique', () => {
     const ctx = makeCtx(continentsConfig);
     await handleReactionRemove(ctx, removeEvent(), createSelfCausedTracker());
     expect(ctx.discord.removeMemberRole).not.toHaveBeenCalled();
+  });
+
+  it('reactionAdd sur le même emoji quand le user a déjà ce rôle (re-clic) : idempotent, aucune suppression', async () => {
+    const ctx = makeCtx(continentsConfig);
+    // Le user a déjà le rôle Europe (la paire qu'on re-clique)
+    (ctx.discord.memberHasRole as ReturnType<typeof vi.fn>).mockImplementation(
+      async (_g: unknown, _u: unknown, r: unknown) => r === ROLE_EU,
+    );
+    const tracker = createSelfCausedTracker();
+
+    await handleReactionAdd(ctx, addEvent(), tracker);
+
+    // addMemberRole appelé idempotent (même rôle)
+    expect(ctx.discord.addMemberRole).toHaveBeenCalledWith(GUILD, USER, ROLE_EU);
+    // Mais PAS d'unassign ni de removeUserReaction sur la même paire
+    expect(ctx.discord.removeMemberRole).not.toHaveBeenCalled();
+    expect(ctx.discord.removeUserReaction).not.toHaveBeenCalled();
+    expect(tracker.size()).toBe(0);
   });
 });
 
