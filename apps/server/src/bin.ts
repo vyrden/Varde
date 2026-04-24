@@ -36,6 +36,7 @@ import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
 import { logs } from '@varde/module-logs';
+import { reactionRoles } from '@varde/module-reaction-roles';
 import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
 
 import { createServer } from './server.js';
@@ -44,15 +45,16 @@ type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
 const LOGS_ID = 'logs' as ModuleId;
+const REACTION_ROLES_ID = 'reaction-roles' as ModuleId;
 
 /**
  * Modules activés par défaut sur toute guild connue. `hello-world`
- * reste dans la liste tant qu'il sert de témoin ; `logs` est le
- * premier vrai module officiel (jalon 4). Les quatre autres
- * (`welcome`, `roles`, `moderation`, `onboarding-presets`) s'y
- * ajouteront à mesure de leur livraison.
+ * reste dans la liste tant qu'il sert de témoin ; `logs` et
+ * `reaction-roles` sont les deux premiers modules officiels V1
+ * (jalon 4). Les trois autres (`welcome-goodbye`, `moderation`,
+ * `onboarding-presets`) s'y ajouteront à mesure de leur livraison.
  */
-const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID, LOGS_ID];
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID, LOGS_ID, REACTION_ROLES_ID];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -91,6 +93,7 @@ const readOptionalRaw = (name: string): string | null => {
  * si la valeur manque.
  */
 const readKeystoreMasterKey = (): Buffer => {
+  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on process.env
   const raw = process.env['VARDE_KEYSTORE_MASTER_KEY'];
   if (typeof raw !== 'string' || raw.length === 0) {
     return die(
@@ -368,6 +371,7 @@ async function main(): Promise<void> {
 
   handle.loader.register(helloWorld);
   handle.loader.register(logs);
+  handle.loader.register(reactionRoles);
   await handle.loader.loadAll();
 
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);

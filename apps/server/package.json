@@ -23,6 +23,7 @@
     "@varde/db": "workspace:*",
     "@varde/module-hello-world": "workspace:*",
     "@varde/module-logs": "workspace:*",
+    "@varde/module-reaction-roles": "workspace:*",
     "@varde/presets": "workspace:*",
     "discord.js": "14.26.3"
   },

@@ -203,6 +203,9 @@ importers:
       '@varde/module-logs':
         specifier: workspace:*
         version: link:../../modules/logs
+      '@varde/module-reaction-roles':
+        specifier: workspace:*
+        version: link:../../modules/reaction-roles
       '@varde/presets':
         specifier: workspace:*
         version: link:../../packages/presets
