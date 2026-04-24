@@ -102,6 +102,21 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.removeOwnReaction` nécessite un host (apps/bot).',
     );
   },
+  addMemberRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.addMemberRole` nécessite un host (apps/bot).',
+    );
+  },
+  removeMemberRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeMemberRole` nécessite un host (apps/bot).',
+    );
+  },
+  memberHasRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.memberHasRole` nécessite un host (apps/bot).',
+    );
+  },
 });
 
 const modulesStub: ModulesService = Object.freeze({

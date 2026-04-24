@@ -170,6 +170,27 @@ export interface DiscordService {
     messageId: MessageId,
     emoji: Emoji,
   ) => Promise<void>;
+
+  /**
+   * Ajoute un rôle Discord à un membre du serveur (nécessite ManageRoles).
+   * Utilisé par reaction-roles pour attribuer un rôle sur réaction.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly addMemberRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<void>;
+
+  /**
+   * Retire un rôle Discord d'un membre du serveur (nécessite ManageRoles).
+   * Utilisé par reaction-roles en mode unique pour retirer le rôle précédent.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly removeMemberRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<void>;
+
+  /**
+   * Vérifie si un membre possède un rôle donné.
+   * Retourne `false` si le membre ou le rôle n'existe pas.
+   * Utilisé par reaction-roles en mode unique pour détecter le rôle courant.
+   */
+  readonly memberHasRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<boolean>;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */

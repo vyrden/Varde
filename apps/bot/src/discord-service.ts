@@ -5,9 +5,11 @@ import {
   type DiscordSendErrorReason,
   type DiscordService,
   type Emoji,
+  type GuildId,
   type Logger,
   type MessageId,
   type ModuleId,
+  type RoleId,
   type UIMessage,
   type UserId,
 } from '@varde/contracts';
@@ -134,6 +136,22 @@ interface MessageLike {
 interface TextChannelLike {
   readonly messages: {
     readonly fetch: (id: string) => Promise<MessageLike>;
+  };
+}
+
+/** Forme minimale d'un GuildMember discord.js dont on a besoin. */
+interface GuildMemberLike {
+  readonly roles: {
+    readonly cache: { has: (roleId: string) => boolean };
+    readonly add: (roleId: string) => Promise<unknown>;
+    readonly remove: (roleId: string) => Promise<unknown>;
+  };
+}
+
+/** Forme minimale d'une Guild discord.js pour la gestion des membres. */
+interface GuildLike {
+  readonly members: {
+    readonly fetch: (userId: string) => Promise<GuildMemberLike>;
   };
 }
 
@@ -294,6 +312,68 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         );
       }
       await this.removeUserReaction(channelId, messageId, botUserId as UserId, emoji);
+    },
+
+    async addMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.addMemberRole : guild introuvable');
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        throw new DiscordSendError('unknown', 'DiscordService.addMemberRole : membre introuvable');
+      }
+      try {
+        await member.roles.add(roleId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.addMemberRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeMemberRole : guild introuvable',
+        );
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeMemberRole : membre introuvable',
+        );
+      }
+      try {
+        await member.roles.remove(roleId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.removeMemberRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async memberHasRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<boolean> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) return false;
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        return false;
+      }
+      return member.roles.cache.has(roleId);
     },
   };
 }
