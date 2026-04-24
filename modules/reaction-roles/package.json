@@ -1,0 +1,30 @@
+{
+  "name": "@varde/module-reaction-roles",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Module officiel : auto-attribution de rôles via réactions sur un message Discord.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "dev": "tsc --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@varde/contracts": "workspace:*",
+    "@varde/core": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "@varde/testing": "workspace:*",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  }
+}

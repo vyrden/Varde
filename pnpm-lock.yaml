@@ -325,6 +325,34 @@ importers:
         specifier: 4.1.4
         version: 4.1.4(@types/node@24.12.2)(esbuild@0.27.7)(happy-dom@20.9.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  modules/reaction-roles:
+    dependencies:
+      '@varde/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@varde/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      '@varde/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@varde/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.4
+        version: 4.1.4(@types/node@24.12.2)(esbuild@0.27.7)(happy-dom@20.9.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
+
   packages/ai:
     dependencies:
       '@varde/contracts':
