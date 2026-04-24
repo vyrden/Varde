@@ -1,0 +1,617 @@
+'use client';
+
+import { Button } from '@varde/ui';
+import { useState, useTransition } from 'react';
+
+import {
+  type PublishReactionRoleInput,
+  publishReactionRole,
+  syncReactionRole,
+} from '../../lib/reaction-roles-actions';
+import type { ReactionRoleMessageClient } from './ReactionRolesConfigEditor';
+import type { ReactionRoleTemplate } from './templates';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ChannelOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+interface RoleOption {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** Paire locale (brouillon) — l'emoji est un texte brut avant parsing. */
+type PairDraft =
+  | { uid: string; emoji: string; roleMode: 'existing'; roleId: string }
+  | { uid: string; emoji: string; roleMode: 'create'; roleName: string };
+
+type EditorMode = 'normal' | 'unique' | 'verifier';
+
+interface FeedbackState {
+  kind: 'success' | 'error';
+  message: string;
+}
+
+export type ReactionRoleEditorProps =
+  | {
+      readonly mode: 'new';
+      readonly guildId: string;
+      readonly template: ReactionRoleTemplate;
+      readonly channels: readonly ChannelOption[];
+      readonly roles: readonly RoleOption[];
+      readonly onSaved: (newRR: ReactionRoleMessageClient) => void;
+      readonly onCancel: () => void;
+    }
+  | {
+      readonly mode: 'edit';
+      readonly guildId: string;
+      readonly existing: ReactionRoleMessageClient;
+      readonly channels: readonly ChannelOption[];
+      readonly roles: readonly RoleOption[];
+      readonly onSaved: (updated: ReactionRoleMessageClient) => void;
+      readonly onCancel: () => void;
+    };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Sérialise une emoji structurée (stockée) en texte brut pour affichage. */
+function serializeEmoji(emoji: ReactionRoleMessageClient['pairs'][number]['emoji']): string {
+  if (emoji.type === 'unicode') return emoji.value;
+  const prefix = emoji.animated ? '<a:' : '<:';
+  return `${prefix}${emoji.name}:${emoji.id}>`;
+}
+
+/**
+ * Parse un texte brut vers la structure emoji attendue par l'API.
+ * Accepte :
+ *  - Forme custom Discord : `<:name:id>` ou `<a:name:id>`
+ *  - Tout autre texte : traité comme unicode (trimmed).
+ */
+function parseEmoji(raw: string): PublishReactionRoleInput['pairs'][number]['emoji'] | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+
+  const customMatch = /^<(a?):([^:]+):(\d{17,19})>$/.exec(trimmed);
+  if (customMatch) {
+    const [, animated, name, id] = customMatch;
+    return {
+      type: 'custom',
+      id: id as string,
+      name: name as string,
+      animated: animated === 'a',
+    };
+  }
+
+  return { type: 'unicode', value: trimmed };
+}
+
+/** Construit la structure emoji client depuis un texte brut. */
+function buildClientEmoji(raw: string): ReactionRoleMessageClient['pairs'][number]['emoji'] | null {
+  const parsed = parseEmoji(raw);
+  if (!parsed) return null;
+  if (parsed.type === 'unicode') return parsed;
+  return { type: 'custom', id: parsed.id, name: parsed.name, animated: parsed.animated ?? false };
+}
+
+/** Valide qu'un brouillon de paire est complet. */
+function isPairValid(p: PairDraft): boolean {
+  if (!parseEmoji(p.emoji)) return false;
+  if (p.roleMode === 'existing') return p.roleId.length > 0;
+  return p.roleName.trim().length > 0;
+}
+
+let _uidCounter = 0;
+const nextUid = (): string => `p-${(_uidCounter++).toString()}`;
+
+/** Initialise les paires depuis un template (mode new). */
+function pairsFromTemplate(template: ReactionRoleTemplate): PairDraft[] {
+  if (template.suggestions.length === 0) {
+    return [{ uid: nextUid(), emoji: '', roleMode: 'create', roleName: '' }];
+  }
+  return template.suggestions.map(
+    (s): PairDraft => ({
+      uid: nextUid(),
+      emoji: s.emoji,
+      roleMode: 'create',
+      roleName: s.roleName,
+    }),
+  );
+}
+
+/** Initialise les paires depuis un message existant (mode edit). */
+function pairsFromExisting(existing: ReactionRoleMessageClient): PairDraft[] {
+  return existing.pairs.map(
+    (p): PairDraft => ({
+      uid: nextUid(),
+      emoji: serializeEmoji(p.emoji),
+      roleMode: 'existing',
+      roleId: p.roleId,
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component : éditeur de paires
+// ---------------------------------------------------------------------------
+
+function PairRow({
+  pair,
+  index,
+  roles,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  readonly pair: PairDraft;
+  readonly index: number;
+  readonly roles: readonly RoleOption[];
+  readonly canRemove: boolean;
+  readonly onChange: (updated: PairDraft) => void;
+  readonly onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2">
+      {/* Emoji */}
+      <div className="flex flex-col gap-0.5">
+        <label className="text-xs text-muted-foreground" htmlFor={`pair-emoji-${index}`}>
+          Emoji
+        </label>
+        <input
+          id={`pair-emoji-${index}`}
+          type="text"
+          value={pair.emoji}
+          placeholder="🌍 ou <:nom:id>"
+          maxLength={64}
+          onChange={(e) =>
+            onChange(
+              pair.roleMode === 'existing'
+                ? {
+                    uid: pair.uid,
+                    roleMode: 'existing',
+                    emoji: e.target.value,
+                    roleId: pair.roleId,
+                  }
+                : {
+                    uid: pair.uid,
+                    roleMode: 'create',
+                    emoji: e.target.value,
+                    roleName: pair.roleName,
+                  },
+            )
+          }
+          className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Emoji de la paire ${index + 1}`}
+        />
+      </div>
+
+      {/* Mode rôle */}
+      <div className="flex flex-col gap-0.5">
+        <label className="text-xs text-muted-foreground" htmlFor={`pair-rolemode-${index}`}>
+          Rôle
+        </label>
+        <select
+          id={`pair-rolemode-${index}`}
+          value={pair.roleMode}
+          onChange={(e) => {
+            const nextMode = e.target.value as 'existing' | 'create';
+            if (nextMode === 'existing') {
+              onChange({ uid: pair.uid, emoji: pair.emoji, roleMode: 'existing', roleId: '' });
+            } else {
+              onChange({ uid: pair.uid, emoji: pair.emoji, roleMode: 'create', roleName: '' });
+            }
+          }}
+          className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Mode rôle de la paire ${index + 1}`}
+        >
+          <option value="existing">Choisir un rôle</option>
+          <option value="create">Créer un rôle</option>
+        </select>
+      </div>
+
+      {/* Sélecteur / nom de rôle */}
+      {pair.roleMode === 'existing' ? (
+        <div className="flex flex-col gap-0.5">
+          <label className="text-xs text-muted-foreground" htmlFor={`pair-roleid-${index}`}>
+            Rôle existant
+          </label>
+          <select
+            id={`pair-roleid-${index}`}
+            value={pair.roleId}
+            onChange={(e) =>
+              onChange({
+                uid: pair.uid,
+                emoji: pair.emoji,
+                roleMode: 'existing',
+                roleId: e.target.value,
+              })
+            }
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Rôle existant de la paire ${index + 1}`}
+          >
+            <option value="">— choisir —</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-0.5">
+          <label className="text-xs text-muted-foreground" htmlFor={`pair-rolename-${index}`}>
+            Nom du rôle à créer
+          </label>
+          <input
+            id={`pair-rolename-${index}`}
+            type="text"
+            value={pair.roleName}
+            placeholder="Nom du rôle"
+            maxLength={100}
+            onChange={(e) =>
+              onChange({
+                uid: pair.uid,
+                emoji: pair.emoji,
+                roleMode: 'create',
+                roleName: e.target.value,
+              })
+            }
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Nom du rôle à créer pour la paire ${index + 1}`}
+          />
+        </div>
+      )}
+
+      {/* Supprimer */}
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={!canRemove}
+        aria-label={`Supprimer la paire ${index + 1}`}
+        className="mt-4 rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+/**
+ * Écran 3 : formulaire de création (mode='new') ou d'édition (mode='edit')
+ * d'un message reaction-roles.
+ */
+export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
+  const isNew = props.mode === 'new';
+
+  const [label, setLabel] = useState<string>(
+    isNew ? props.template.defaultLabel : props.existing.label,
+  );
+  const [channelId, setChannelId] = useState<string>(isNew ? '' : props.existing.channelId);
+  const [message, setMessage] = useState<string>(isNew ? props.template.defaultMessage : '');
+  const [mode, setMode] = useState<EditorMode>(
+    isNew ? props.template.defaultMode : props.existing.mode,
+  );
+  const [pairs, setPairs] = useState<PairDraft[]>(
+    isNew ? pairsFromTemplate(props.template) : pairsFromExisting(props.existing),
+  );
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  // Validation
+  const isValid =
+    label.trim() !== '' &&
+    (isNew ? channelId !== '' && message.trim() !== '' : true) &&
+    pairs.length > 0 &&
+    pairs.every(isPairValid);
+
+  const handlePairChange = (index: number, updated: PairDraft) => {
+    setPairs((prev) => prev.map((p, i) => (i === index ? updated : p)));
+  };
+
+  const handleAddPair = () => {
+    const newPair: PairDraft = { uid: nextUid(), emoji: '', roleMode: 'create', roleName: '' };
+    setPairs((prev) => [...prev, newPair]);
+  };
+
+  const handleRemovePair = (index: number) => {
+    setPairs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const buildApiPairs = (): PublishReactionRoleInput['pairs'] => {
+    return pairs.map((p) => {
+      const emoji = parseEmoji(p.emoji);
+      if (!emoji) throw new Error(`Emoji invalide : "${p.emoji}"`);
+      if (p.roleMode === 'existing') {
+        return { emoji, roleId: p.roleId };
+      }
+      return { emoji, roleName: p.roleName } as const;
+    });
+  };
+
+  const handleSubmit = () => {
+    if (!isValid) return;
+    setFeedback(null);
+
+    startTransition(async () => {
+      if (isNew) {
+        const apiPairs = buildApiPairs();
+        const result = await publishReactionRole(props.guildId, {
+          label: label.trim(),
+          channelId,
+          message: message.trim(),
+          mode,
+          pairs: apiPairs,
+        });
+
+        if (!result.ok) {
+          setFeedback({
+            kind: 'error',
+            message: result.detail ?? result.reason,
+          });
+          return;
+        }
+
+        // Reconstruit le client object depuis les données retournées + state local
+        const clientPairs = pairs.map((p) => {
+          const emoji = buildClientEmoji(p.emoji);
+          const roleId = p.roleMode === 'existing' ? p.roleId : '';
+          return {
+            emoji: emoji ?? ({ type: 'unicode', value: p.emoji } as const),
+            roleId,
+          };
+        });
+
+        props.onSaved({
+          id: result.id,
+          label: label.trim(),
+          channelId,
+          messageId: result.messageId,
+          mode,
+          pairs: clientPairs,
+        });
+      } else {
+        // Mode édition
+        const apiPairs = buildApiPairs();
+        const result = await syncReactionRole(props.guildId, props.existing.messageId, {
+          label: label.trim(),
+          mode,
+          pairs: apiPairs,
+        });
+
+        if (!result.ok) {
+          setFeedback({
+            kind: 'error',
+            message: result.reason,
+          });
+          return;
+        }
+
+        const clientPairs = pairs.map((p) => {
+          const emoji = buildClientEmoji(p.emoji);
+          const roleId = p.roleMode === 'existing' ? p.roleId : '';
+          return {
+            emoji: emoji ?? ({ type: 'unicode', value: p.emoji } as const),
+            roleId,
+          };
+        });
+
+        props.onSaved({
+          ...props.existing,
+          label: label.trim(),
+          mode,
+          pairs: clientPairs,
+        });
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* En-tête */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold">
+          {isNew ? 'Créer un reaction-role' : `Éditer "${props.existing.label}"`}
+        </h3>
+        <Button type="button" variant="secondary" onClick={props.onCancel}>
+          ← Retour
+        </Button>
+      </div>
+
+      {/* Label */}
+      <div className="space-y-1">
+        <label className="block text-sm font-medium" htmlFor="rr-label">
+          Label
+        </label>
+        <input
+          id="rr-label"
+          type="text"
+          value={label}
+          placeholder="Ex. Couleurs de nom"
+          maxLength={64}
+          onChange={(e) => setLabel(e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </div>
+
+      {/* Salon (nouveau uniquement) */}
+      {isNew ? (
+        <div className="space-y-1">
+          <label className="block text-sm font-medium" htmlFor="rr-channel">
+            Salon de publication
+          </label>
+          <select
+            id="rr-channel"
+            value={channelId}
+            onChange={(e) => setChannelId(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="">— choisir un salon —</option>
+            {props.channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">Salon</p>
+          <p className="text-sm">
+            #
+            {props.channels.find((c) => c.id === props.existing.channelId)?.name ??
+              props.existing.channelId}
+            <span className="ml-2 text-xs text-muted-foreground">
+              (non modifiable — supprime et recrée pour changer)
+            </span>
+          </p>
+        </div>
+      )}
+
+      {/* Message (nouveau uniquement) */}
+      {isNew ? (
+        <div className="space-y-1">
+          <label className="block text-sm font-medium" htmlFor="rr-message">
+            Contenu du message Discord
+          </label>
+          <textarea
+            id="rr-message"
+            value={message}
+            placeholder="Le texte qui apparaîtra dans le message Discord…"
+            maxLength={2000}
+            rows={3}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <p className="text-xs text-muted-foreground">{message.length}/2000</p>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">Message Discord</p>
+          <p className="text-xs text-muted-foreground">
+            Non modifiable — supprime et recrée pour changer le texte.
+          </p>
+        </div>
+      )}
+
+      {/* Mode */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Mode d'attribution</legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {(
+            [
+              {
+                value: 'normal',
+                label: 'Normal',
+                desc: 'Plusieurs rôles possibles',
+              },
+              {
+                value: 'unique',
+                label: 'Unique',
+                desc: 'Un seul rôle à la fois',
+              },
+              {
+                value: 'verifier',
+                label: 'Vérificateur',
+                desc: 'Attribue un rôle sans retrait',
+              },
+            ] as const
+          ).map((m) => (
+            <label
+              key={m.value}
+              className={`flex cursor-pointer flex-col gap-1 rounded-md border p-3 text-sm transition-colors ${
+                mode === m.value
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-muted-foreground'
+              }`}
+            >
+              <input
+                type="radio"
+                name="rr-mode"
+                value={m.value}
+                checked={mode === m.value}
+                onChange={() => setMode(m.value)}
+                className="sr-only"
+              />
+              <span className="font-medium">{m.label}</span>
+              <span className="text-xs text-muted-foreground">{m.desc}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {/* Paires emoji → rôle */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">
+            Paires emoji → rôle{' '}
+            <span className="text-xs text-muted-foreground">
+              (collez un emoji unicode ou la forme &lt;:nom:id&gt;)
+            </span>
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={handleAddPair}
+            disabled={pairs.length >= 20}
+          >
+            + Ajouter
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {pairs.map((pair, i) => (
+            <PairRow
+              key={pair.uid}
+              pair={pair}
+              index={i}
+              roles={props.roles}
+              canRemove={pairs.length > 1}
+              onChange={(updated) => handlePairChange(i, updated)}
+              onRemove={() => handleRemovePair(i)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Feedback */}
+      {feedback !== null ? (
+        <p
+          role="status"
+          className={
+            feedback.kind === 'success'
+              ? 'text-sm text-green-700 dark:text-green-300'
+              : 'text-sm text-red-700 dark:text-red-300'
+          }
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+
+      {/* Actions */}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={props.onCancel}>
+          Annuler
+        </Button>
+        <Button type="button" disabled={!isValid || isPending} onClick={handleSubmit}>
+          {isPending
+            ? isNew
+              ? 'Publication…'
+              : 'Enregistrement…'
+            : isNew
+              ? 'Publier'
+              : 'Enregistrer'}
+        </Button>
+      </div>
+    </div>
+  );
+}
