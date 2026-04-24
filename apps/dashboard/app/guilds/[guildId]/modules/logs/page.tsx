@@ -135,11 +135,22 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
 
         <PageTitle
           title={logsModule.name}
-          description={
-            logsModule.description ||
-            `Configuration du module ${logsModule.name} (v${logsModule.version}).`
-          }
+          description="Publie dans un salon Discord les événements importants de ton serveur — arrivées, départs, modifications de rôles, messages supprimés, etc. Utile pour un audit de modération ou un suivi des changements."
         />
+
+        <div className="mt-2 flex items-center gap-2">
+          <span
+            className={
+              logsModule.enabled === false
+                ? 'inline-block h-2 w-2 rounded-full bg-muted-foreground/50'
+                : 'inline-block h-2 w-2 rounded-full bg-emerald-500'
+            }
+            aria-hidden="true"
+          />
+          <span className="text-xs text-muted-foreground">
+            {logsModule.enabled === false ? 'Module désactivé' : 'Module activé'}
+          </span>
+        </div>
 
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
