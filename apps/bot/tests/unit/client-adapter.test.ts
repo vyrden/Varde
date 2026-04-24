@@ -233,5 +233,54 @@ describe('attachDiscordClient — events minimaux (régression)', () => {
   });
 });
 
+describe('attachDiscordClient — reactions', () => {
+  it('messageReactionAdd propage guildId + emoji unicode', () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+    const reaction = {
+      message: { guildId: '111', channelId: '222', id: '333' },
+      emoji: { id: null, name: '🎉', animated: false },
+    };
+    const user = { id: '42' };
+    fake.trigger('messageReactionAdd', reaction, user);
+    expect(dispatcher.calls).toHaveLength(1);
+    expect(dispatcher.calls[0]).toMatchObject({
+      kind: 'messageReactionAdd',
+      guildId: '111',
+      channelId: '222',
+      messageId: '333',
+      userId: '42',
+      emoji: { type: 'unicode', value: '🎉' },
+    });
+  });
+
+  it('messageReactionAdd avec emoji custom emet type custom', () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+    const reaction = {
+      message: { guildId: '111', channelId: '222', id: '333' },
+      emoji: { id: '999888777666555444', name: 'rocket', animated: true },
+    };
+    fake.trigger('messageReactionAdd', reaction, { id: '42' });
+    expect(dispatcher.calls[0]).toMatchObject({
+      emoji: { type: 'custom', id: '999888777666555444', name: 'rocket', animated: true },
+    });
+  });
+
+  it('messageReactionAdd sans guildId (DM) est ignoré', () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+    fake.trigger(
+      'messageReactionAdd',
+      { message: { guildId: null, channelId: '1', id: '2' }, emoji: { id: null, name: '🎉' } },
+      { id: '42' },
+    );
+    expect(dispatcher.calls).toHaveLength(0);
+  });
+});
+
 // Empêche le linter de se plaindre de vi non utilisé si aucun mock inline.
 void vi;

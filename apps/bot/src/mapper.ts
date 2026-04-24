@@ -1,4 +1,12 @@
-import type { ChannelId, CoreEvent, GuildId, MessageId, RoleId, UserId } from '@varde/contracts';
+import type {
+  ChannelId,
+  CoreEvent,
+  Emoji,
+  GuildId,
+  MessageId,
+  RoleId,
+  UserId,
+} from '@varde/contracts';
 
 /**
  * Traduction discord.js ↔ `CoreEvent` (contract @varde/contracts).
@@ -22,6 +30,8 @@ export type DiscordEventKind =
   | 'messageCreate'
   | 'messageUpdate'
   | 'messageDelete'
+  | 'messageReactionAdd'
+  | 'messageReactionRemove'
   | 'channelCreate'
   | 'channelUpdate'
   | 'channelDelete'
@@ -85,6 +95,26 @@ interface MessageDeleteInput {
   readonly messageId: string;
   readonly authorId: string | null;
   readonly deletedAt: number;
+}
+
+interface MessageReactionAddInput {
+  readonly kind: 'messageReactionAdd';
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly userId: string;
+  readonly emoji: Emoji;
+  readonly reactedAt: number;
+}
+
+interface MessageReactionRemoveInput {
+  readonly kind: 'messageReactionRemove';
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly userId: string;
+  readonly emoji: MessageReactionAddInput['emoji'];
+  readonly reactedAt: number;
 }
 
 interface ChannelCreateInput {
@@ -167,6 +197,8 @@ export type DiscordEventInput =
   | MessageCreateInput
   | MessageUpdateInput
   | MessageDeleteInput
+  | MessageReactionAddInput
+  | MessageReactionRemoveInput
   | ChannelCreateInput
   | ChannelUpdateInput
   | ChannelDeleteInput
@@ -237,6 +269,26 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         messageId: input.messageId as MessageId,
         authorId: input.authorId === null ? null : (input.authorId as UserId),
         deletedAt: input.deletedAt,
+      };
+    case 'messageReactionAdd':
+      return {
+        type: 'guild.messageReactionAdd',
+        guildId: input.guildId as GuildId,
+        channelId: input.channelId as ChannelId,
+        messageId: input.messageId as MessageId,
+        userId: input.userId as UserId,
+        emoji: input.emoji,
+        reactedAt: input.reactedAt,
+      };
+    case 'messageReactionRemove':
+      return {
+        type: 'guild.messageReactionRemove',
+        guildId: input.guildId as GuildId,
+        channelId: input.channelId as ChannelId,
+        messageId: input.messageId as MessageId,
+        userId: input.userId as UserId,
+        emoji: input.emoji,
+        reactedAt: input.reactedAt,
       };
     case 'channelCreate':
       return {

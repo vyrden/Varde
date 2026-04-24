@@ -87,6 +87,21 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.sendEmbed` nécessite un host (apps/bot).',
     );
   },
+  addReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.addReaction` nécessite un host (apps/bot).',
+    );
+  },
+  removeUserReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeUserReaction` nécessite un host (apps/bot).',
+    );
+  },
+  removeOwnReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeOwnReaction` nécessite un host (apps/bot).',
+    );
+  },
 });
 
 const modulesStub: ModulesService = Object.freeze({

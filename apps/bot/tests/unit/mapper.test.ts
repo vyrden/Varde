@@ -258,6 +258,45 @@ describe('mapDiscordEvent — salons, rôles, guild', () => {
   });
 });
 
+describe('mapDiscordEvent — reactions', () => {
+  const baseUnicode = {
+    kind: 'messageReactionAdd' as const,
+    guildId: '111',
+    channelId: '222',
+    messageId: '333',
+    userId: '42',
+    emoji: { type: 'unicode' as const, value: '🎉' },
+    reactedAt: AT,
+  };
+
+  it('messageReactionAdd avec emoji unicode → guild.messageReactionAdd', () => {
+    const event = mapDiscordEvent(baseUnicode);
+    expect(event).toMatchObject({
+      type: 'guild.messageReactionAdd',
+      guildId: '111',
+      channelId: '222',
+      messageId: '333',
+      userId: '42',
+      emoji: { type: 'unicode', value: '🎉' },
+    });
+  });
+
+  it('messageReactionAdd avec emoji custom', () => {
+    const event = mapDiscordEvent({
+      ...baseUnicode,
+      emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    });
+    expect(event).toMatchObject({
+      emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    });
+  });
+
+  it('messageReactionRemove → guild.messageReactionRemove', () => {
+    const event = mapDiscordEvent({ ...baseUnicode, kind: 'messageReactionRemove' });
+    expect(event.type).toBe('guild.messageReactionRemove');
+  });
+});
+
 describe('mapDiscordEvent — parité avec le schéma Zod', () => {
   it('chaque sortie passe parseCoreEvent sans erreur', () => {
     const fixtures: DiscordEventInput[] = [
@@ -336,6 +375,24 @@ describe('mapDiscordEvent — parité avec le schéma Zod', () => {
       { kind: 'roleDelete', guildId: '111', roleId: 'r1', deletedAt: AT },
       { kind: 'guildCreate', guildId: '111', joinedAt: AT },
       { kind: 'guildDelete', guildId: '111', leftAt: AT },
+      {
+        kind: 'messageReactionAdd',
+        guildId: '111',
+        channelId: '222',
+        messageId: '333',
+        userId: '42',
+        emoji: { type: 'unicode', value: '🎉' },
+        reactedAt: AT,
+      },
+      {
+        kind: 'messageReactionRemove',
+        guildId: '111',
+        channelId: '222',
+        messageId: '333',
+        userId: '42',
+        emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+        reactedAt: AT,
+      },
     ];
     for (const input of fixtures) {
       expect(() => roundTrip(input)).not.toThrow();

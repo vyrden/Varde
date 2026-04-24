@@ -1,5 +1,17 @@
 import type { ChannelId, GuildId, Logger, UserId } from '@varde/contracts';
-import type { Channel, Client, Guild, GuildMember, Interaction, Message, Role } from 'discord.js';
+import type {
+  Channel,
+  Client,
+  Guild,
+  GuildMember,
+  Interaction,
+  Message,
+  MessageReaction,
+  PartialMessageReaction,
+  PartialUser,
+  Role,
+  User,
+} from 'discord.js';
 
 import type { BotDispatcher } from './dispatcher.js';
 import type { DiscordEventInput } from './mapper.js';
@@ -189,6 +201,36 @@ const guildDeleteInput = (guild: Guild): DiscordEventInput => ({
   leftAt: Date.now(),
 });
 
+const reactionInput = (
+  reaction: MessageReaction | PartialMessageReaction,
+  user: User | PartialUser,
+  kind: 'messageReactionAdd' | 'messageReactionRemove',
+): DiscordEventInput | null => {
+  const guildId = reaction.message.guildId;
+  if (!guildId) return null;
+  const emojiNode = reaction.emoji;
+  const emoji = emojiNode.id
+    ? {
+        type: 'custom' as const,
+        id: emojiNode.id,
+        name: emojiNode.name ?? '',
+        animated: emojiNode.animated ?? false,
+      }
+    : {
+        type: 'unicode' as const,
+        value: emojiNode.name ?? '',
+      };
+  return {
+    kind,
+    guildId,
+    channelId: reaction.message.channelId,
+    messageId: reaction.message.id,
+    userId: user.id,
+    emoji,
+    reactedAt: Date.now(),
+  };
+};
+
 /**
  * Attache les handlers discord.js au dispatcher. Retourne une
  * fonction `detach` à appeler au shutdown pour retirer proprement
@@ -236,6 +278,12 @@ export function attachDiscordClient(
   on('roleDelete', (role) => dispatch(roleInput(role as Role, 'roleDelete')));
   on('guildCreate', (guild) => dispatch(guildCreateInput(guild as Guild)));
   on('guildDelete', (guild) => dispatch(guildDeleteInput(guild as Guild)));
+  on('messageReactionAdd', (reaction, user) =>
+    dispatch(reactionInput(reaction as MessageReaction, user as User, 'messageReactionAdd')),
+  );
+  on('messageReactionRemove', (reaction, user) =>
+    dispatch(reactionInput(reaction as MessageReaction, user as User, 'messageReactionRemove')),
+  );
 
   // Interaction routing.
   const interactionHandler = async (interaction: Interaction): Promise<void> => {

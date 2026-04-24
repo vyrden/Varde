@@ -4,10 +4,14 @@ import {
   DiscordSendError,
   type DiscordSendErrorReason,
   type DiscordService,
+  type Emoji,
   type Logger,
+  type MessageId,
   type ModuleId,
   type UIMessage,
+  type UserId,
 } from '@varde/contracts';
+import type { Client } from 'discord.js';
 
 /**
  * Implémentation concrète du `DiscordService` : un wrapper minimal
@@ -42,6 +46,13 @@ export interface CreateDiscordServiceOptions {
   readonly rateLimit?: RateLimitConfig;
   /** Horloge injectable (tests). Défaut : `Date.now`. */
   readonly now?: () => number;
+  /**
+   * Client discord.js. Requis pour les méthodes qui accèdent
+   * directement aux messages/réactions (addReaction, removeUserReaction,
+   * removeOwnReaction). Optionnel pour rester rétrocompatible avec les
+   * tests qui ne couvrent que sendMessage/sendEmbed.
+   */
+  readonly client?: Client;
 }
 
 interface SlidingWindow {
@@ -73,15 +84,21 @@ const consume = (window: SlidingWindow, nowMs: number): boolean => {
 /**
  * Codes d'erreur Discord (REST API v10) mappés sur nos raisons typées.
  * - 10003 = Unknown Channel
- * - 10008 = Unknown Message (rattaché à channel-not-found : situation équivalente pour l'admin)
+ * - 10008 = Unknown Message
+ * - 10014 = Unknown Emoji
+ * - 20028 = Slow Mode
  * - 50001 = Missing Access
  * - 50013 = Missing Permissions
+ * - 429  = Rate Limited (HTTP)
  */
 const DISCORD_CODE_TO_REASON: Readonly<Record<number, DiscordSendErrorReason>> = Object.freeze({
   10003: 'channel-not-found',
-  10008: 'channel-not-found',
+  10008: 'message-not-found',
+  10014: 'emoji-not-found',
+  20028: 'rate-limit-exhausted',
   50001: 'missing-permission',
   50013: 'missing-permission',
+  429: 'rate-limit-exhausted',
 });
 
 const classifyError = (error: unknown): DiscordSendErrorReason => {
@@ -99,13 +116,34 @@ const classifyError = (error: unknown): DiscordSendErrorReason => {
   return 'unknown';
 };
 
+/** Forme minimale d'une réaction discord.js dont on a besoin. */
+interface ReactionLike {
+  readonly emoji: { readonly id: string | null; readonly name: string | null };
+  readonly users: { remove: (userId: string) => Promise<unknown> };
+}
+
+/** Forme minimale d'un Message discord.js dont on a besoin. */
+interface MessageLike {
+  readonly react: (emoji: string) => Promise<unknown>;
+  readonly reactions: {
+    readonly cache: Map<string, ReactionLike>;
+  };
+}
+
+/** Forme minimale d'un salon texte discord.js pour fetch de messages. */
+interface TextChannelLike {
+  readonly messages: {
+    readonly fetch: (id: string) => Promise<MessageLike>;
+  };
+}
+
 /**
  * Construit un `DiscordService`. Chaque instance a son propre état de
  * rate limiting ; produire un service par module donne l'isolation
  * demandée par le plan.
  */
 export function createDiscordService(options: CreateDiscordServiceOptions): DiscordService {
-  const { sender, moduleId } = options;
+  const { sender, moduleId, client } = options;
   const logger = options.logger.child({
     component: 'discord-service',
     ...(moduleId ? { moduleId } : {}),
@@ -172,6 +210,90 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           },
         });
       }
+    },
+
+    async addReaction(channelId: ChannelId, messageId: MessageId, emoji: Emoji): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.addReaction : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      let message: MessageLike;
+      try {
+        message = await textChannel.messages.fetch(messageId);
+      } catch {
+        throw new DiscordSendError(
+          'message-not-found',
+          'DiscordService.addReaction : message introuvable',
+        );
+      }
+      const emojiApiId = emoji.type === 'unicode' ? emoji.value : `${emoji.name}:${emoji.id}`;
+      try {
+        await message.react(emojiApiId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.addReaction : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeUserReaction(
+      channelId: ChannelId,
+      messageId: MessageId,
+      userId: UserId,
+      emoji: Emoji,
+    ): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.removeUserReaction : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      let message: MessageLike;
+      try {
+        message = await textChannel.messages.fetch(messageId);
+      } catch {
+        throw new DiscordSendError(
+          'message-not-found',
+          'DiscordService.removeUserReaction : message introuvable',
+        );
+      }
+      const reaction = [...message.reactions.cache.values()].find((r) => {
+        if (emoji.type === 'unicode') return r.emoji.name === emoji.value;
+        return r.emoji.id === emoji.id;
+      });
+      if (!reaction) return;
+      try {
+        await reaction.users.remove(userId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.removeUserReaction : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeOwnReaction(
+      channelId: ChannelId,
+      messageId: MessageId,
+      emoji: Emoji,
+    ): Promise<void> {
+      const botUserId = client?.user?.id;
+      if (!botUserId) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeOwnReaction : client non connecté',
+        );
+      }
+      await this.removeUserReaction(channelId, messageId, botUserId as UserId, emoji);
     },
   };
 }
