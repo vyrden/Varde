@@ -7,6 +7,8 @@ import {
   guildMemberJoinSchema,
   guildMessageCreateSchema,
   guildMessageEditSchema,
+  guildMessageReactionAddSchema,
+  guildMessageReactionRemoveSchema,
   guildRoleDeleteSchema,
   guildRoleUpdateSchema,
   isCoreEvent,
@@ -345,6 +347,70 @@ describe('guildRoleUpdateSchema', () => {
     } else {
       throw new Error('narrowing cassé');
     }
+  });
+});
+
+describe('guildMessageReactionAddSchema et RemoveSchema', () => {
+  const unicodePayload = {
+    type: 'guild.messageReactionAdd',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    messageId: SNOWFLAKE_C,
+    userId: SNOWFLAKE_D,
+    emoji: { type: 'unicode', value: '🎉' },
+    reactedAt: 1_700_000_000_000,
+  };
+
+  const customPayload = {
+    type: 'guild.messageReactionAdd',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    messageId: SNOWFLAKE_C,
+    userId: SNOWFLAKE_D,
+    emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    reactedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload valide avec emoji unicode', () => {
+    expect(guildMessageReactionAddSchema.parse(unicodePayload)).toEqual(unicodePayload);
+  });
+
+  it('accepte un payload valide avec emoji custom', () => {
+    expect(guildMessageReactionAddSchema.parse(customPayload)).toEqual(customPayload);
+  });
+
+  it('refuse un emoji sans discriminant type', () => {
+    const bad = { ...unicodePayload, emoji: { value: '🎉' } };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un emoji unicode avec value vide', () => {
+    const bad = { ...unicodePayload, emoji: { type: 'unicode', value: '' } };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un emoji custom avec id non-snowflake', () => {
+    const bad = {
+      ...customPayload,
+      emoji: { type: 'custom', id: 'abc', name: 'x', animated: false },
+    };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un userId non-snowflake', () => {
+    const bad = { ...unicodePayload, userId: 'pas-un-snowflake' };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('guildMessageReactionRemoveSchema a la même forme (avec type différent)', () => {
+    const payload = { ...unicodePayload, type: 'guild.messageReactionRemove' };
+    expect(guildMessageReactionRemoveSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('coreEventSchema accepte les 2 nouveaux events via la union', () => {
+    expect(coreEventSchema.safeParse(unicodePayload).success).toBe(true);
+    const removePayload = { ...unicodePayload, type: 'guild.messageReactionRemove' };
+    expect(coreEventSchema.safeParse(removePayload).success).toBe(true);
   });
 });
 

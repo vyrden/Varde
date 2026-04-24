@@ -128,6 +128,8 @@ export class ModuleError extends AppError {
 /** Raisons d'un échec d'envoi Discord, stables dans les logs et API. */
 export type DiscordSendErrorReason =
   | 'channel-not-found'
+  | 'message-not-found'
+  | 'emoji-not-found'
   | 'missing-permission'
   | 'rate-limit-exhausted'
   | 'unknown';

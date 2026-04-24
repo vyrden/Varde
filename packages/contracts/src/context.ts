@@ -1,10 +1,11 @@
 import type { ZodType } from 'zod';
 
-import type { CoreEvent, CoreEventType } from './events.js';
+import type { CoreEvent, CoreEventType, Emoji } from './events.js';
 import type {
   ActionId,
   ChannelId,
   GuildId,
+  MessageId,
   ModuleId,
   PermissionId,
   RoleId,
@@ -140,6 +141,35 @@ export interface DiscordService {
    * - `unknown` : toute autre erreur réseau / API.
    */
   readonly sendEmbed: (channelId: ChannelId, message: UIMessage) => Promise<void>;
+
+  /**
+   * Pose une réaction du bot sur un message.
+   * `emoji` est un Emoji (unicode ou custom).
+   * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'message-not-found' | 'missing-permission' | 'emoji-not-found' | 'rate-limit-exhausted' | 'unknown'`.
+   */
+  readonly addReaction: (channelId: ChannelId, messageId: MessageId, emoji: Emoji) => Promise<void>;
+
+  /**
+   * Retire la réaction d'un user spécifique sur un message (nécessite ManageMessages).
+   * Utilisé par le mode Unique de reaction-roles pour basculer d'un rôle à un autre.
+   */
+  readonly removeUserReaction: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    userId: UserId,
+    emoji: Emoji,
+  ) => Promise<void>;
+
+  /**
+   * Retire la propre réaction du bot sur un message (raccourci pour
+   * removeUserReaction(..., botUserId, ...) — le bot n'a pas besoin de
+   * connaître son userId).
+   */
+  readonly removeOwnReaction: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    emoji: Emoji,
+  ) => Promise<void>;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */

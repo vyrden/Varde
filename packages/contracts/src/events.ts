@@ -36,6 +36,18 @@ const moduleIdSchema = z.custom<ModuleId>(isModuleId);
 /** Timestamp en millisecondes depuis l'epoch. */
 const timestampSchema = z.number().int().nonnegative();
 
+/** Emoji unicode ou custom Discord (discriminated union). */
+const emojiSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('unicode'), value: z.string().min(1) }),
+  z.object({
+    type: z.literal('custom'),
+    id: z.string().regex(/^\d{17,19}$/, 'emoji.id doit être un snowflake Discord'),
+    name: z.string().min(1),
+    animated: z.boolean(),
+  }),
+]);
+export type Emoji = z.infer<typeof emojiSchema>;
+
 // --- Événements Discord : membres ---
 
 export const guildMemberJoinSchema = z.object({
@@ -101,6 +113,28 @@ export const guildMessageDeleteSchema = z.object({
   deletedAt: timestampSchema,
 });
 export type GuildMessageDeleteEvent = z.infer<typeof guildMessageDeleteSchema>;
+
+export const guildMessageReactionAddSchema = z.object({
+  type: z.literal('guild.messageReactionAdd'),
+  guildId: guildIdSchema,
+  channelId: channelIdSchema,
+  messageId: messageIdSchema,
+  userId: userIdSchema,
+  emoji: emojiSchema,
+  reactedAt: timestampSchema,
+});
+export type GuildMessageReactionAddEvent = z.infer<typeof guildMessageReactionAddSchema>;
+
+export const guildMessageReactionRemoveSchema = z.object({
+  type: z.literal('guild.messageReactionRemove'),
+  guildId: guildIdSchema,
+  channelId: channelIdSchema,
+  messageId: messageIdSchema,
+  userId: userIdSchema,
+  emoji: emojiSchema,
+  reactedAt: timestampSchema,
+});
+export type GuildMessageReactionRemoveEvent = z.infer<typeof guildMessageReactionRemoveSchema>;
 
 // --- Événements Discord : salons ---
 
@@ -249,6 +283,8 @@ export const coreEventSchema = z.discriminatedUnion('type', [
   guildMessageCreateSchema,
   guildMessageEditSchema,
   guildMessageDeleteSchema,
+  guildMessageReactionAddSchema,
+  guildMessageReactionRemoveSchema,
   guildChannelCreateSchema,
   guildChannelUpdateSchema,
   guildChannelDeleteSchema,
