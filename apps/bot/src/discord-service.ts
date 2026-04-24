@@ -137,6 +137,8 @@ interface TextChannelLike {
   readonly messages: {
     readonly fetch: (id: string) => Promise<MessageLike>;
   };
+  /** `send` est disponible sur les salons textuels ; retourne un Message. */
+  readonly send?: (content: string) => Promise<{ readonly id: string }>;
 }
 
 /** Forme minimale d'un GuildMember discord.js dont on a besoin. */
@@ -152,6 +154,15 @@ interface GuildMemberLike {
 interface GuildLike {
   readonly members: {
     readonly fetch: (userId: string) => Promise<GuildMemberLike>;
+  };
+  readonly roles: {
+    readonly create: (options: {
+      readonly name: string;
+      readonly mentionable?: boolean;
+      readonly hoist?: boolean;
+      /** discord.js v14.26+ : couleurs via `colors.primaryColor`. */
+      readonly colors?: { readonly primaryColor?: number };
+    }) => Promise<{ readonly id: string }>;
   };
 }
 
@@ -374,6 +385,63 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         return false;
       }
       return member.roles.cache.has(roleId);
+    },
+
+    async postMessage(channelId: ChannelId, content: string): Promise<{ readonly id: MessageId }> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.postMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.send) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.postMessage : le salon ne supporte pas send()',
+        );
+      }
+      try {
+        const message = await textChannel.send(content);
+        return { id: message.id as MessageId };
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.postMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async createRole(
+      guildId: GuildId,
+      params: {
+        readonly name: string;
+        readonly mentionable?: boolean;
+        readonly hoist?: boolean;
+        readonly color?: number;
+      },
+    ): Promise<{ readonly id: RoleId }> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.createRole : guild introuvable');
+      }
+      try {
+        const role = await guild.roles.create({
+          name: params.name,
+          mentionable: params.mentionable ?? false,
+          hoist: params.hoist ?? false,
+          ...(params.color !== undefined ? { colors: { primaryColor: params.color } } : {}),
+        });
+        return { id: role.id as RoleId };
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.createRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     },
   };
 }

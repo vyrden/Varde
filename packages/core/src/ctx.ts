@@ -117,6 +117,16 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.memberHasRole` nécessite un host (apps/bot).',
     );
   },
+  postMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.postMessage` nécessite un host (apps/bot).',
+    );
+  },
+  createRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.createRole` nécessite un host (apps/bot).',
+    );
+  },
 });
 
 const modulesStub: ModulesService = Object.freeze({

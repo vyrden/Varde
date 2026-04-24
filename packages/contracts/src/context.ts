@@ -191,6 +191,37 @@ export interface DiscordService {
    * Utilisé par reaction-roles en mode unique pour détecter le rôle courant.
    */
   readonly memberHasRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<boolean>;
+
+  /**
+   * Poste un message texte dans un salon et retourne son identifiant.
+   * Variante de `sendMessage` qui expose le `messageId` pour les modules
+   * qui doivent persister une référence au message posté (reaction-roles).
+   *
+   * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly postMessage: (
+    channelId: ChannelId,
+    content: string,
+  ) => Promise<{ readonly id: MessageId }>;
+
+  /**
+   * Crée un rôle dans une guild. Retourne le `roleId` pour que le module
+   * appelant puisse persister la référence. Requiert la permission
+   * ManageRoles côté bot.
+   *
+   * Lève `DiscordSendError('missing-permission')` si le bot n'a pas les droits,
+   * `DiscordSendError('unknown')` sinon.
+   */
+  readonly createRole: (
+    guildId: GuildId,
+    params: {
+      readonly name: string;
+      readonly mentionable?: boolean;
+      readonly hoist?: boolean;
+      /** Couleur RGB encodée en entier (0x000000 à 0xFFFFFF). */
+      readonly color?: number;
+    },
+  ) => Promise<{ readonly id: RoleId }>;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */

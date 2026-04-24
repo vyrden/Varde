@@ -60,6 +60,10 @@ export {
   registerOnboardingRoutes,
 } from './routes/onboarding.js';
 export {
+  type RegisterReactionRolesRoutesOptions,
+  registerReactionRolesRoutes,
+} from './routes/reaction-roles.js';
+export {
   type RegisterUnboundPermissionsRoutesOptions,
   registerUnboundPermissionsRoutes,
 } from './routes/unbound-permissions.js';
