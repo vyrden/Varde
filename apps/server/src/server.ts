@@ -12,6 +12,7 @@ import {
   reconcileOnboardingSessions,
   registerAiSettingsRoutes,
   registerAuditRoutes,
+  registerBotSettingsRoutes,
   registerDiscordChannelsRoutes,
   registerDiscordEmojisRoutes,
   registerGuildsRoutes,
@@ -524,6 +525,7 @@ export async function createServer<D extends DbDriver>(
   registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });
   registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });
+  registerBotSettingsRoutes(api, { config, discord });
   registerOnboardingRoutes(api, {
     client,
     discord,

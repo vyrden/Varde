@@ -26,6 +26,15 @@ export {
   registerAuditRoutes,
 } from './routes/audit.js';
 export {
+  BOT_LANGUAGES,
+  BOT_TIMEZONES,
+  type BotLanguage,
+  type BotSettingsDto,
+  type BotTimezone,
+  type RegisterBotSettingsRoutesOptions,
+  registerBotSettingsRoutes,
+} from './routes/bot-settings.js';
+export {
   type CreateGuildChannelPayload,
   type CreateGuildChannelResult,
   type GuildRoleDto,
