@@ -1,4 +1,5 @@
-import { PageHeader } from '@varde/ui';
+import { Separator } from '@varde/ui';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -22,17 +23,16 @@ interface PermissionsPageProps {
 }
 
 /**
- * Page de gestion des bindings permission → rôle (PR 4.1d).
+ * Page de gestion des bindings permission → rôle. Header custom
+ * (breadcrumb « Paramètres → Permissions », icône clé blurple, titre,
+ * description) + Separator, puis l'éditeur 2 colonnes (liste des
+ * modules à gauche avec recherche/filtres, sidebar à droite avec
+ * résumé / légende / à propos).
  *
- * Server component qui charge en parallèle la liste des guilds
- * administrables, les modules chargés (avec leurs permissions
- * déclarées), les bindings existants et les rôles Discord. Le rendu
- * interactif (bind / unbind) est délégué au composant client
- * `PermissionsEditor`.
- *
- * Le query param `?focus=<moduleId>` (produit par `UnboundPermissionsBanner`)
- * est transmis au composant via un `data-focus` et un fragment anchor
- * qui scrolle automatiquement vers la section du module concerné.
+ * Le query param `?focus=<moduleId>` (produit par
+ * `UnboundPermissionsBanner`) est transmis via `data-focus` et un
+ * fragment anchor qui scrolle automatiquement vers la section du
+ * module concerné.
  */
 export default async function PermissionsPage({
   params,
@@ -64,7 +64,6 @@ export default async function PermissionsPage({
   const guild = guilds.find((g) => g.id === guildId);
   if (!guild) notFound();
 
-  // Construit l'index permissionId → roleIds liés pour initialiser l'éditeur.
   const bindingsByPermission = new Map<string, string[]>();
   for (const b of bindings) {
     const list = bindingsByPermission.get(b.permissionId) ?? [];
@@ -72,8 +71,6 @@ export default async function PermissionsPage({
     bindingsByPermission.set(b.permissionId, list);
   }
 
-  // Filtre les modules qui déclarent au moins une permission (les autres
-  // n'ont rien à afficher dans cette page).
   const modulesData: readonly ModulePermissionsData[] = modules
     .filter((m) => m.permissions.length > 0)
     .map((m) => ({
@@ -87,15 +84,43 @@ export default async function PermissionsPage({
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={[{ label: 'Paramètres' }, { label: 'Permissions' }]}
-        title="Permissions des modules"
-        description="Liez les permissions déclarées par chaque module à des rôles Discord. Une permission sans rôle bloque toutes les actions correspondantes."
-      />
-      <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
-        {/* Scroll vers le module ciblé par ?focus= au montage */}
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
+          <Link
+            href={`/guilds/${guildId}/settings/permissions`}
+            className="font-medium uppercase tracking-wider hover:text-foreground"
+          >
+            Paramètres
+          </Link>
+          <span aria-hidden="true" className="mx-2">
+            →
+          </span>
+          <span className="font-medium uppercase tracking-wider text-foreground">Permissions</span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="6" cy="10" r="3.2" stroke="currentColor" strokeWidth="1.6" fill="none" />
+              <path
+                d="M8.3 8L13.5 2.8M11.5 4.8L13 6.3M10 6.3L11.5 7.8"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <h1 className="text-[22px] font-bold leading-tight text-foreground">
+            Permissions des modules
+          </h1>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Liez les permissions de chaque module à des rôles Discord. Une permission sans rôle bloque
+          toutes les actions correspondantes.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
         {focus !== undefined && focus.length > 0 ? <FocusScroller targetId={focus} /> : null}
-
         <PermissionsEditor guildId={guildId} modules={modulesData} roles={roles} />
       </div>
     </>
