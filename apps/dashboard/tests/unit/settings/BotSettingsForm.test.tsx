@@ -8,7 +8,7 @@ vi.mock('../../../lib/bot-settings-actions', () => ({
 }));
 
 import { BotSettingsForm } from '../../../components/settings/BotSettingsForm';
-import type { BotSettingsDto } from '../../../lib/bot-settings-client';
+import type { BotSettingsDto } from '../../../lib/bot-settings-types';
 
 const initial: BotSettingsDto = {
   language: 'en',

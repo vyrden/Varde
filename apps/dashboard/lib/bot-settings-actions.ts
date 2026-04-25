@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
-import type { BotLanguage, BotTimezone } from './bot-settings-client.js';
+import type { BotLanguage, BotTimezone } from './bot-settings-types.js';
 
 /**
  * Server action de mise à jour des paramètres bot d'une guild.

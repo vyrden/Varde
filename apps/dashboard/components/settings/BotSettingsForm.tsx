@@ -19,7 +19,7 @@ import {
   type BotLanguage,
   type BotSettingsDto,
   type BotTimezone,
-} from '../../lib/bot-settings-client';
+} from '../../lib/bot-settings-types';
 
 export interface BotSettingsFormProps {
   readonly guildId: string;

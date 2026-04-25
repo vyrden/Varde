@@ -6,11 +6,8 @@ import { auth } from '../../../../../auth';
 import { BotSettingsForm } from '../../../../../components/settings/BotSettingsForm';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import { ApiError, fetchAdminGuilds } from '../../../../../lib/api-client';
-import {
-  BotSettingsApiError,
-  type BotSettingsDto,
-  fetchBotSettings,
-} from '../../../../../lib/bot-settings-client';
+import { BotSettingsApiError, fetchBotSettings } from '../../../../../lib/bot-settings-client';
+import type { BotSettingsDto } from '../../../../../lib/bot-settings-types';
 
 interface BotSettingsPageProps {
   readonly params: Promise<{ readonly guildId: string }>;
