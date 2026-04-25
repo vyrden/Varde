@@ -21,6 +21,7 @@ import {
   registerOnboardingRoutes,
   registerReactionRolesRoutes,
   registerUnboundPermissionsRoutes,
+  registerWelcomeRoutes,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
@@ -501,6 +502,11 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
   });
   registerReactionRolesRoutes(api, {
+    discord,
+    config,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+  });
+  registerWelcomeRoutes(api, {
     discord,
     config,
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),

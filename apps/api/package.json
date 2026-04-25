@@ -31,6 +31,7 @@
     "@varde/core": "workspace:*",
     "@varde/db": "workspace:*",
     "@varde/module-logs": "workspace:*",
+    "@varde/module-welcome": "workspace:*",
     "@varde/presets": "workspace:*",
     "drizzle-orm": "0.45.2",
     "fastify": "5.8.5",

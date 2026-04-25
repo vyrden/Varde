@@ -74,6 +74,10 @@ export {
   registerUnboundPermissionsRoutes,
 } from './routes/unbound-permissions.js';
 export {
+  type RegisterWelcomeRoutesOptions,
+  registerWelcomeRoutes,
+} from './routes/welcome.js';
+export {
   type Authenticator,
   type CreateApiServerOptions,
   createApiServer,

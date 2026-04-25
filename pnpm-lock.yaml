@@ -53,6 +53,9 @@ importers:
       '@varde/module-logs':
         specifier: workspace:*
         version: link:../../modules/logs
+      '@varde/module-welcome':
+        specifier: workspace:*
+        version: link:../../modules/welcome
       '@varde/presets':
         specifier: workspace:*
         version: link:../../packages/presets

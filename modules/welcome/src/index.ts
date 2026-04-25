@@ -1,6 +1,12 @@
 import { defineModule } from '@varde/contracts';
 
-import { configSchema, configUi, resolveConfig, type WelcomeConfig } from './config.js';
+import {
+  configSchema,
+  configUi,
+  resolveConfig,
+  type WelcomeConfig,
+  welcomeConfigSchema,
+} from './config.js';
 import { locales } from './locales.js';
 import { manifest } from './manifest.js';
 import { handleMemberJoin, handleMemberLeave } from './runtime.js';
@@ -34,6 +40,16 @@ export const welcome = defineModule({
   },
 });
 
+export { type RenderCardOptions, renderWelcomeCard } from './card.js';
+export { renderTemplate, TEMPLATE_VARIABLES, type TemplateVariables } from './template-render.js';
 export type { WelcomeConfig, WelcomeTemplate };
-export { configSchema, configUi, locales, manifest, resolveConfig, WELCOME_TEMPLATES };
+export {
+  configSchema,
+  configUi,
+  locales,
+  manifest,
+  resolveConfig,
+  WELCOME_TEMPLATES,
+  welcomeConfigSchema,
+};
 export default welcome;
