@@ -12,6 +12,7 @@ import {
   cn,
   Input,
   Label,
+  Select,
 } from '@varde/ui';
 import { type FormEvent, type ReactElement, useState } from 'react';
 
@@ -270,14 +271,10 @@ function renderWidget(
 
   if (field.widget === 'select') {
     return (
-      <select
+      <Select
         {...commonProps}
         value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(event.target.value)}
-        className={cn(
-          'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        )}
       >
         <option value="">—</option>
         {(field.options ?? []).map((option) => (
@@ -285,7 +282,7 @@ function renderWidget(
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
 

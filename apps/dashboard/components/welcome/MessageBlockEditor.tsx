@@ -1,5 +1,6 @@
 'use client';
 
+import { Select } from '@varde/ui';
 import { useRef } from 'react';
 
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
@@ -135,7 +136,7 @@ export function MessageBlockEditor<B extends Block>({
               <label className="block text-sm font-medium" htmlFor={`channel-${title}`}>
                 Salon
               </label>
-              <select
+              <Select
                 id={`channel-${title}`}
                 value={block.channelId ?? ''}
                 onChange={(e) =>
@@ -144,7 +145,6 @@ export function MessageBlockEditor<B extends Block>({
                     (e.target.value === '' ? null : e.target.value) as B[keyof B],
                   )
                 }
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">— choisir un salon —</option>
                 {channels.map((c) => (
@@ -152,7 +152,7 @@ export function MessageBlockEditor<B extends Block>({
                     #{c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : null}
 
@@ -297,9 +297,15 @@ export function MessageBlockEditor<B extends Block>({
 
                   {/* Réglages typographiques de la carte */}
                   <div className="grid gap-2 rounded-md border border-border bg-background/40 p-2 sm:grid-cols-2">
-                    <label className="text-xs sm:col-span-2">
-                      <span className="block font-medium text-muted-foreground">Police</span>
-                      <select
+                    <div className="text-xs sm:col-span-2">
+                      <label
+                        htmlFor={`card-font-${title}`}
+                        className="block font-medium text-muted-foreground"
+                      >
+                        Police
+                      </label>
+                      <Select
+                        id={`card-font-${title}`}
                         value={block.card.text.fontFamily}
                         onChange={(e) =>
                           updateBlock('card', {
@@ -310,20 +316,20 @@ export function MessageBlockEditor<B extends Block>({
                             },
                           } as B[keyof B])
                         }
-                        className="mt-0.5 h-7 w-full rounded border border-input bg-background px-2 text-xs"
+                        className="mt-0.5 h-8 text-xs"
                       >
                         {availableFonts.map((f) => (
                           <option key={f} value={f} style={{ fontFamily: f }}>
                             {f}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       <span className="mt-0.5 block text-[10px] text-muted-foreground">
                         Pour ajouter une police, dépose un fichier .ttf ou .otf dans{' '}
                         <code className="rounded bg-muted px-1">VARDE_UPLOADS_DIR/fonts/</code> et
                         redémarre le bot.
                       </span>
-                    </label>
+                    </div>
                     <label className="text-xs">
                       <span className="block font-medium text-muted-foreground">
                         Taille du titre :{' '}

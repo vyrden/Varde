@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@varde/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select } from '@varde/ui';
 import { type ReactElement, useState } from 'react';
 
 import type { GuildRoleDto, PermissionDefinitionDto } from '../../lib/api-client';
@@ -202,12 +202,11 @@ export function PermissionsEditor({
                         <label htmlFor={`role-select-${key}`} className="sr-only">
                           Ajouter un rôle à {perm.definition.id}
                         </label>
-                        <select
+                        <Select
                           id={`role-select-${key}`}
                           value={state.selectedRoleId}
                           disabled={state.pending || unbound.length === 0}
                           onChange={(e) => setRowState(key, { selectedRoleId: e.target.value })}
-                          className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                         >
                           <option value="">
                             {unbound.length === 0
@@ -219,7 +218,7 @@ export function PermissionsEditor({
                               {r.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <Button
                           type="button"
                           size="sm"

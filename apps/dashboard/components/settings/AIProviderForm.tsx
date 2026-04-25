@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '@varde/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Select } from '@varde/ui';
 import { type FormEvent, type ReactElement, useState } from 'react';
 
 import {
@@ -137,19 +137,18 @@ export function AIProviderForm({ guildId, initial }: AIProviderFormProps): React
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="ai-provider">Provider</Label>
-            <select
+            <Select
               id="ai-provider"
               name="providerId"
               value={state.providerId}
               onChange={(e) => updateField('providerId', e.target.value as AiProviderId)}
-              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="none">Aucun (stub local, sans réseau)</option>
               <option value="ollama">Ollama (auto-hébergé)</option>
               <option value="openai-compat">
                 OpenAI-compatible (OpenAI / OpenRouter / Groq / vLLM / LM Studio)
               </option>
-            </select>
+            </Select>
             <p className="text-xs text-muted-foreground">
               `none` garde tout local via un stub déterministe. `ollama` et `openai-compat` sortent
               du réseau vers l'endpoint indiqué — la clé éventuelle est chiffrée en base, pas

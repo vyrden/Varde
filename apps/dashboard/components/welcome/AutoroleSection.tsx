@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@varde/ui';
+
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
 
 interface RoleOption {
@@ -79,18 +81,18 @@ export function AutoroleSection({ value, onChange, roles }: AutoroleSectionProps
         <label className="block text-sm font-medium" htmlFor="autorole-delay">
           Délai d'attribution
         </label>
-        <select
+        <Select
           id="autorole-delay"
           value={value.delaySeconds}
           onChange={(e) => onChange({ ...value, delaySeconds: Number(e.target.value) })}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-64"
+          wrapperClassName="sm:w-64"
         >
           {DELAY_OPTIONS.map((d) => (
             <option key={d.value} value={d.value}>
               {d.label}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="text-xs text-muted-foreground">
           Un délai &gt; 0 laisse le temps au filtre comptes neufs et à la modération de s'appliquer
           avant l'attribution.

@@ -1,5 +1,7 @@
 'use client';
 
+import { Select } from '@varde/ui';
+
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
 
 interface RoleOption {
@@ -100,7 +102,7 @@ export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFi
           <label className="block text-sm font-medium" htmlFor="filter-quarantine-role">
             Rôle de quarantaine
           </label>
-          <select
+          <Select
             id="filter-quarantine-role"
             value={value.quarantineRoleId ?? ''}
             onChange={(e) =>
@@ -109,7 +111,6 @@ export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFi
                 quarantineRoleId: e.target.value === '' ? null : e.target.value,
               })
             }
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">— choisir un rôle —</option>
             {roles.map((r) => (
@@ -117,7 +118,7 @@ export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFi
                 {r.name}
               </option>
             ))}
-          </select>
+          </Select>
           <p className="text-xs text-muted-foreground">
             Crée un rôle « Quarantaine » sans permissions et configure-le ici. L'auto-rôle normal
             n'est pas appliqué quand un membre est quarantiné.

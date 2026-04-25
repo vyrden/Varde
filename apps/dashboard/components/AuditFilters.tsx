@@ -1,4 +1,4 @@
-import { Button, cn, Input, Label } from '@varde/ui';
+import { Button, Input, Label, Select } from '@varde/ui';
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 
@@ -25,10 +25,6 @@ export interface AuditFiltersProps {
  * endpoint `distinct actions` viendra post-V1 si le besoin monte.
  */
 export function AuditFilters({ guildId, values, knownActions }: AuditFiltersProps): ReactElement {
-  const selectClass = cn(
-    'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-  );
   return (
     <form
       method="get"
@@ -54,32 +50,22 @@ export function AuditFilters({ guildId, values, knownActions }: AuditFiltersProp
 
       <div className="space-y-2">
         <Label htmlFor="filter-actor">Type d'acteur</Label>
-        <select
-          id="filter-actor"
-          name="actorType"
-          defaultValue={values.actorType ?? ''}
-          className={selectClass}
-        >
+        <Select id="filter-actor" name="actorType" defaultValue={values.actorType ?? ''}>
           <option value="">Tous</option>
           <option value="user">Utilisateur</option>
           <option value="system">Système</option>
           <option value="module">Module</option>
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="filter-severity">Sévérité</Label>
-        <select
-          id="filter-severity"
-          name="severity"
-          defaultValue={values.severity ?? ''}
-          className={selectClass}
-        >
+        <Select id="filter-severity" name="severity" defaultValue={values.severity ?? ''}>
           <option value="">Toutes</option>
           <option value="info">Info</option>
           <option value="warn">Warn</option>
           <option value="error">Error</option>
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-2">

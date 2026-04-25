@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@varde/ui';
+import { Button, Select } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
@@ -221,7 +221,7 @@ function PairRow({
         <label className="text-xs text-muted-foreground" htmlFor={`pair-rolemode-${index}`}>
           Rôle
         </label>
-        <select
+        <Select
           id={`pair-rolemode-${index}`}
           value={pair.roleMode}
           onChange={(e) => {
@@ -232,12 +232,12 @@ function PairRow({
               onChange({ uid: pair.uid, emoji: pair.emoji, roleMode: 'create', roleName: '' });
             }
           }}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-8 text-xs"
           aria-label={`Mode rôle de la paire ${index + 1}`}
         >
           <option value="existing">Choisir un rôle</option>
           <option value="create">Créer un rôle</option>
-        </select>
+        </Select>
       </div>
 
       {/* Sélecteur / nom de rôle */}
@@ -246,7 +246,7 @@ function PairRow({
           <label className="text-xs text-muted-foreground" htmlFor={`pair-roleid-${index}`}>
             Rôle existant
           </label>
-          <select
+          <Select
             id={`pair-roleid-${index}`}
             value={pair.roleId}
             onChange={(e) =>
@@ -257,7 +257,7 @@ function PairRow({
                 roleId: e.target.value,
               })
             }
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-8 text-xs"
             aria-label={`Rôle existant de la paire ${index + 1}`}
           >
             <option value="">— choisir —</option>
@@ -266,7 +266,7 @@ function PairRow({
                 {r.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       ) : (
         <div className="flex flex-col gap-0.5">
@@ -489,19 +489,14 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         <label className="block text-sm font-medium" htmlFor="rr-channel">
           Salon de publication
         </label>
-        <select
-          id="rr-channel"
-          value={channelId}
-          onChange={(e) => setChannelId(e.target.value)}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <Select id="rr-channel" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
           <option value="">— choisir un salon —</option>
           {props.channels.map((c) => (
             <option key={c.id} value={c.id}>
               #{c.name}
             </option>
           ))}
-        </select>
+        </Select>
         {!isNew && channelId !== props.existing.channelId ? (
           <p className="text-xs text-amber-700 dark:text-amber-400">
             Changer de salon supprime le message actuel et en repost un nouveau (les réactions

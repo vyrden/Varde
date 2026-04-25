@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@varde/ui';
+import { Button, Select } from '@varde/ui';
 import { useState } from 'react';
 
 import type { TestLogsRouteError } from '../../lib/logs-actions';
@@ -151,10 +151,10 @@ function RouteRow({
 
         {/* Salon */}
         <td className="px-3 py-2">
-          <select
+          <Select
             value={draft.channelId}
             onChange={(e) => setDraft((prev) => ({ ...prev, channelId: e.target.value }))}
-            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9"
             aria-label="Salon de destination"
           >
             <option value="">— Choisir —</option>
@@ -163,12 +163,12 @@ function RouteRow({
                 #{c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </td>
 
         {/* Verbosité */}
         <td className="px-3 py-2">
-          <select
+          <Select
             value={draft.verbosity}
             onChange={(e) =>
               setDraft((prev) => ({
@@ -176,13 +176,13 @@ function RouteRow({
                 verbosity: e.target.value as 'compact' | 'detailed',
               }))
             }
-            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-9"
             aria-label="Verbosité de la route"
             title="Compact : une ligne par événement. Détaillé : embed complet avec tous les champs."
           >
             <option value="compact">Compact</option>
             <option value="detailed">Détaillé</option>
-          </select>
+          </Select>
         </td>
 
         {/* Actions */}
@@ -318,12 +318,11 @@ function AddRouteForm({
           <label htmlFor="new-route-channel" className="block text-sm font-medium">
             Salon
           </label>
-          <select
+          <Select
             id="new-route-channel"
             value={draft.channelId}
             onChange={(e) => setDraft((prev) => ({ ...prev, channelId: e.target.value }))}
             required
-            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Salon de destination de la route"
           >
             <option value="">— Choisir un salon —</option>
@@ -332,7 +331,7 @@ function AddRouteForm({
                 #{c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -377,7 +376,7 @@ function AddRouteForm({
             (?)
           </span>
         </label>
-        <select
+        <Select
           id="new-route-verbosity"
           value={draft.verbosity}
           onChange={(e) =>
@@ -386,12 +385,12 @@ function AddRouteForm({
               verbosity: e.target.value as 'compact' | 'detailed',
             }))
           }
-          className="h-9 w-48 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          wrapperClassName="w-48"
           aria-label="Verbosité de la route"
         >
           <option value="compact">Compact</option>
           <option value="detailed">Détaillé</option>
-        </select>
+        </Select>
       </div>
 
       <div className="flex items-center gap-3">
@@ -514,7 +513,7 @@ function ExclusionsEditor({
         <label htmlFor="excl-roles" className="block text-sm font-medium">
           Rôles exclus
         </label>
-        <select
+        <Select
           id="excl-roles"
           multiple
           size={Math.min(roles.length + 1, 5)}
@@ -523,7 +522,7 @@ function ExclusionsEditor({
             const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
             onChange({ ...exclusions, roleIds: selected });
           }}
-          className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          wrapperClassName="max-w-sm"
           aria-label="Rôles exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
         >
           {roles.map((r) => (
@@ -531,7 +530,7 @@ function ExclusionsEditor({
               {r.name}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="text-xs text-muted-foreground">
           Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs rôles.
         </p>
@@ -542,7 +541,7 @@ function ExclusionsEditor({
         <label htmlFor="excl-channels" className="block text-sm font-medium">
           Salons exclus
         </label>
-        <select
+        <Select
           id="excl-channels"
           multiple
           size={Math.min(channels.length + 1, 6)}
@@ -551,7 +550,7 @@ function ExclusionsEditor({
             const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
             onChange({ ...exclusions, channelIds: selected });
           }}
-          className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          wrapperClassName="max-w-sm"
           aria-label="Salons exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
         >
           {channels.map((c) => (
@@ -559,7 +558,7 @@ function ExclusionsEditor({
               #{c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <p className="text-xs text-muted-foreground">
           Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs salons.
         </p>
