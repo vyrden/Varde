@@ -19,6 +19,12 @@ import type { GeneratedPresetDto } from '../../lib/onboarding-client';
 export interface AIGeneratorProps {
   readonly guildId: string;
   readonly onBack: () => void;
+  /**
+   * Description pré-remplie depuis la card CTA du picker. Permet de
+   * commencer à taper dans la card mise en avant et de continuer dans
+   * l'écran AI sans ressaisir.
+   */
+  readonly initialDescription?: string;
 }
 
 interface DraftShape {
@@ -60,8 +66,12 @@ const descriptionOf = (preset: Readonly<Record<string, unknown>>): string => {
 // donner l'impression que c'est fini avant que le résultat arrive.
 const AI_TIMEOUT_MS = 30_000;
 
-export function AIGenerator({ guildId, onBack }: AIGeneratorProps): ReactElement {
-  const [description, setDescription] = useState('');
+export function AIGenerator({
+  guildId,
+  onBack,
+  initialDescription = '',
+}: AIGeneratorProps): ReactElement {
+  const [description, setDescription] = useState(initialDescription);
   const [locale, setLocale] = useState<'fr' | 'en'>('fr');
   const [generating, setGenerating] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
