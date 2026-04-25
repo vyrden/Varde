@@ -1,11 +1,10 @@
-import { PageHeader } from '@varde/ui';
+import { Separator } from '@varde/ui';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../auth';
-import { AuditFilters } from '../../../../components/AuditFilters';
-import { AuditTable } from '../../../../components/AuditTable';
+import { AuditView } from '../../../../components/audit/AuditView';
 import {
   ApiError,
   type AuditActorType,
@@ -49,7 +48,6 @@ const buildFilters = (
     severity?: AuditSeverity;
     since?: string;
     until?: string;
-    cursor?: string;
   } = {};
   const action = firstString(searchParams['action']);
   if (action) filters.action = action;
@@ -61,30 +59,16 @@ const buildFilters = (
   if (since) filters.since = since;
   const until = firstString(searchParams['until']);
   if (until) filters.until = until;
-  const cursor = firstString(searchParams['cursor']);
-  if (cursor) filters.cursor = cursor;
   return filters;
 };
 
-const buildNextUrl = (guildId: string, filters: AuditFiltersValues, cursor: string): string => {
-  const params = new URLSearchParams();
-  if (filters.action) params.set('action', filters.action);
-  if (filters.actorType) params.set('actorType', filters.actorType);
-  if (filters.severity) params.set('severity', filters.severity);
-  if (filters.since) params.set('since', filters.since);
-  if (filters.until) params.set('until', filters.until);
-  params.set('cursor', cursor);
-  return `/guilds/${guildId}/audit?${params.toString()}`;
-};
-
 /**
- * Page audit log d'une guild. Lecture paginée cursor-based, filtres
- * pilotés par l'URL (voir [`AuditFilters`](../../../../components/AuditFilters.tsx)).
- * On fait deux lectures parallèles : la liste des guilds admin pour
- * vérifier l'accès (et récupérer le nom de la guild pour le header),
- * et la page audit elle-même. Les filtres invalides côté URL sont
- * simplement ignorés — l'API validera à nouveau et refusera les
- * mauvaises valeurs si jamais l'une passe côté client.
+ * Page audit log d'une guild. Lecture initiale server-side ; les
+ * filtres et le scroll infini sont pilotés côté client par
+ * `AuditView` via la server action `loadAuditPage`. La query string
+ * peut pré-remplir les filtres (utile depuis un lien partagé) mais
+ * n'est plus modifiée à chaque submit — tout reste en RAM côté client
+ * pour permettre le scroll infini sans rechargement.
  */
 export default async function AuditPage({
   params,
@@ -114,24 +98,56 @@ export default async function AuditPage({
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={[{ label: 'Gestion' }, { label: "Journal d'audit" }]}
-        title="Journal d'audit"
-        description="Historique des actions sur le serveur. Filtrez par type, sévérité ou fenêtre temporelle."
-      />
-      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
-        <AuditFilters guildId={guildId} values={filters} knownActions={knownActions} />
-        <AuditTable items={page.items} />
-        {page.nextCursor ? (
-          <div className="flex justify-center">
-            <Link
-              href={buildNextUrl(guildId, filters, page.nextCursor)}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Charger la suite
-            </Link>
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
+          <Link
+            href={`/guilds/${guildId}`}
+            className="font-medium uppercase tracking-wider hover:text-foreground"
+          >
+            Gestion
+          </Link>
+          <span aria-hidden="true" className="mx-2">
+            →
+          </span>
+          <span className="font-medium uppercase tracking-wider text-foreground">Audit</span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect
+                x="3"
+                y="2"
+                width="10"
+                height="12"
+                rx="1.5"
+                stroke="currentColor"
+                strokeWidth="1.4"
+              />
+              <path
+                d="M5.5 6h5M5.5 8.5h5M5.5 11h3"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+              <rect x="6" y="1" width="4" height="2" rx="0.5" fill="currentColor" />
+            </svg>
           </div>
-        ) : null}
+          <h1 className="text-[22px] font-bold leading-tight text-foreground">Journal d'audit</h1>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Historique des actions sur le serveur. Filtrez par type, acteur, sévérité ou fenêtre
+          temporelle.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-7xl px-6 py-6">
+        <AuditView
+          guildId={guildId}
+          initialItems={page.items}
+          initialNextCursor={page.nextCursor}
+          initialFilters={filters}
+          knownActions={knownActions}
+        />
       </div>
     </>
   );
