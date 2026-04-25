@@ -1,4 +1,5 @@
-import { PageHeader } from '@varde/ui';
+import { Separator } from '@varde/ui';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -16,10 +17,10 @@ interface AiSettingsPageProps {
 }
 
 /**
- * Page paramètres IA (PR 3.9). Server component qui fetche les
- * paramètres actuels puis délègue le rendu éditable à un composant
- * client. L'admin choisit un provider, configure, peut tester la
- * connexion et enregistrer — la clé API est chiffrée côté serveur.
+ * Page paramètres IA. Header custom (breadcrumb « PARAMÈTRES →
+ * FOURNISSEUR IA » + icône blurple + titre + description) + Separator,
+ * puis le form 2 colonnes (provider cards + formulaire à gauche,
+ * statut connexion + à propos à droite).
  */
 export default async function AiSettingsPage({
   params,
@@ -44,12 +45,39 @@ export default async function AiSettingsPage({
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={[{ label: 'Paramètres' }, { label: 'IA' }]}
-        title="Paramètres IA"
-        description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
-      />
-      <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
+          <Link
+            href={`/guilds/${guildId}/settings/permissions`}
+            className="font-medium uppercase tracking-wider hover:text-foreground"
+          >
+            Paramètres
+          </Link>
+          <span aria-hidden="true" className="mx-2">
+            →
+          </span>
+          <span className="font-medium uppercase tracking-wider text-foreground">
+            Fournisseur IA
+          </span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M8 1.5l1.4 4.1L13.5 7l-4.1 1.4L8 12.5 6.6 8.4 2.5 7l4.1-1.4L8 1.5z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <h1 className="text-[22px] font-bold leading-tight text-foreground">Fournisseur IA</h1>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Configurez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La
+          clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
         <AIProviderForm guildId={guildId} initial={settings} />
       </div>
     </>
