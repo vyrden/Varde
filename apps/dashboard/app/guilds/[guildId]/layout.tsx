@@ -5,6 +5,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { auth } from '../../../auth';
 import { GuildRail } from '../../../components/shell/GuildRail';
 import { GuildSidebar } from '../../../components/shell/GuildSidebar';
+import { RouterRefreshOnFocus } from '../../../components/shell/RouterRefreshOnFocus';
 import { ApiError, fetchAdminGuilds, fetchModules } from '../../../lib/api-client';
 
 /**
@@ -52,6 +53,7 @@ export default async function GuildLayout({
 
   return (
     <Toaster>
+      <RouterRefreshOnFocus />
       <div className="flex min-h-screen bg-rail text-foreground">
         <GuildRail guilds={guilds} currentGuildId={guildId} />
         <GuildSidebar guildId={guildId} guildName={currentGuild.name} modules={sidebarModules} />
