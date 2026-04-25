@@ -128,3 +128,39 @@ export const TEMPLATE_VARIABLES_CLIENT = [
   { key: 'memberCount', description: 'Nombre total de membres' },
   { key: 'accountAge', description: 'Âge du compte Discord (welcome uniquement)' },
 ] as const;
+
+/**
+ * Renderer client-side miroir de `renderTemplate` côté module. Réécrit
+ * ici pour éviter d'importer @varde/module-welcome (qui dépend de
+ * @napi-rs/canvas, natif et incompatible avec le bundle navigateur).
+ */
+export function renderTemplateClient(
+  template: string,
+  vars: {
+    readonly user: string;
+    readonly userMention: string;
+    readonly userTag: string;
+    readonly guild: string;
+    readonly memberCount: number;
+    readonly accountAgeDays?: number;
+  },
+): string {
+  const formatAge = (days: number): string => {
+    if (days < 1) return "moins d'un jour";
+    if (days < 30) return `${days} jour${days > 1 ? 's' : ''}`;
+    if (days < 365) return `${Math.floor(days / 30)} mois`;
+    const years = Math.floor(days / 365);
+    return `${years} an${years > 1 ? 's' : ''}`;
+  };
+  const replacements: Record<string, string> = {
+    user: vars.user,
+    'user.mention': vars.userMention,
+    'user.tag': vars.userTag,
+    guild: vars.guild,
+    memberCount: String(vars.memberCount),
+    ...(vars.accountAgeDays !== undefined ? { accountAge: formatAge(vars.accountAgeDays) } : {}),
+  };
+  return template.replace(/\{([a-zA-Z][a-zA-Z0-9.]*)\}/g, (_, key: string) =>
+    key in replacements ? (replacements[key] ?? `{${key}}`) : `{${key}}`,
+  );
+}

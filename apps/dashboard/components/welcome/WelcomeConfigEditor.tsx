@@ -10,7 +10,7 @@ import {
 } from '../../lib/welcome-actions';
 import { AccountAgeFilterSection } from './AccountAgeFilterSection';
 import { AutoroleSection } from './AutoroleSection';
-import { CardPreview } from './CardPreview';
+import { DiscordMessagePreview } from './DiscordMessagePreview';
 import { MessageBlockEditor } from './MessageBlockEditor';
 import { TemplatePicker } from './TemplatePicker';
 
@@ -119,12 +119,8 @@ export function WelcomeConfigEditor({
         variant="welcome"
         guildId={guildId}
       />
-      {config.welcome.enabled && config.welcome.card.enabled ? (
-        <CardPreview
-          guildId={guildId}
-          backgroundColor={config.welcome.card.backgroundColor}
-          variant="welcome"
-        />
+      {config.welcome.enabled ? (
+        <DiscordMessagePreview guildId={guildId} block={config.welcome} variant="welcome" />
       ) : null}
 
       <MessageBlockEditor
@@ -135,12 +131,8 @@ export function WelcomeConfigEditor({
         variant="goodbye"
         guildId={guildId}
       />
-      {config.goodbye.enabled && config.goodbye.card.enabled ? (
-        <CardPreview
-          guildId={guildId}
-          backgroundColor={config.goodbye.card.backgroundColor}
-          variant="goodbye"
-        />
+      {config.goodbye.enabled ? (
+        <DiscordMessagePreview guildId={guildId} block={config.goodbye} variant="goodbye" />
       ) : null}
 
       <AutoroleSection
