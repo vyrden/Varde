@@ -136,6 +136,7 @@ interface MessageLike {
 interface TextChannelLike {
   readonly messages: {
     readonly fetch: (id: string) => Promise<MessageLike>;
+    readonly delete: (id: string) => Promise<unknown>;
   };
   /** `send` est disponible sur les salons textuels ; retourne un Message. */
   readonly send?: (content: string) => Promise<{ readonly id: string }>;
@@ -452,6 +453,29 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         throw new DiscordSendError(
           reason,
           `DiscordService.createRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async deleteMessage(channelId: ChannelId, messageId: MessageId): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.deleteMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      try {
+        await textChannel.messages.delete(messageId);
+      } catch (err) {
+        const reason = classifyError(err);
+        // Code 10008 = Unknown Message → message déjà supprimé manuellement.
+        // On laisse classifyError remonter 'message-not-found' (code 10008
+        // déjà mappé) pour que l'appelant puisse traiter en succès silencieux.
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.deleteMessage : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },

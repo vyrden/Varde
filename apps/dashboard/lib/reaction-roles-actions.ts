@@ -131,45 +131,25 @@ export async function syncReactionRole(
 }
 
 /**
- * Suppression côté config uniquement. Récupère la config actuelle via
- * `GET /guilds/:guildId/modules/reaction-roles/config`, retire l'entrée
- * correspondante au messageId, puis persiste via
- * `PUT /guilds/:guildId/modules/reaction-roles/config`.
- *
- * Le message Discord reste en place (zombie) — suppression manuelle requise.
+ * Supprime une entrée reaction-roles via
+ * `DELETE /guilds/:guildId/modules/reaction-roles/:messageId`.
+ * L'API supprime le message Discord (best-effort : un message déjà
+ * supprimé manuellement n'est pas une erreur) puis nettoie la config.
  */
 export async function deleteReactionRole(
   guildId: string,
   messageId: string,
 ): Promise<{ readonly ok: boolean }> {
   try {
-    const cookieHeader = await buildCookieHeader();
-
-    const existing = await fetch(
-      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/config`,
-      {
-        headers: { accept: 'application/json', cookie: cookieHeader },
-        cache: 'no-store',
-      },
-    );
-    if (!existing.ok) return { ok: false };
-
-    const dto = (await existing.json()) as {
-      config: { messages?: ReadonlyArray<{ messageId: string }> };
-    };
-    const remaining = (dto.config.messages ?? []).filter((m) => m.messageId !== messageId);
-
     const response = await fetch(
-      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/config`,
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/${encodeURIComponent(messageId)}`,
       {
-        method: 'PUT',
+        method: 'DELETE',
         cache: 'no-store',
         headers: {
-          'content-type': 'application/json',
           accept: 'application/json',
-          cookie: cookieHeader,
+          cookie: await buildCookieHeader(),
         },
-        body: JSON.stringify({ version: 1, messages: remaining }),
       },
     );
     if (response.ok || response.status === 204) {

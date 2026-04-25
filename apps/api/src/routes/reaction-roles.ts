@@ -401,4 +401,61 @@ export function registerReactionRolesRoutes(
       return reply.code(200).send({ added: toAdd.length, removed: toRemove.length });
     },
   );
+
+  // -------------------------------------------------------------------------
+  // DELETE /guilds/:guildId/modules/reaction-roles/:messageId
+  // -------------------------------------------------------------------------
+  app.delete<{ Params: { guildId: string; messageId: string } }>(
+    '/guilds/:guildId/modules/reaction-roles/:messageId',
+    async (request, reply: FastifyReply) => {
+      const { guildId, messageId } = request.params;
+      const session = await requireGuildAdmin(app, request, guildId, options.discord);
+      const typedGuildId = assertGuildId(guildId);
+
+      let snapshot: unknown = {};
+      try {
+        snapshot = await options.config.get(typedGuildId);
+      } catch {
+        snapshot = {};
+      }
+
+      const existingMessages = extractMessages(snapshot);
+      const entryIndex = existingMessages.findIndex((m) => m.messageId === messageId);
+      if (entryIndex === -1) {
+        return reply.code(404).send({ reason: 'message-not-found' });
+      }
+
+      const entry = existingMessages[entryIndex] as RRMessage;
+
+      // Tentative de suppression du message Discord. Un message déjà
+      // supprimé manuellement (message-not-found) est considéré comme un
+      // succès. Les autres erreurs de suppression sont loggées mais ne
+      // bloquent pas le nettoyage de la config (sinon l'admin se retrouve
+      // avec une entrée orpheline qu'il ne peut pas supprimer).
+      if (options.discordService) {
+        try {
+          await options.discordService.deleteMessage(
+            assertChannelId(entry.channelId),
+            assertMessageId(entry.messageId),
+          );
+        } catch (error) {
+          if (error instanceof DiscordSendError && error.reason !== 'message-not-found') {
+            request.log.warn(
+              { err: error, messageId, channelId: entry.channelId },
+              'reaction-roles: deleteMessage Discord a échoué — la config sera tout de même nettoyée',
+            );
+          }
+        }
+      }
+
+      const remaining = existingMessages.filter((_, i) => i !== entryIndex);
+      await options.config.setWith(
+        typedGuildId,
+        { modules: { 'reaction-roles': { version: 1, messages: remaining } } },
+        { scope: 'modules.reaction-roles', updatedBy: session.userId as UserId },
+      );
+
+      return reply.code(204).send();
+    },
+  );
 }

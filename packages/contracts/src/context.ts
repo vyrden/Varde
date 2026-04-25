@@ -230,6 +230,14 @@ export interface DiscordService {
    */
   readonly sendDirectMessage: (userId: UserId, content: string) => Promise<boolean>;
 
+  /**
+   * Supprime un message Discord. Idempotent côté API : si le message
+   * a déjà été supprimé manuellement, lève
+   * `DiscordSendError('message-not-found')` que l'appelant peut traiter
+   * comme un succès silencieux.
+   */
+  readonly deleteMessage: (channelId: ChannelId, messageId: MessageId) => Promise<void>;
+
   /** Retourne le nom de la guild si elle est en cache, `null` sinon. */
   readonly getGuildName: (guildId: GuildId) => string | null;
 
