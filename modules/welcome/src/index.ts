@@ -9,6 +9,7 @@ import {
 } from './config.js';
 import { locales } from './locales.js';
 import { manifest } from './manifest.js';
+import { setWelcomeAutoroleAction, setWelcomeChannelAction } from './onboarding-actions.js';
 import { handleMemberJoin, handleMemberLeave } from './runtime.js';
 import { WELCOME_TEMPLATES, type WelcomeTemplate } from './templates.js';
 
@@ -31,6 +32,12 @@ export const welcome = defineModule({
 
     subscriptions.add(ctx.events.on('guild.memberJoin', async (e) => handleMemberJoin(ctx, e)));
     subscriptions.add(ctx.events.on('guild.memberLeave', async (e) => handleMemberLeave(ctx, e)));
+
+    // Actions d'onboarding contribuées : permettent à un preset jalon 4
+    // de câbler le module en réutilisant les rôles/salons créés en amont
+    // de la séquence d'apply (cf. ADR 0007).
+    ctx.onboarding.registerAction(setWelcomeChannelAction);
+    ctx.onboarding.registerAction(setWelcomeAutoroleAction);
   },
 
   onUnload: async (ctx) => {
@@ -41,6 +48,14 @@ export const welcome = defineModule({
 });
 
 export { type RenderCardOptions, renderWelcomeCard } from './card.js';
+export {
+  type SetWelcomeAutoroleePayload,
+  type SetWelcomeAutoroleResult,
+  type SetWelcomeChannelPayload,
+  type SetWelcomeChannelResult,
+  setWelcomeAutoroleAction,
+  setWelcomeChannelAction,
+} from './onboarding-actions.js';
 export { renderTemplate, TEMPLATE_VARIABLES, type TemplateVariables } from './template-render.js';
 export type { WelcomeConfig, WelcomeTemplate };
 export {
