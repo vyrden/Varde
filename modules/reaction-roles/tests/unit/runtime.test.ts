@@ -106,10 +106,10 @@ describe('runtime — mode verifier', () => {
     expect(ctx.discord.addMemberRole).toHaveBeenCalled();
   });
 
-  it('reactionRemove ne retire RIEN (verifier ne retire jamais)', async () => {
+  it('reactionRemove retire le rôle (symétrie sur tous les modes)', async () => {
     const ctx = makeCtx(verifierCfg);
     await handleReactionRemove(ctx, removeEvent(), createSelfCausedTracker());
-    expect(ctx.discord.removeMemberRole).not.toHaveBeenCalled();
+    expect(ctx.discord.removeMemberRole).toHaveBeenCalledWith(GUILD, USER, ROLE_EU);
   });
 });
 
@@ -148,10 +148,10 @@ describe('runtime — mode unique', () => {
     expect(ctx.discord.removeMemberRole).not.toHaveBeenCalled();
   });
 
-  it('reactionRemove est ignoré en mode unique si non-self', async () => {
+  it('reactionRemove non-self retire le rôle (symétrie sur tous les modes)', async () => {
     const ctx = makeCtx(continentsConfig);
     await handleReactionRemove(ctx, removeEvent(), createSelfCausedTracker());
-    expect(ctx.discord.removeMemberRole).not.toHaveBeenCalled();
+    expect(ctx.discord.removeMemberRole).toHaveBeenCalledWith(GUILD, USER, ROLE_EU);
   });
 
   it('reactionAdd sur le même emoji quand le user a déjà ce rôle (re-clic) : idempotent, aucune suppression', async () => {

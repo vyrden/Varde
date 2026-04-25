@@ -194,8 +194,10 @@ export async function handleReactionAdd(
 }
 
 /**
- * Handler du `messageReactionRemove`. Mode normal retire le rôle.
- * Modes unique et verifier : no-op (sauf filtrage self-caused).
+ * Handler du `messageReactionRemove`. Quel que soit le mode, retirer
+ * sa réaction retire le rôle correspondant pour l'utilisateur. Les
+ * retraits provoqués par le bot lui-même (swap en mode unique) sont
+ * filtrés via le tracker self-caused.
  */
 export async function handleReactionRemove(
   ctx: ModuleContext,
@@ -217,18 +219,15 @@ export async function handleReactionRemove(
   const match = findPair(cfg, event.channelId, event.messageId, event.emoji);
   if (!match) return;
 
-  if (match.message.mode === 'verifier') return;
-  if (match.message.mode === 'unique') return;
-
   const typedGuildId = event.guildId as GuildId;
   const typedUserId = event.userId as UserId;
   const typedRoleId = match.roleId as RoleId;
 
-  // mode 'normal' : retirer le rôle
   try {
     await ctx.discord.removeMemberRole(typedGuildId, typedUserId, typedRoleId);
   } catch (error) {
-    ctx.logger.warn('reaction-roles : removeMemberRole (normal) a échoué', {
+    ctx.logger.warn('reaction-roles : removeMemberRole a échoué', {
+      mode: match.message.mode,
       error: error instanceof Error ? error.message : String(error),
     });
     return;
@@ -242,7 +241,7 @@ export async function handleReactionRemove(
     metadata: {
       messageId: event.messageId,
       roleId: match.roleId,
-      cause: 'normal',
+      cause: match.message.mode,
     },
   });
 

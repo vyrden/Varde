@@ -519,17 +519,17 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
               {
                 value: 'normal',
                 label: 'Normal',
-                desc: 'Plusieurs rôles possibles',
+                desc: 'Plusieurs rôles possibles, ajout/retrait libre',
               },
               {
                 value: 'unique',
                 label: 'Unique',
-                desc: 'Un seul rôle à la fois',
+                desc: 'Un seul rôle à la fois (swap automatique)',
               },
               {
                 value: 'verifier',
                 label: 'Vérificateur',
-                desc: 'Attribue un rôle sans retrait',
+                desc: 'Pré-pensé pour la validation des règles',
               },
             ] as const
           ).map((m) => (
