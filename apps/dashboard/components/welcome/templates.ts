@@ -56,7 +56,6 @@ export const WELCOME_TEMPLATES_CLIENT: readonly WelcomeTemplateClient[] = [
       },
       goodbye: {
         ...baseConfig().goodbye,
-        enabled: true,
         message: '{user.tag} a déconnecté. À la prochaine partie !',
       },
     },
@@ -77,7 +76,6 @@ export const WELCOME_TEMPLATES_CLIENT: readonly WelcomeTemplateClient[] = [
       },
       goodbye: {
         ...baseConfig().goodbye,
-        enabled: true,
         message: '{user.tag} a quitté la communauté.',
         embed: { enabled: true, color: '#64748B' },
       },
@@ -98,7 +96,6 @@ export const WELCOME_TEMPLATES_CLIENT: readonly WelcomeTemplateClient[] = [
       },
       goodbye: {
         ...baseConfig().goodbye,
-        enabled: true,
         message: 'Au revoir {user.tag}, prends soin de toi. ✨',
         card: { enabled: true, backgroundColor: '#1E1B4B', backgroundImagePath: null },
       },

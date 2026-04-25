@@ -67,3 +67,9 @@ temp/
 # Notes et brouillons locaux non versionnés
 .notes/
 scratch/
+
+# Images uploadées par les admins (welcome backgrounds, etc.) :
+# le dossier est créé/peuplé à l'exécution via VARDE_UPLOADS_DIR.
+# Garder hors git, c'est de la donnée user-supplied par guild.
+uploads/
+apps/server/uploads/

@@ -62,6 +62,10 @@ export function MessageBlockEditor<B extends Block>({
   const isWelcome = variant === 'welcome';
   const welcomeBlock = block as WelcomeConfigClient['welcome'];
 
+  // Section activée mais incomplète (config invalide, save échouera).
+  const channelRequired = isWelcome ? welcomeBlock.destination !== 'dm' : true;
+  const missingChannel = block.enabled && channelRequired && block.channelId === null;
+
   return (
     <fieldset className="space-y-4 rounded-lg border border-border bg-muted/30 p-4">
       <legend className="px-2 text-sm font-semibold">{title}</legend>
@@ -74,6 +78,13 @@ export function MessageBlockEditor<B extends Block>({
         />
         Activer
       </label>
+
+      {missingChannel ? (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          Section activée mais aucun salon sélectionné. Choisis un salon ci-dessous, sinon décoche «
+          Activer » — sans ça la sauvegarde sera refusée.
+        </p>
+      ) : null}
 
       {block.enabled ? (
         <>
