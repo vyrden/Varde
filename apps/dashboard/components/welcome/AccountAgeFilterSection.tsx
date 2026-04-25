@@ -86,6 +86,19 @@ export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFi
             </div>
           </div>
 
+          {value.minDays > 0 ? (
+            <p className="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100">
+              <strong>Que se passera-t-il ?</strong> Un compte créé il y a moins de {value.minDays}{' '}
+              jour{value.minDays > 1 ? 's' : ''}{' '}
+              {value.action === 'kick'
+                ? 'sera expulsé du serveur dès son arrivée (kick).'
+                : 'recevra le rôle de quarantaine et l’auto-rôle normal sera ignoré.'}{' '}
+              Il n’y a pas de bouton « Test » : la seule façon de vérifier en réel est qu’un compte
+              fraîchement créé rejoigne le serveur. Tu peux retirer un membre kické en lui renvoyant
+              une invitation, ou retirer le rôle de quarantaine côté Discord.
+            </p>
+          ) : null}
+
           {value.action === 'quarantine' ? (
             <div className="space-y-1">
               <label className="block text-sm font-medium" htmlFor="filter-quarantine-role">

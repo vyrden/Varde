@@ -15,7 +15,7 @@ import {
   fetchModules,
   fetchUnboundPermissions,
 } from '../../../../../lib/api-client';
-import type { WelcomeConfigClient } from '../../../../../lib/welcome-actions';
+import { fetchWelcomeFonts, type WelcomeConfigClient } from '../../../../../lib/welcome-actions';
 
 interface WelcomePageProps {
   readonly params: Promise<{ readonly guildId: string }>;
@@ -170,15 +170,17 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
   let unbound: Awaited<ReturnType<typeof fetchUnboundPermissions>>;
   let channels: Awaited<ReturnType<typeof fetchGuildTextChannels>>;
   let roles: Awaited<ReturnType<typeof fetchGuildRoles>>;
+  let fonts: Awaited<ReturnType<typeof fetchWelcomeFonts>>;
 
   try {
-    [guilds, modules, moduleConfig, unbound, channels, roles] = await Promise.all([
+    [guilds, modules, moduleConfig, unbound, channels, roles, fonts] = await Promise.all([
       fetchAdminGuilds(),
       fetchModules(guildId),
       fetchModuleConfig(guildId, 'welcome'),
       fetchUnboundPermissions(guildId, 'welcome'),
       fetchGuildTextChannels(guildId),
       fetchGuildRoles(guildId),
+      fetchWelcomeFonts(guildId),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
@@ -273,6 +275,7 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
             initialConfig={initialConfig}
             channels={channels}
             roles={roles}
+            availableFonts={fonts.length > 0 ? fonts : ['sans-serif', 'serif', 'monospace']}
           />
         )}
       </main>

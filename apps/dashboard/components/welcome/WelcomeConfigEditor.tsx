@@ -6,6 +6,7 @@ import { useState, useTransition } from 'react';
 import {
   saveWelcomeConfig,
   testWelcome,
+  testWelcomeAutorole,
   type WelcomeConfigClient,
 } from '../../lib/welcome-actions';
 import { AccountAgeFilterSection } from './AccountAgeFilterSection';
@@ -29,6 +30,7 @@ export interface WelcomeConfigEditorProps {
   readonly initialConfig: WelcomeConfigClient;
   readonly channels: readonly ChannelOption[];
   readonly roles: readonly RoleOption[];
+  readonly availableFonts: readonly string[];
 }
 
 interface FeedbackBanner {
@@ -43,12 +45,18 @@ const formatTestReason = (reason: string): string => {
       return 'Le bot Discord est indisponible.';
     case 'welcome-désactivé':
       return "Active d'abord la section « Message d'accueil » avant de tester.";
+    case 'goodbye-désactivé':
+      return "Active d'abord la section « Message de départ » avant de tester.";
     case 'channel-requis':
       return 'Choisis un salon avant de tester.';
     case 'draft-invalide':
       return 'Le brouillon contient une erreur de validation.';
     case 'send-failed':
       return "L'envoi du message a échoué côté Discord.";
+    case 'autorole-désactivé':
+      return "Active l'auto-rôle avec au moins un rôle avant de tester.";
+    case 'all-roles-failed':
+      return 'Aucun rôle n’a pu être attribué (permissions / hiérarchie).';
     default:
       return reason.startsWith('http-') ? `Erreur HTTP ${reason.slice(5)}.` : `Erreur : ${reason}`;
   }
@@ -59,6 +67,7 @@ export function WelcomeConfigEditor({
   initialConfig,
   channels,
   roles,
+  availableFonts,
 }: WelcomeConfigEditorProps) {
   const [config, setConfig] = useState<WelcomeConfigClient>(initialConfig);
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
@@ -88,15 +97,15 @@ export function WelcomeConfigEditor({
     });
   };
 
-  const handleTest = () => {
+  const handleTestMessage = (target: 'welcome' | 'goodbye') => {
     setFeedback(null);
     startTransition(async () => {
-      const result = await testWelcome(guildId, config);
+      const result = await testWelcome(guildId, config, target);
       if (result.ok) {
         setFeedback({
           kind: 'success',
-          title: 'Test envoyé',
-          message: 'Vérifie le salon ou tes DMs Discord.',
+          title: target === 'welcome' ? 'Accueil envoyé' : 'Départ envoyé',
+          message: 'Vérifie le salon (et tes DMs si destination=both).',
         });
       } else {
         const base = formatTestReason(result.reason);
@@ -105,6 +114,27 @@ export function WelcomeConfigEditor({
             ? `${base} (${result.detail})`
             : base;
         setFeedback({ kind: 'error', title: 'Échec du test', message });
+      }
+    });
+  };
+
+  const handleTestAutorole = () => {
+    setFeedback(null);
+    startTransition(async () => {
+      const result = await testWelcomeAutorole(guildId, config);
+      if (result.ok) {
+        setFeedback({
+          kind: 'success',
+          title: 'Auto-rôle appliqué',
+          message: `${result.assigned.length} rôle(s) attribué(s) à ton compte. Vérifie côté Discord ; tu peux les retirer manuellement après vérification.`,
+        });
+      } else {
+        const base = formatTestReason(result.reason);
+        const message =
+          result.detail !== undefined && result.detail.length > 0
+            ? `${base} (${result.detail})`
+            : base;
+        setFeedback({ kind: 'error', title: 'Échec du test auto-rôle', message });
       }
     });
   };
@@ -159,6 +189,7 @@ export function WelcomeConfigEditor({
             channels={channels}
             variant="welcome"
             guildId={guildId}
+            availableFonts={availableFonts}
           />
           {config.welcome.enabled ? (
             <DiscordMessagePreview guildId={guildId} block={config.welcome} variant="welcome" />
@@ -173,6 +204,7 @@ export function WelcomeConfigEditor({
             channels={channels}
             variant="goodbye"
             guildId={guildId}
+            availableFonts={availableFonts}
           />
           {config.goodbye.enabled ? (
             <DiscordMessagePreview guildId={guildId} block={config.goodbye} variant="goodbye" />
@@ -212,8 +244,36 @@ export function WelcomeConfigEditor({
       ) : null}
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={handleTest} disabled={pending}>
-          {pending ? '…' : 'Tester (envoie un message)'}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => handleTestMessage('welcome')}
+          disabled={pending || !config.welcome.enabled}
+          title={!config.welcome.enabled ? "Active la section Message d'accueil" : undefined}
+        >
+          Tester accueil
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => handleTestMessage('goodbye')}
+          disabled={pending || !config.goodbye.enabled}
+          title={!config.goodbye.enabled ? 'Active la section Message de départ' : undefined}
+        >
+          Tester départ
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={handleTestAutorole}
+          disabled={pending || !config.autorole.enabled || config.autorole.roleIds.length === 0}
+          title={
+            !config.autorole.enabled || config.autorole.roleIds.length === 0
+              ? "Active l'auto-rôle avec au moins un rôle"
+              : undefined
+          }
+        >
+          Tester auto-rôle
         </Button>
         <Button type="button" onClick={handleSave} disabled={pending}>
           {pending ? 'Sauvegarde…' : 'Sauvegarder'}

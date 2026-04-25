@@ -7,6 +7,7 @@ import {
 } from '@varde/contracts';
 import type { CoreConfigService } from '@varde/core';
 import {
+  listRegisteredFonts,
   renderTemplate,
   renderWelcomeCard,
   type WelcomeConfig,
@@ -53,7 +54,7 @@ const previewBodySchema = z.object({
     .object({
       titleFontSize: z.number().int().min(16).max(72).optional(),
       subtitleFontSize: z.number().int().min(10).max(48).optional(),
-      fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).optional(),
+      fontFamily: z.string().min(1).max(64).optional(),
     })
     .optional(),
 });
@@ -70,6 +71,8 @@ const uploadBodySchema = z.object({
 const testWelcomeBodySchema = z.object({
   /** Brouillon de config envoyé depuis l'éditeur (peut différer du persisté). */
   draft: z.unknown(),
+  /** Cible du test : welcome (défaut) ou goodbye. */
+  target: z.enum(['welcome', 'goodbye']).default('welcome'),
 });
 
 /**
@@ -273,10 +276,18 @@ export function registerWelcomeRoutes(
       }
 
       const draft: WelcomeConfig = draftParse.data;
-      if (!draft.welcome.enabled) {
-        return reply.code(400).send({ reason: 'welcome-désactivé' });
+      const target = parseBody.data.target;
+      const block = target === 'welcome' ? draft.welcome : draft.goodbye;
+      if (!block.enabled) {
+        return reply
+          .code(400)
+          .send({ reason: target === 'welcome' ? 'welcome-désactivé' : 'goodbye-désactivé' });
       }
-      if (draft.welcome.destination !== 'dm' && draft.welcome.channelId === null) {
+      // welcome accepte channel/dm/both ; goodbye n'a pas de destination
+      // (toujours channel-only) → channelId obligatoire dans les deux cas
+      // sauf welcome en mode dm pur.
+      const requiresChannel = target !== 'welcome' || draft.welcome.destination !== 'dm';
+      if (requiresChannel && block.channelId === null) {
         return reply.code(400).send({ reason: 'channel-requis' });
       }
 
@@ -289,7 +300,7 @@ export function registerWelcomeRoutes(
       const username = userInfo?.username ?? 'Admin';
       const tag = userInfo?.tag ?? username;
 
-      const content = renderTemplate(draft.welcome.message, {
+      const content = renderTemplate(block.message, {
         user: username,
         userMention: `<@${session.userId}>`,
         userTag: tag,
@@ -299,19 +310,22 @@ export function registerWelcomeRoutes(
       });
 
       const files: { name: string; data: Buffer }[] = [];
-      if (draft.welcome.card.enabled) {
+      if (block.card.enabled) {
         const backgroundImagePath =
-          draft.welcome.card.backgroundImagePath !== null && options.uploads !== undefined
-            ? options.uploads.resolveAbsolute(draft.welcome.card.backgroundImagePath)
+          block.card.backgroundImagePath !== null && options.uploads !== undefined
+            ? options.uploads.resolveAbsolute(block.card.backgroundImagePath)
             : undefined;
         try {
           const png = await renderWelcomeCard({
-            title: `Bienvenue, ${tag} !`,
-            subtitle: `Tu es le ${memberCount}ᵉ membre`,
+            title: target === 'welcome' ? `Bienvenue, ${tag} !` : `Au revoir, ${tag}`,
+            subtitle:
+              target === 'welcome'
+                ? `Tu es le ${memberCount}ᵉ membre`
+                : `${memberCount} membre${memberCount > 1 ? 's' : ''} restant${memberCount > 1 ? 's' : ''}`,
             avatarUrl: userInfo?.avatarUrl ?? '',
-            backgroundColor: draft.welcome.card.backgroundColor,
+            backgroundColor: block.card.backgroundColor,
             ...(backgroundImagePath !== undefined ? { backgroundImagePath } : {}),
-            text: draft.welcome.card.text,
+            text: block.card.text,
           });
           files.push({ name: 'welcome-card.png', data: png });
         } catch (error) {
@@ -320,8 +334,8 @@ export function registerWelcomeRoutes(
       }
 
       let embeds: unknown[] | undefined;
-      if (draft.welcome.embed.enabled) {
-        const colorInt = Number.parseInt(draft.welcome.embed.color.slice(1), 16);
+      if (block.embed.enabled) {
+        const colorInt = Number.parseInt(block.embed.color.slice(1), 16);
         embeds = [
           {
             description: `[TEST] ${content}`,
@@ -340,25 +354,96 @@ export function registerWelcomeRoutes(
             }
           : undefined;
 
+      // Destination : welcome respecte destination (channel/dm/both),
+      // goodbye est toujours channel-only.
+      const sendToChannel = target === 'welcome' ? draft.welcome.destination !== 'dm' : true;
+      const sendToDm = target === 'welcome' && draft.welcome.destination !== 'channel';
+
       try {
-        if (draft.welcome.destination !== 'dm' && draft.welcome.channelId !== null) {
+        if (sendToChannel && block.channelId !== null) {
           await options.discordService.postMessage(
-            assertChannelId(draft.welcome.channelId),
+            assertChannelId(block.channelId),
             sendContent,
             fileOpts,
           );
         }
-        if (draft.welcome.destination !== 'channel') {
+        if (sendToDm) {
           await options.discordService.sendDirectMessage(typedUserId, sendContent, fileOpts);
         }
       } catch (error) {
-        request.log.warn({ err: error }, 'welcome: test-welcome a échoué');
+        request.log.warn({ err: error }, 'welcome: test a échoué');
         return reply
           .code(502)
           .send({ reason: 'send-failed', detail: error instanceof Error ? error.message : '' });
       }
 
       return reply.code(200).send({ ok: true });
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // POST /guilds/:guildId/modules/welcome/test-autorole
+  // -------------------------------------------------------------------------
+  app.post<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/modules/welcome/test-autorole',
+    async (request, reply: FastifyReply) => {
+      const { guildId } = request.params;
+      const session = await requireGuildAdmin(app, request, guildId, options.discord);
+
+      if (!options.discordService) {
+        return reply.code(503).send({ reason: 'service-indisponible' });
+      }
+
+      const parseBody = testWelcomeBodySchema.safeParse(request.body);
+      if (!parseBody.success) {
+        return reply.code(400).send({ reason: 'body-invalide' });
+      }
+      const draftParse = welcomeConfigSchema.safeParse(parseBody.data.draft);
+      if (!draftParse.success) {
+        return reply.code(400).send({ reason: 'draft-invalide', details: draftParse.error.issues });
+      }
+      const draft: WelcomeConfig = draftParse.data;
+
+      if (!draft.autorole.enabled || draft.autorole.roleIds.length === 0) {
+        return reply.code(400).send({ reason: 'autorole-désactivé' });
+      }
+
+      const typedGuildId = assertGuildId(guildId);
+      const typedUserId = assertUserId(session.userId);
+      const assigned: string[] = [];
+      const failed: { roleId: string; error: string }[] = [];
+
+      for (const roleId of draft.autorole.roleIds) {
+        try {
+          await options.discordService.addMemberRole(typedGuildId, typedUserId, roleId as never);
+          assigned.push(roleId);
+        } catch (error) {
+          failed.push({
+            roleId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (failed.length > 0 && assigned.length === 0) {
+        return reply.code(502).send({
+          reason: 'all-roles-failed',
+          detail: failed.map((f) => `${f.roleId}: ${f.error}`).join(' ; '),
+        });
+      }
+      return reply.code(200).send({ ok: true, assigned, failed });
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // GET /guilds/:guildId/modules/welcome/fonts
+  // -------------------------------------------------------------------------
+  app.get<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/modules/welcome/fonts',
+    async (request, reply: FastifyReply) => {
+      const { guildId } = request.params;
+      await requireGuildAdmin(app, request, guildId, options.discord);
+      return reply.code(200).send({ fonts: listRegisteredFonts() });
     },
   );
 }

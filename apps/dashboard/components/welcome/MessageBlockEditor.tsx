@@ -22,6 +22,8 @@ export interface MessageBlockEditorProps<B extends Block> {
   readonly variant: 'welcome' | 'goodbye';
   /** Requis pour brancher l'upload d'image de fond sur l'API. */
   readonly guildId: string;
+  /** Polices enregistrées par le bot (système + intégrées + admin). */
+  readonly availableFonts: readonly string[];
 }
 
 const colorPresets = ['#5865F2', '#7C3AED', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#64748B'];
@@ -39,6 +41,7 @@ export function MessageBlockEditor<B extends Block>({
   channels,
   variant,
   guildId,
+  availableFonts,
 }: MessageBlockEditorProps<B>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -294,7 +297,7 @@ export function MessageBlockEditor<B extends Block>({
 
                   {/* Réglages typographiques de la carte */}
                   <div className="grid gap-2 rounded-md border border-border bg-background/40 p-2 sm:grid-cols-2">
-                    <label className="text-xs">
+                    <label className="text-xs sm:col-span-2">
                       <span className="block font-medium text-muted-foreground">Police</span>
                       <select
                         value={block.card.text.fontFamily}
@@ -303,16 +306,23 @@ export function MessageBlockEditor<B extends Block>({
                             ...block.card,
                             text: {
                               ...block.card.text,
-                              fontFamily: e.target.value as 'sans-serif' | 'serif' | 'monospace',
+                              fontFamily: e.target.value,
                             },
                           } as B[keyof B])
                         }
                         className="mt-0.5 h-7 w-full rounded border border-input bg-background px-2 text-xs"
                       >
-                        <option value="sans-serif">Sans-serif</option>
-                        <option value="serif">Serif</option>
-                        <option value="monospace">Monospace</option>
+                        {availableFonts.map((f) => (
+                          <option key={f} value={f} style={{ fontFamily: f }}>
+                            {f}
+                          </option>
+                        ))}
                       </select>
+                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        Pour ajouter une police, dépose un fichier .ttf ou .otf dans{' '}
+                        <code className="rounded bg-muted px-1">VARDE_UPLOADS_DIR/fonts/</code> et
+                        redémarre le bot.
+                      </span>
                     </label>
                     <label className="text-xs">
                       <span className="block font-medium text-muted-foreground">

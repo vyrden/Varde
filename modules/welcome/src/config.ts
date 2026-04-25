@@ -63,7 +63,14 @@ const messageBlockSchema = z.object({
         .object({
           titleFontSize: z.number().int().min(16).max(72).default(32),
           subtitleFontSize: z.number().int().min(10).max(48).default(20),
-          fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).default('sans-serif'),
+          /**
+           * Nom d'une police enregistrée par `registerWelcomeFonts` ou
+           * d'une famille système (`sans-serif`, `serif`, `monospace`).
+           * Si la police est inconnue côté canvas au moment du rendu,
+           * @napi-rs/canvas fait un fallback silencieux sur la famille
+           * par défaut du système.
+           */
+          fontFamily: z.string().min(1).max(64).default('sans-serif'),
         })
         .default({ titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' }),
     })

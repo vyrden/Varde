@@ -7,6 +7,7 @@ import {
   type WelcomeConfig,
   welcomeConfigSchema,
 } from './config.js';
+import { registerWelcomeFonts } from './font-registry.js';
 import { locales } from './locales.js';
 import { manifest } from './manifest.js';
 import { setWelcomeAutoroleAction, setWelcomeChannelAction } from './onboarding-actions.js';
@@ -30,6 +31,11 @@ export const welcome = defineModule({
     ctx.logger.info('welcome : onLoad');
     subscriptions.clear();
 
+    // Enregistrement des polices : embarquées + admin (uploads/fonts/).
+    // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess pour process.env
+    const uploadsDir = process.env['VARDE_UPLOADS_DIR'] ?? './uploads';
+    await registerWelcomeFonts(uploadsDir);
+
     subscriptions.add(ctx.events.on('guild.memberJoin', async (e) => handleMemberJoin(ctx, e)));
     subscriptions.add(ctx.events.on('guild.memberLeave', async (e) => handleMemberLeave(ctx, e)));
 
@@ -48,6 +54,7 @@ export const welcome = defineModule({
 });
 
 export { type RenderCardOptions, renderWelcomeCard } from './card.js';
+export { listRegisteredFonts, registerWelcomeFonts } from './font-registry.js';
 export {
   type SetWelcomeAutoroleePayload,
   type SetWelcomeAutoroleResult,

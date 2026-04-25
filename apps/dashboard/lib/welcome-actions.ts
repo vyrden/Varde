@@ -29,7 +29,7 @@ export interface WelcomeConfigClient {
       readonly text: {
         readonly titleFontSize: number;
         readonly subtitleFontSize: number;
-        readonly fontFamily: 'sans-serif' | 'serif' | 'monospace';
+        readonly fontFamily: string;
       };
     };
   };
@@ -45,7 +45,7 @@ export interface WelcomeConfigClient {
       readonly text: {
         readonly titleFontSize: number;
         readonly subtitleFontSize: number;
-        readonly fontFamily: 'sans-serif' | 'serif' | 'monospace';
+        readonly fontFamily: string;
       };
     };
   };
@@ -142,7 +142,7 @@ export async function previewWelcomeCard(
     readonly text?: {
       readonly titleFontSize?: number;
       readonly subtitleFontSize?: number;
-      readonly fontFamily?: 'sans-serif' | 'serif' | 'monospace';
+      readonly fontFamily?: string;
     };
   },
 ): Promise<PreviewCardResult> {
@@ -280,12 +280,14 @@ export type TestWelcomeResult =
   | { readonly ok: false; readonly reason: string; readonly detail?: string };
 
 /**
- * Envoie un message d'accueil de test via le brouillon de config courant.
- * L'admin connecté joue le rôle du nouveau membre fictif.
+ * Envoie un message de test via le brouillon de config courant.
+ * L'admin connecté joue le rôle du nouveau membre fictif. `target`
+ * choisit entre le message d'accueil et celui de départ.
  */
 export async function testWelcome(
   guildId: string,
   draft: WelcomeConfigClient,
+  target: 'welcome' | 'goodbye' = 'welcome',
 ): Promise<TestWelcomeResult> {
   try {
     const response = await fetch(
@@ -298,7 +300,7 @@ export async function testWelcome(
           accept: 'application/json',
           cookie: await buildCookieHeader(),
         },
-        body: JSON.stringify({ draft }),
+        body: JSON.stringify({ draft, target }),
       },
     );
     if (response.ok) return { ok: true };
@@ -325,5 +327,74 @@ export async function testWelcome(
     };
   } catch (error) {
     return { ok: false, reason: 'network', detail: error instanceof Error ? error.message : '' };
+  }
+}
+
+export type TestAutoroleResult =
+  | { readonly ok: true; readonly assigned: readonly string[] }
+  | { readonly ok: false; readonly reason: string; readonly detail?: string };
+
+/**
+ * Applique réellement les rôles configurés à l'admin connecté pour
+ * vérifier que la chaîne d'auto-rôle marche (permissions du bot,
+ * existence des rôles, hiérarchie). Les rôles restent attribués —
+ * libre à l'admin de les retirer côté Discord ensuite.
+ */
+export async function testWelcomeAutorole(
+  guildId: string,
+  draft: WelcomeConfigClient,
+): Promise<TestAutoroleResult> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/welcome/test-autorole`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify({ draft }),
+      },
+    );
+    if (response.ok) {
+      const body = (await response.json()) as { assigned?: string[] };
+      return { ok: true, assigned: body.assigned ?? [] };
+    }
+    const errBody = (await response.json().catch(() => ({}))) as {
+      reason?: string;
+      detail?: string;
+    };
+    return {
+      ok: false,
+      reason: errBody.reason ?? `http-${response.status}`,
+      ...(errBody.detail !== undefined ? { detail: errBody.detail } : {}),
+    };
+  } catch (error) {
+    return { ok: false, reason: 'network', detail: error instanceof Error ? error.message : '' };
+  }
+}
+
+/**
+ * Récupère la liste des polices enregistrées par le bot (système +
+ * embarquées + admin-uploadées). Vide en cas d'erreur — la dropdown
+ * tombera alors sur les familles génériques.
+ */
+export async function fetchWelcomeFonts(guildId: string): Promise<readonly string[]> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/welcome/fonts`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { accept: 'application/json', cookie: await buildCookieHeader() },
+      },
+    );
+    if (!response.ok) return [];
+    const body = (await response.json()) as { fonts?: string[] };
+    return body.fonts ?? [];
+  } catch {
+    return [];
   }
 }
