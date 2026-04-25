@@ -77,9 +77,16 @@ export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement 
 
               {/* CTA — en flux, poussé en bas par mt-auto, révélé au hover */}
               <div className="mt-auto translate-y-2 pt-3 opacity-0 transition-[transform,opacity] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
-                <span className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-sm font-medium text-primary-foreground">
+                <span className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out group-hover:bg-(--primary-hover) group-focus-visible:bg-(--primary-hover)">
                   Configurer
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    aria-hidden="true"
+                    className="transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-focus-visible:translate-x-0.5"
+                  >
                     <path
                       d="M5 3l4 4-4 4"
                       stroke="currentColor"
