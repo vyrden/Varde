@@ -70,13 +70,13 @@ export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement 
                 <h3 className="mt-0.5 text-lg font-semibold leading-tight text-foreground">
                   {module.name}
                 </h3>
-                <p className="mt-1 max-h-0 overflow-hidden text-sm leading-relaxed text-muted-foreground opacity-0 transition-[max-height,opacity] duration-400 ease-[cubic-bezier(0.36,0.35,0.1,1.23)] group-hover:max-h-16 group-hover:opacity-100 group-focus-visible:max-h-16 group-focus-visible:opacity-100">
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {module.description || 'Aucune description fournie par le manifest.'}
                 </p>
               </div>
 
               {/* CTA — en flux, poussé en bas par mt-auto, révélé au hover */}
-              <div className="mt-auto translate-y-2 pt-3 opacity-0 transition-[transform,opacity] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+              <div className="mt-auto translate-y-2 pt-3 opacity-0 transition-[translate,opacity] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
                 <span className="group/cta flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-(--primary-hover)">
                   Configurer
                   <svg
