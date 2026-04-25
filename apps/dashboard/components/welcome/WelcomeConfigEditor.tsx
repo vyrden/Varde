@@ -62,6 +62,7 @@ export function WelcomeConfigEditor({
 }: WelcomeConfigEditorProps) {
   const [config, setConfig] = useState<WelcomeConfigClient>(initialConfig);
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
+  const [activeTab, setActiveTab] = useState<'welcome' | 'goodbye'>('welcome');
   const [pending, startTransition] = useTransition();
 
   const handleSave = () => {
@@ -98,11 +99,12 @@ export function WelcomeConfigEditor({
           message: 'Vérifie le salon ou tes DMs Discord.',
         });
       } else {
-        setFeedback({
-          kind: 'error',
-          title: 'Échec du test',
-          message: formatTestReason(result.reason),
-        });
+        const base = formatTestReason(result.reason);
+        const message =
+          result.detail !== undefined && result.detail.length > 0
+            ? `${base} (${result.detail})`
+            : base;
+        setFeedback({ kind: 'error', title: 'Échec du test', message });
       }
     });
   };
@@ -111,29 +113,72 @@ export function WelcomeConfigEditor({
     <div className="space-y-6">
       <TemplatePicker onApply={(t) => setConfig(t.config)} />
 
-      <MessageBlockEditor
-        title="Message d'accueil"
-        block={config.welcome}
-        onChange={(welcome) => setConfig({ ...config, welcome })}
-        channels={channels}
-        variant="welcome"
-        guildId={guildId}
-      />
-      {config.welcome.enabled ? (
-        <DiscordMessagePreview guildId={guildId} block={config.welcome} variant="welcome" />
-      ) : null}
+      {/* Tabs Accueil / Départ */}
+      <div
+        role="tablist"
+        aria-label="Messages welcome et goodbye"
+        className="flex gap-2 border-b border-border"
+      >
+        {(
+          [
+            { id: 'welcome', label: "Message d'accueil", enabled: config.welcome.enabled },
+            { id: 'goodbye', label: 'Message de départ', enabled: config.goodbye.enabled },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => setActiveTab(t.id)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === t.id
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              {t.label}
+              <span
+                aria-hidden="true"
+                className={`inline-block h-2 w-2 rounded-full ${
+                  t.enabled ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                }`}
+              />
+            </span>
+          </button>
+        ))}
+      </div>
 
-      <MessageBlockEditor
-        title="Message de départ"
-        block={config.goodbye}
-        onChange={(goodbye) => setConfig({ ...config, goodbye })}
-        channels={channels}
-        variant="goodbye"
-        guildId={guildId}
-      />
-      {config.goodbye.enabled ? (
-        <DiscordMessagePreview guildId={guildId} block={config.goodbye} variant="goodbye" />
-      ) : null}
+      {activeTab === 'welcome' ? (
+        <>
+          <MessageBlockEditor
+            title="Message d'accueil"
+            block={config.welcome}
+            onChange={(welcome) => setConfig({ ...config, welcome })}
+            channels={channels}
+            variant="welcome"
+            guildId={guildId}
+          />
+          {config.welcome.enabled ? (
+            <DiscordMessagePreview guildId={guildId} block={config.welcome} variant="welcome" />
+          ) : null}
+        </>
+      ) : (
+        <>
+          <MessageBlockEditor
+            title="Message de départ"
+            block={config.goodbye}
+            onChange={(goodbye) => setConfig({ ...config, goodbye })}
+            channels={channels}
+            variant="goodbye"
+            guildId={guildId}
+          />
+          {config.goodbye.enabled ? (
+            <DiscordMessagePreview guildId={guildId} block={config.goodbye} variant="goodbye" />
+          ) : null}
+        </>
+      )}
 
       <AutoroleSection
         value={config.autorole}

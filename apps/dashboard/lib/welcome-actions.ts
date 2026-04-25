@@ -262,7 +262,7 @@ export async function fetchWelcomeBackgroundDataUrl(
 
 export type TestWelcomeResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly reason: string; readonly detail?: string };
 
 /**
  * Envoie un message d'accueil de test via le brouillon de config courant.
@@ -287,9 +287,28 @@ export async function testWelcome(
       },
     );
     if (response.ok) return { ok: true };
-    const body = (await response.json().catch(() => ({}))) as { reason?: string };
-    return { ok: false, reason: body.reason ?? `http-${response.status}` };
+    const body = (await response.json().catch(() => ({}))) as {
+      reason?: string;
+      detail?: string;
+      details?: Array<{ path?: unknown; message?: string }>;
+    };
+    // Concatène les détails de validation Zod si présents.
+    let detail = body.detail;
+    if (detail === undefined && Array.isArray(body.details) && body.details.length > 0) {
+      detail = body.details
+        .map((d) => {
+          const path = Array.isArray(d.path) ? d.path.join('.') : String(d.path ?? '');
+          return path !== '' ? `${path} : ${d.message ?? ''}` : (d.message ?? '');
+        })
+        .filter((s) => s.length > 0)
+        .join(' ; ');
+    }
+    return {
+      ok: false,
+      reason: body.reason ?? `http-${response.status}`,
+      ...(detail !== undefined && detail.length > 0 ? { detail } : {}),
+    };
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : 'network' };
+    return { ok: false, reason: 'network', detail: error instanceof Error ? error.message : '' };
   }
 }
