@@ -37,6 +37,7 @@ import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
 import { logs } from '@varde/module-logs';
 import { reactionRoles } from '@varde/module-reaction-roles';
+import { welcome } from '@varde/module-welcome';
 import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
 
 import { createServer } from './server.js';
@@ -46,15 +47,21 @@ type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
 const LOGS_ID = 'logs' as ModuleId;
 const REACTION_ROLES_ID = 'reaction-roles' as ModuleId;
+const WELCOME_ID = 'welcome' as ModuleId;
 
 /**
  * Modules activés par défaut sur toute guild connue. `hello-world`
- * reste dans la liste tant qu'il sert de témoin ; `logs` et
- * `reaction-roles` sont les deux premiers modules officiels V1
- * (jalon 4). Les trois autres (`welcome-goodbye`, `moderation`,
- * `onboarding-presets`) s'y ajouteront à mesure de leur livraison.
+ * reste dans la liste tant qu'il sert de témoin ; `logs`,
+ * `reaction-roles` et `welcome` sont les modules officiels V1 (jalon 4).
+ * Les deux autres (`moderation`, `onboarding-presets`) s'y ajouteront à
+ * mesure de leur livraison.
  */
-const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID, LOGS_ID, REACTION_ROLES_ID];
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [
+  HELLO_WORLD_ID,
+  LOGS_ID,
+  REACTION_ROLES_ID,
+  WELCOME_ID,
+];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -409,9 +416,7 @@ async function main(): Promise<void> {
             ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
-          ...(discordAttachment
-            ? { listGuildEmojis: discordAttachment.listGuildEmojis }
-            : {}),
+          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -424,14 +429,13 @@ async function main(): Promise<void> {
             ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
-          ...(discordAttachment
-            ? { listGuildEmojis: discordAttachment.listGuildEmojis }
-            : {}),
+          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
         });
 
   handle.loader.register(helloWorld);
   handle.loader.register(logs);
   handle.loader.register(reactionRoles);
+  handle.loader.register(welcome);
   await handle.loader.loadAll();
 
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);

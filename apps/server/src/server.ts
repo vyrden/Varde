@@ -169,9 +169,7 @@ export interface CreateServerOptions<D extends DbDriver> {
    * (emojis du serveur courant + emojis des autres serveurs où le bot
    * est présent). Absente → la route GET /discord/emojis répond 503.
    */
-  readonly listGuildEmojis?: (
-    guildId: string,
-  ) => Promise<{
+  readonly listGuildEmojis?: (guildId: string) => Promise<{
     readonly current: readonly { id: string; name: string; animated: boolean }[];
     readonly external: readonly {
       id: string;

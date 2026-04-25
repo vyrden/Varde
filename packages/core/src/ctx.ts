@@ -142,6 +142,13 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.editMessage` nécessite un host (apps/bot).',
     );
   },
+  kickMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.kickMember` nécessite un host (apps/bot).',
+    );
+  },
+  getMemberCount: () => null,
+  getUserDisplayInfo: async () => null,
   getGuildName: () => null,
   getRoleName: () => null,
 });

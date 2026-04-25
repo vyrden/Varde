@@ -140,7 +140,7 @@ interface TextChannelLike {
     readonly edit: (id: string, options: { readonly content: string }) => Promise<unknown>;
   };
   /** `send` est disponible sur les salons textuels ; retourne un Message. */
-  readonly send?: (content: string) => Promise<{ readonly id: string }>;
+  readonly send?: (payload: SendPayload) => Promise<{ readonly id: string }>;
 }
 
 /** Forme minimale d'un GuildMember discord.js dont on a besoin. */
@@ -150,11 +150,13 @@ interface GuildMemberLike {
     readonly add: (roleId: string) => Promise<unknown>;
     readonly remove: (roleId: string) => Promise<unknown>;
   };
+  readonly kick?: (reason?: string) => Promise<unknown>;
 }
 
 /** Forme minimale d'une Guild discord.js pour la gestion des membres. */
 interface GuildLike {
   readonly name: string;
+  readonly memberCount?: number;
   readonly members: {
     readonly fetch: (userId: string) => Promise<GuildMemberLike>;
   };
@@ -170,14 +172,30 @@ interface GuildLike {
   };
 }
 
+/** Payload accepté par les helpers d'envoi (texte + pièces jointes + embeds). */
+type SendPayload =
+  | string
+  | {
+      readonly content: string;
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+    };
+
 /** Forme minimale d'un User discord.js pour les DMs. */
 interface UserLike {
-  readonly send: (content: string) => Promise<unknown>;
+  readonly send: (payload: SendPayload) => Promise<unknown>;
+  /** Snowflake → timestamp Unix en ms (epoch ≥ Discord epoch 2015-01-01). */
+  readonly createdTimestamp?: number;
+  readonly username?: string;
+  readonly tag?: string;
+  readonly globalName?: string | null;
+  readonly displayAvatarURL?: (options?: { size?: number }) => string;
 }
 
 /** Forme minimale d'un UserManager discord.js pour `users.fetch`. */
 interface UsersManagerLike {
   readonly fetch: (userId: string) => Promise<UserLike>;
+  readonly cache: { get: (userId: string) => UserLike | undefined };
 }
 
 /**
@@ -401,7 +419,14 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       return member.roles.cache.has(roleId);
     },
 
-    async postMessage(channelId: ChannelId, content: string): Promise<{ readonly id: MessageId }> {
+    async postMessage(
+      channelId: ChannelId,
+      content: string,
+      options?: {
+        readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+        readonly embeds?: ReadonlyArray<unknown>;
+      },
+    ): Promise<{ readonly id: MessageId }> {
       const channel = client?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
@@ -417,7 +442,15 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         );
       }
       try {
-        const message = await textChannel.send(content);
+        const payload: SendPayload =
+          options && (options.files !== undefined || options.embeds !== undefined)
+            ? {
+                content,
+                ...(options.files !== undefined ? { files: options.files } : {}),
+                ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
+              }
+            : content;
+        const message = await textChannel.send(payload);
         return { id: message.id as MessageId };
       } catch (err) {
         const reason = classifyError(err);
@@ -501,14 +534,22 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       }
     },
 
-    async sendDirectMessage(userId, content) {
+    async sendDirectMessage(userId, content, options) {
       const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
       if (!users) {
         throw new DiscordSendError('unknown', 'DiscordService.sendDirectMessage : client absent');
       }
       try {
         const user = await users.fetch(userId);
-        await user.send(content);
+        const payload: SendPayload =
+          options && (options.files !== undefined || options.embeds !== undefined)
+            ? {
+                content,
+                ...(options.files !== undefined ? { files: options.files } : {}),
+                ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
+              }
+            : content;
+        await user.send(payload);
         return true;
       } catch (err) {
         // Code 50007 = "Cannot send messages to this user" (DMs fermés).
@@ -534,6 +575,60 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     getRoleName(guildId, roleId) {
       const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
       return guild?.roles.cache.get(roleId)?.name ?? null;
+    },
+
+    async kickMember(guildId, userId, reason) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.kickMember : guild introuvable');
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (err) {
+        const reason2 = classifyError(err);
+        throw new DiscordSendError(
+          reason2,
+          `DiscordService.kickMember : member fetch a échoué (${err instanceof Error ? err.message : String(err)})`,
+        );
+      }
+      if (!member.kick) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.kickMember : member.kick indisponible',
+        );
+      }
+      try {
+        await member.kick(reason);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.kickMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    getMemberCount(guildId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.memberCount ?? null;
+    },
+
+    async getUserDisplayInfo(userId) {
+      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      if (!users) return null;
+      let user: UserLike | undefined;
+      try {
+        user = users.cache.get(userId) ?? (await users.fetch(userId));
+      } catch {
+        return null;
+      }
+      if (!user) return null;
+      const username = user.username ?? user.globalName ?? 'Inconnu';
+      const tag = user.tag ?? user.username ?? username;
+      const avatarUrl = user.displayAvatarURL?.({ size: 256 }) ?? '';
+      const accountCreatedAt = user.createdTimestamp ?? Date.now();
+      return { username, tag, avatarUrl, accountCreatedAt };
     },
   };
 }

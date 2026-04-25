@@ -90,6 +90,9 @@ const makeDiscordService = (overrides: Partial<DiscordService> = {}): DiscordSer
   sendDirectMessage: vi.fn().mockResolvedValue(true),
   getGuildName: vi.fn().mockReturnValue('Test Guild'),
   getRoleName: vi.fn().mockReturnValue('Test Role'),
+  kickMember: vi.fn().mockResolvedValue(undefined),
+  getMemberCount: vi.fn().mockReturnValue(100),
+  getUserDisplayInfo: vi.fn().mockResolvedValue(null),
   ...overrides,
 });
 

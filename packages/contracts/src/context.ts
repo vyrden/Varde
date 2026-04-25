@@ -197,11 +197,19 @@ export interface DiscordService {
    * Variante de `sendMessage` qui expose le `messageId` pour les modules
    * qui doivent persister une référence au message posté (reaction-roles).
    *
+   * `options.files` permet d'attacher une ou plusieurs pièces jointes
+   * (carte d'accueil pour le module welcome). `options.embeds` accepte
+   * des embeds Discord encodés en JSON brut.
+   *
    * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
    */
   readonly postMessage: (
     channelId: ChannelId,
     content: string,
+    options?: {
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+    },
   ) => Promise<{ readonly id: MessageId }>;
 
   /**
@@ -227,8 +235,18 @@ export interface DiscordService {
    * Envoie un message privé à un utilisateur. Échoue silencieusement
    * (résout en `false`) si l'utilisateur a désactivé les DMs venant
    * du serveur ; les autres erreurs lèvent `DiscordSendError`.
+   *
+   * `options.files` / `options.embeds` ont la même sémantique que
+   * pour `postMessage`.
    */
-  readonly sendDirectMessage: (userId: UserId, content: string) => Promise<boolean>;
+  readonly sendDirectMessage: (
+    userId: UserId,
+    content: string,
+    options?: {
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+    },
+  ) => Promise<boolean>;
 
   /**
    * Supprime un message Discord. Idempotent côté API : si le message
@@ -248,6 +266,31 @@ export interface DiscordService {
     messageId: MessageId,
     content: string,
   ) => Promise<void>;
+
+  /**
+   * Kick un membre d'une guild. Utilisé par le module welcome pour
+   * appliquer le filtre comptes neufs.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly kickMember: (guildId: GuildId, userId: UserId, reason?: string) => Promise<void>;
+
+  /**
+   * Retourne le nombre de membres d'une guild si elle est en cache,
+   * `null` sinon. Pas d'appel réseau.
+   */
+  readonly getMemberCount: (guildId: GuildId) => number | null;
+
+  /**
+   * Retourne les informations d'affichage d'un utilisateur (nom,
+   * tag, URL d'avatar). Source : cache discord.js puis fetch si manquant.
+   * Retourne `null` si l'utilisateur n'a pas pu être résolu.
+   */
+  readonly getUserDisplayInfo: (userId: UserId) => Promise<{
+    readonly username: string;
+    readonly tag: string;
+    readonly avatarUrl: string;
+    readonly accountCreatedAt: number;
+  } | null>;
 
   /** Retourne le nom de la guild si elle est en cache, `null` sinon. */
   readonly getGuildName: (guildId: GuildId) => string | null;
