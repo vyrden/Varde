@@ -36,6 +36,7 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
   return (
     <>
       <PageHeader
+        breadcrumbs={[{ label: 'Gestion' }, { label: 'Modules' }]}
         title="Modules"
         description="Clique sur un module pour en éditer la configuration."
       />

@@ -115,6 +115,7 @@ export default async function AuditPage({
   return (
     <>
       <PageHeader
+        breadcrumbs={[{ label: 'Gestion' }, { label: "Journal d'audit" }]}
         title="Journal d'audit"
         description="Historique des actions sur le serveur. Filtrez par type, sévérité ou fenêtre temporelle."
       />

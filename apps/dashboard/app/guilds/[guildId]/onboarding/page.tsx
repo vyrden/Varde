@@ -62,6 +62,7 @@ export default async function OnboardingPage({
   return (
     <>
       <PageHeader
+        breadcrumbs={[{ label: 'Gestion' }, { label: 'Onboarding' }]}
         title="Onboarding"
         description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
       />
