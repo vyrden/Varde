@@ -4,11 +4,11 @@ import { Button } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
-  formatReactionRoleReason,
   type PublishReactionRoleInput,
   publishReactionRole,
   syncReactionRole,
 } from '../../lib/reaction-roles-actions';
+import { formatReactionRoleReason } from '../../lib/reaction-roles-reasons';
 import type { ReactionRoleMessageClient } from './ReactionRolesConfigEditor';
 import type { ReactionRoleTemplate } from './templates';
 
