@@ -13,6 +13,7 @@ import {
   registerAiSettingsRoutes,
   registerAuditRoutes,
   registerDiscordChannelsRoutes,
+  registerDiscordEmojisRoutes,
   registerGuildsRoutes,
   registerLogsRoutes,
   registerModulePermissionsRoutes,
@@ -163,6 +164,22 @@ export interface CreateServerOptions<D extends DbDriver> {
   readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
   /** Fonction listant les rôles Discord d'une guild. Voir `listGuildTextChannels`. */
   readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Fonction listant les emojis custom visibles depuis une guild
+   * (emojis du serveur courant + emojis des autres serveurs où le bot
+   * est présent). Absente → la route GET /discord/emojis répond 503.
+   */
+  readonly listGuildEmojis?: (
+    guildId: string,
+  ) => Promise<{
+    readonly current: readonly { id: string; name: string; animated: boolean }[];
+    readonly external: readonly {
+      id: string;
+      name: string;
+      animated: boolean;
+      guildName: string;
+    }[];
+  }>;
   /**
    * Service Discord concret câblé par `bin.ts` quand le token est
    * présent. Omis → `createCtxFactory` utilise son stub interne
@@ -476,6 +493,10 @@ export async function createServer<D extends DbDriver>(
       ? { listGuildTextChannels: options.listGuildTextChannels }
       : {}),
     ...(options.listGuildRoles ? { listGuildRoles: options.listGuildRoles } : {}),
+  });
+  registerDiscordEmojisRoutes(api, {
+    discord,
+    ...(options.listGuildEmojis ? { listGuildEmojis: options.listGuildEmojis } : {}),
   });
   registerLogsRoutes(api, {
     discord,

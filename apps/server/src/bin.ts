@@ -238,6 +238,22 @@ interface DiscordAttachment {
   readonly listGuildTextChannels: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
   /** Liste les rôles d'une guild depuis le cache discord.js. */
   readonly listGuildRoles: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Liste les emojis custom visibles depuis une guild :
+   * - `current` : emojis du serveur courant.
+   * - `external` : emojis des autres serveurs où le bot est présent
+   *   (utilisables par les utilisateurs Nitro côté Discord, et par le
+   *   bot lui-même pour pré-réagir).
+   */
+  readonly listGuildEmojis: (guildId: string) => Promise<{
+    readonly current: readonly { id: string; name: string; animated: boolean }[];
+    readonly external: readonly {
+      id: string;
+      name: string;
+      animated: boolean;
+      guildName: string;
+    }[];
+  }>;
 }
 
 interface DiscordBinding {
@@ -300,7 +316,37 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
       .map((r) => ({ id: r.id, name: r.name }));
   };
 
-  return { client, bridge, discordService, listGuildTextChannels, listGuildRoles };
+  const listGuildEmojis: DiscordAttachment['listGuildEmojis'] = async (guildId) => {
+    const current: { id: string; name: string; animated: boolean }[] = [];
+    const external: { id: string; name: string; animated: boolean; guildName: string }[] = [];
+    for (const guild of client.guilds.cache.values()) {
+      for (const emoji of guild.emojis.cache.values()) {
+        if (emoji.id === null || emoji.name === null) continue;
+        if (guild.id === guildId) {
+          current.push({ id: emoji.id, name: emoji.name, animated: emoji.animated ?? false });
+        } else {
+          external.push({
+            id: emoji.id,
+            name: emoji.name,
+            animated: emoji.animated ?? false,
+            guildName: guild.name,
+          });
+        }
+      }
+    }
+    current.sort((a, b) => a.name.localeCompare(b.name));
+    external.sort((a, b) => a.guildName.localeCompare(b.guildName) || a.name.localeCompare(b.name));
+    return { current, external };
+  };
+
+  return {
+    client,
+    bridge,
+    discordService,
+    listGuildTextChannels,
+    listGuildRoles,
+    listGuildEmojis,
+  };
 }
 
 function attachDiscordToHandle(
@@ -363,6 +409,9 @@ async function main(): Promise<void> {
             ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
+          ...(discordAttachment
+            ? { listGuildEmojis: discordAttachment.listGuildEmojis }
+            : {}),
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -375,6 +424,9 @@ async function main(): Promise<void> {
             ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
+          ...(discordAttachment
+            ? { listGuildEmojis: discordAttachment.listGuildEmojis }
+            : {}),
         });
 
   handle.loader.register(helloWorld);

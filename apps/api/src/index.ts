@@ -34,6 +34,12 @@ export {
   registerDiscordChannelsRoutes,
 } from './routes/discord-channels.js';
 export {
+  type GuildEmojiDto,
+  type ListGuildEmojisResult,
+  type RegisterDiscordEmojisRoutesOptions,
+  registerDiscordEmojisRoutes,
+} from './routes/discord-emojis.js';
+export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,

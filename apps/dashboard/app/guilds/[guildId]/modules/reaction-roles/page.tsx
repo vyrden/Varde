@@ -10,6 +10,7 @@ import { ReactionRolesConfigEditor } from '../../../../../components/reaction-ro
 import {
   ApiError,
   fetchAdminGuilds,
+  fetchGuildEmojis,
   fetchGuildRoles,
   fetchGuildTextChannels,
   fetchModuleConfig,
@@ -110,15 +111,17 @@ export default async function ReactionRolesPage({
   let unbound: Awaited<ReturnType<typeof fetchUnboundPermissions>>;
   let channels: Awaited<ReturnType<typeof fetchGuildTextChannels>>;
   let roles: Awaited<ReturnType<typeof fetchGuildRoles>>;
+  let emojis: Awaited<ReturnType<typeof fetchGuildEmojis>>;
 
   try {
-    [guilds, modules, moduleConfig, unbound, channels, roles] = await Promise.all([
+    [guilds, modules, moduleConfig, unbound, channels, roles, emojis] = await Promise.all([
       fetchAdminGuilds(),
       fetchModules(guildId),
       fetchModuleConfig(guildId, 'reaction-roles'),
       fetchUnboundPermissions(guildId, 'reaction-roles'),
       fetchGuildTextChannels(guildId),
       fetchGuildRoles(guildId),
+      fetchGuildEmojis(guildId),
     ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
@@ -218,6 +221,7 @@ export default async function ReactionRolesPage({
             initialMessages={initialMessages}
             channels={channels}
             roles={roles}
+            emojis={emojis}
           />
         )}
       </main>

@@ -246,6 +246,39 @@ export async function fetchGuildRoles(guildId: string): Promise<readonly GuildRo
   }
 }
 
+/** Emoji custom Discord retourné par GET /discord/emojis. */
+export interface GuildEmojiDto {
+  readonly id: string;
+  readonly name: string;
+  readonly animated: boolean;
+  /** Présent uniquement pour les emojis externes (autres serveurs). */
+  readonly guildName?: string;
+}
+
+/** Réponse de GET /discord/emojis : emojis serveur courant + autres serveurs. */
+export interface GuildEmojisResponse {
+  readonly current: readonly GuildEmojiDto[];
+  readonly external: readonly GuildEmojiDto[];
+}
+
+/**
+ * Liste les emojis custom visibles depuis une guild (serveur courant +
+ * autres serveurs où le bot est invité). Retourne `{ current: [],
+ * external: [] }` si le bot n'est pas connecté.
+ */
+export async function fetchGuildEmojis(guildId: string): Promise<GuildEmojisResponse> {
+  try {
+    return await apiGet<GuildEmojisResponse>(
+      `/guilds/${encodeURIComponent(guildId)}/discord/emojis`,
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 503) {
+      return { current: [], external: [] };
+    }
+    throw error;
+  }
+}
+
 /** Binding permission → rôle tel que renvoyé par l'API. */
 export interface PermissionBindingDto {
   readonly permissionId: string;

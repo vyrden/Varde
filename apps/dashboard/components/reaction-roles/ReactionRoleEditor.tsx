@@ -9,7 +9,8 @@ import {
   syncReactionRole,
 } from '../../lib/reaction-roles-actions';
 import { formatReactionRoleReason } from '../../lib/reaction-roles-reasons';
-import type { ReactionRoleMessageClient } from './ReactionRolesConfigEditor';
+import { EmojiPicker } from './EmojiPicker';
+import type { EmojiCatalog, ReactionRoleMessageClient } from './ReactionRolesConfigEditor';
 import type { ReactionRoleTemplate } from './templates';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,7 @@ export type ReactionRoleEditorProps =
       readonly template: ReactionRoleTemplate;
       readonly channels: readonly ChannelOption[];
       readonly roles: readonly RoleOption[];
+      readonly emojis: EmojiCatalog;
       readonly onSaved: (newRR: ReactionRoleMessageClient) => void;
       readonly onCancel: () => void;
     }
@@ -55,6 +57,7 @@ export type ReactionRoleEditorProps =
       readonly existing: ReactionRoleMessageClient;
       readonly channels: readonly ChannelOption[];
       readonly roles: readonly RoleOption[];
+      readonly emojis: EmojiCatalog;
       readonly onSaved: (updated: ReactionRoleMessageClient) => void;
       readonly onCancel: () => void;
     };
@@ -153,6 +156,7 @@ function PairRow({
   pair,
   index,
   roles,
+  emojis,
   canRemove,
   onChange,
   onRemove,
@@ -160,43 +164,56 @@ function PairRow({
   readonly pair: PairDraft;
   readonly index: number;
   readonly roles: readonly RoleOption[];
+  readonly emojis: EmojiCatalog;
   readonly canRemove: boolean;
   readonly onChange: (updated: PairDraft) => void;
   readonly onRemove: () => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const setEmojiValue = (value: string) => {
+    onChange(
+      pair.roleMode === 'existing'
+        ? { uid: pair.uid, roleMode: 'existing', emoji: value, roleId: pair.roleId }
+        : { uid: pair.uid, roleMode: 'create', emoji: value, roleName: pair.roleName },
+    );
+  };
+
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2">
       {/* Emoji */}
-      <div className="flex flex-col gap-0.5">
+      <div className="relative flex flex-col gap-0.5">
         <label className="text-xs text-muted-foreground" htmlFor={`pair-emoji-${index}`}>
           Emoji
         </label>
-        <input
-          id={`pair-emoji-${index}`}
-          type="text"
-          value={pair.emoji}
-          placeholder="🌍 ou <:nom:id>"
-          maxLength={64}
-          onChange={(e) =>
-            onChange(
-              pair.roleMode === 'existing'
-                ? {
-                    uid: pair.uid,
-                    roleMode: 'existing',
-                    emoji: e.target.value,
-                    roleId: pair.roleId,
-                  }
-                : {
-                    uid: pair.uid,
-                    roleMode: 'create',
-                    emoji: e.target.value,
-                    roleName: pair.roleName,
-                  },
-            )
-          }
-          className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Emoji de la paire ${index + 1}`}
-        />
+        <div className="flex items-center gap-1">
+          <input
+            id={`pair-emoji-${index}`}
+            type="text"
+            value={pair.emoji}
+            placeholder="🌍 ou <:nom:id>"
+            maxLength={64}
+            onChange={(e) => setEmojiValue(e.target.value)}
+            className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Emoji de la paire ${index + 1}`}
+          />
+          <button
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            aria-label="Ouvrir le sélecteur d'emoji"
+            aria-expanded={pickerOpen}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background hover:bg-muted"
+          >
+            😀
+          </button>
+        </div>
+        {pickerOpen ? (
+          <EmojiPicker
+            catalog={emojis}
+            onPick={(raw) => setEmojiValue(raw)}
+            onClose={() => setPickerOpen(false)}
+          />
+        ) : null}
       </div>
 
       {/* Mode rôle */}
@@ -633,6 +650,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
               pair={pair}
               index={i}
               roles={props.roles}
+              emojis={props.emojis}
               canRemove={pairs.length > 1}
               onChange={(updated) => handlePairChange(i, updated)}
               onRemove={() => handleRemovePair(i)}

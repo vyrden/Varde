@@ -34,11 +34,25 @@ export interface RoleOption {
   readonly name: string;
 }
 
+export interface CustomEmojiOption {
+  readonly id: string;
+  readonly name: string;
+  readonly animated: boolean;
+  /** Présent uniquement pour les emojis externes (autres serveurs). */
+  readonly guildName?: string;
+}
+
+export interface EmojiCatalog {
+  readonly current: readonly CustomEmojiOption[];
+  readonly external: readonly CustomEmojiOption[];
+}
+
 export interface ReactionRolesConfigEditorProps {
   readonly guildId: string;
   readonly initialMessages: readonly ReactionRoleMessageClient[];
   readonly channels: readonly ChannelOption[];
   readonly roles: readonly RoleOption[];
+  readonly emojis: EmojiCatalog;
 }
 
 type View =
@@ -101,6 +115,7 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
         template={view.template}
         channels={props.channels}
         roles={props.roles}
+        emojis={props.emojis}
         onSaved={(saved) => {
           setMessages([...messages, saved]);
           setView({ kind: 'list' });
@@ -122,6 +137,7 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
       existing={current}
       channels={props.channels}
       roles={props.roles}
+      emojis={props.emojis}
       onSaved={(saved) => {
         setMessages(messages.map((m) => (m.id === saved.id ? saved : m)));
         setView({ kind: 'list' });
