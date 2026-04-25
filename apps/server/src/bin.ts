@@ -264,7 +264,7 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   });
   const bridge = createOnboardingDiscordBridge(client);
   const sender = createDiscordJsChannelSender(client);
-  const discordService = createDiscordService({ sender, logger });
+  const discordService = createDiscordService({ sender, logger, client });
 
   const listGuildTextChannels = async (
     guildId: string,
