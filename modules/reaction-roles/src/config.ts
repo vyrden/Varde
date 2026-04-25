@@ -40,6 +40,13 @@ export const reactionRoleMessageSchema = z.object({
   label: z.string().min(1).max(64),
   channelId: z.string().regex(SNOWFLAKE),
   messageId: z.string().regex(SNOWFLAKE),
+  /**
+   * Contenu textuel du message Discord, miroir de l'état de Discord
+   * pour permettre l'édition depuis le dashboard sans aller-retour.
+   * Vide par défaut pour les entrées créées avant l'introduction du
+   * champ : l'admin saisit le nouveau texte au moment de l'édition.
+   */
+  message: z.string().max(2000).default(''),
   mode: reactionRoleModeSchema,
   pairs: z.array(reactionRolePairSchema).min(1).max(20),
 });

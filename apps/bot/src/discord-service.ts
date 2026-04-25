@@ -137,6 +137,7 @@ interface TextChannelLike {
   readonly messages: {
     readonly fetch: (id: string) => Promise<MessageLike>;
     readonly delete: (id: string) => Promise<unknown>;
+    readonly edit: (id: string, options: { readonly content: string }) => Promise<unknown>;
   };
   /** `send` est disponible sur les salons textuels ; retourne un Message. */
   readonly send?: (content: string) => Promise<{ readonly id: string }>;
@@ -453,6 +454,26 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         throw new DiscordSendError(
           reason,
           `DiscordService.createRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async editMessage(channelId: ChannelId, messageId: MessageId, content: string): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.editMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      try {
+        await textChannel.messages.edit(messageId, { content });
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.editMessage : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },

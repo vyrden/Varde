@@ -304,7 +304,9 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
     isNew ? props.template.defaultLabel : props.existing.label,
   );
   const [channelId, setChannelId] = useState<string>(isNew ? '' : props.existing.channelId);
-  const [message, setMessage] = useState<string>(isNew ? props.template.defaultMessage : '');
+  const [message, setMessage] = useState<string>(
+    isNew ? props.template.defaultMessage : props.existing.message,
+  );
   const [mode, setMode] = useState<EditorMode>(
     isNew ? props.template.defaultMode : props.existing.mode,
   );
@@ -317,7 +319,8 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
   // Validation
   const isValid =
     label.trim() !== '' &&
-    (isNew ? channelId !== '' && message.trim() !== '' : true) &&
+    channelId !== '' &&
+    message.trim() !== '' &&
     pairs.length > 0 &&
     pairs.every(isPairValid);
 
@@ -383,6 +386,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           label: label.trim(),
           channelId,
           messageId: result.messageId,
+          message: message.trim(),
           mode,
           pairs: clientPairs,
         });
@@ -391,6 +395,8 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         const apiPairs = buildApiPairs();
         const result = await syncReactionRole(props.guildId, props.existing.messageId, {
           label: label.trim(),
+          channelId,
+          message: message.trim(),
           mode,
           pairs: apiPairs,
         });
@@ -415,6 +421,9 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         props.onSaved({
           ...props.existing,
           label: label.trim(),
+          channelId,
+          messageId: result.messageId ?? props.existing.messageId,
+          message: message.trim(),
           mode,
           pairs: clientPairs,
         });
@@ -450,65 +459,54 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         />
       </div>
 
-      {/* Salon (nouveau uniquement) */}
-      {isNew ? (
-        <div className="space-y-1">
-          <label className="block text-sm font-medium" htmlFor="rr-channel">
-            Salon de publication
-          </label>
-          <select
-            id="rr-channel"
-            value={channelId}
-            onChange={(e) => setChannelId(e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">— choisir un salon —</option>
-            {props.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">Salon</p>
-          <p className="text-sm">
-            #
-            {props.channels.find((c) => c.id === props.existing.channelId)?.name ??
-              props.existing.channelId}
-            <span className="ml-2 text-xs text-muted-foreground">
-              (non modifiable — supprime et recrée pour changer)
-            </span>
+      {/* Salon */}
+      <div className="space-y-1">
+        <label className="block text-sm font-medium" htmlFor="rr-channel">
+          Salon de publication
+        </label>
+        <select
+          id="rr-channel"
+          value={channelId}
+          onChange={(e) => setChannelId(e.target.value)}
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="">— choisir un salon —</option>
+          {props.channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              #{c.name}
+            </option>
+          ))}
+        </select>
+        {!isNew && channelId !== props.existing.channelId ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Changer de salon supprime le message actuel et en repost un nouveau (les réactions
+            existantes des membres seront perdues).
           </p>
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      {/* Message (nouveau uniquement) */}
-      {isNew ? (
-        <div className="space-y-1">
-          <label className="block text-sm font-medium" htmlFor="rr-message">
-            Contenu du message Discord
-          </label>
-          <textarea
-            id="rr-message"
-            value={message}
-            placeholder="Le texte qui apparaîtra dans le message Discord…"
-            maxLength={2000}
-            rows={3}
-            onChange={(e) => setMessage(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <p className="text-xs text-muted-foreground">{message.length}/2000</p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">Message Discord</p>
+      {/* Message */}
+      <div className="space-y-1">
+        <label className="block text-sm font-medium" htmlFor="rr-message">
+          Contenu du message Discord
+        </label>
+        <textarea
+          id="rr-message"
+          value={message}
+          placeholder="Le texte qui apparaîtra dans le message Discord…"
+          maxLength={2000}
+          rows={3}
+          onChange={(e) => setMessage(e.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <p className="text-xs text-muted-foreground">{message.length}/2000</p>
+        {!isNew && props.existing.message === '' ? (
           <p className="text-xs text-muted-foreground">
-            Non modifiable — supprime et recrée pour changer le texte.
+            Le contenu actuel n'est pas connu (entrée créée avant cette mise à jour). Saisis le
+            nouveau texte si tu veux le modifier.
           </p>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Mode */}
       <fieldset className="space-y-2">

@@ -10,6 +10,7 @@ const msg = {
   label: 'Continents',
   channelId: '111',
   messageId: '222',
+  message: 'Choisis ton continent',
   mode: 'unique' as const,
   pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: '333' }],
 };

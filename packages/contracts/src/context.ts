@@ -238,6 +238,17 @@ export interface DiscordService {
    */
   readonly deleteMessage: (channelId: ChannelId, messageId: MessageId) => Promise<void>;
 
+  /**
+   * Édite le contenu d'un message Discord posté par le bot.
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'message-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly editMessage: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    content: string,
+  ) => Promise<void>;
+
   /** Retourne le nom de la guild si elle est en cache, `null` sinon. */
   readonly getGuildName: (guildId: GuildId) => string | null;
 

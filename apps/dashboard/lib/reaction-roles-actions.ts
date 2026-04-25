@@ -85,12 +85,21 @@ export async function publishReactionRole(
 
 export interface SyncReactionRoleInput {
   readonly label: string;
+  readonly channelId: string;
+  readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
   readonly pairs: PublishReactionRoleInput['pairs'];
 }
 
 export type SyncResult =
-  | { readonly ok: true; readonly added: number; readonly removed: number }
+  | {
+      readonly ok: true;
+      readonly added: number;
+      readonly removed: number;
+      readonly channelChanged: boolean;
+      /** Présent uniquement quand le salon change : nouveau messageId Discord. */
+      readonly messageId?: string;
+    }
   | { readonly ok: false; readonly reason: string };
 
 /**
@@ -118,9 +127,20 @@ export async function syncReactionRole(
     );
 
     if (response.ok) {
-      const body = (await response.json()) as { added: number; removed: number };
+      const body = (await response.json()) as {
+        added: number;
+        removed: number;
+        channelChanged?: boolean;
+        messageId?: string;
+      };
       revalidatePath(`/guilds/${guildId}/modules/reaction-roles`);
-      return { ok: true, added: body.added, removed: body.removed };
+      return {
+        ok: true,
+        added: body.added,
+        removed: body.removed,
+        channelChanged: body.channelChanged === true,
+        ...(body.messageId !== undefined ? { messageId: body.messageId } : {}),
+      };
     }
 
     const errBody = (await response.json().catch(() => ({}))) as { reason?: string };

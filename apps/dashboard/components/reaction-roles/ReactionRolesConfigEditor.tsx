@@ -13,6 +13,7 @@ export interface ReactionRoleMessageClient {
   readonly label: string;
   readonly channelId: string;
   readonly messageId: string;
+  readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
   readonly pairs: readonly {
     readonly emoji:

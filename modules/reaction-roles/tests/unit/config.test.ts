@@ -50,6 +50,7 @@ describe('reactionRoleMessageSchema', () => {
   it('accepte un message valide avec 1 paire', () => {
     expect(reactionRoleMessageSchema.parse(validMessage)).toEqual({
       ...validMessage,
+      message: '',
       pairs: [{ emoji: { type: 'unicode', value: '🇪🇺' }, roleId: SNOWFLAKE_C }],
     });
   });

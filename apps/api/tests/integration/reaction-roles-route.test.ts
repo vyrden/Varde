@@ -85,6 +85,11 @@ const makeDiscordService = (overrides: Partial<DiscordService> = {}): DiscordSer
   memberHasRole: vi.fn().mockResolvedValue(false),
   postMessage: vi.fn().mockResolvedValue({ id: MESSAGE_ID }),
   createRole: vi.fn().mockResolvedValue({ id: NEW_ROLE_ID }),
+  deleteMessage: vi.fn().mockResolvedValue(undefined),
+  editMessage: vi.fn().mockResolvedValue(undefined),
+  sendDirectMessage: vi.fn().mockResolvedValue(true),
+  getGuildName: vi.fn().mockReturnValue('Test Guild'),
+  getRoleName: vi.fn().mockReturnValue('Test Role'),
   ...overrides,
 });
 
@@ -125,6 +130,8 @@ const validPublishBody = {
 
 const validSyncBody = {
   label: 'Rôles de jeu (màj)',
+  channelId: CHANNEL,
+  message: 'Choisis ton/tes rôles de jeu (màj)',
   mode: 'unique',
   pairs: [{ emoji: { type: 'unicode', value: '🎮' }, roleId: ROLE_ID }],
 };
@@ -434,6 +441,8 @@ describe('POST /guilds/:guildId/modules/reaction-roles/:messageId/sync', () => {
       // Body sync : ajoute 🎨 en plus de 🎮
       const syncBody = {
         label: 'Màj',
+        channelId: CHANNEL,
+        message: 'Réagis pour obtenir un rôle',
         mode: 'normal',
         pairs: [
           { emoji: { type: 'unicode', value: '🎮' }, roleId: ROLE_ID },
@@ -527,6 +536,8 @@ describe('POST /guilds/:guildId/modules/reaction-roles/:messageId/sync', () => {
       // Body sync : retire 🎨, ajoute 🚀
       const syncBody = {
         label: 'Màj mixte',
+        channelId: CHANNEL,
+        message: 'Réagis pour obtenir un rôle',
         mode: 'normal',
         pairs: [
           { emoji: { type: 'unicode', value: '🎮' }, roleId: ROLE_ID },

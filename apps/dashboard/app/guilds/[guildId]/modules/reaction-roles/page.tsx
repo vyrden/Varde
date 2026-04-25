@@ -32,6 +32,7 @@ interface RawRRMessage {
   label?: unknown;
   channelId?: unknown;
   messageId?: unknown;
+  message?: unknown;
   mode?: unknown;
   pairs?: unknown;
 }
@@ -81,6 +82,7 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
         label: String(m.label ?? ''),
         channelId: String(m.channelId ?? ''),
         messageId: String(m.messageId ?? ''),
+        message: typeof m.message === 'string' ? m.message : '',
         mode: mode === 'unique' || mode === 'verifier' ? mode : 'normal',
         pairs,
       };

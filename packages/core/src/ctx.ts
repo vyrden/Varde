@@ -137,6 +137,11 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.deleteMessage` nécessite un host (apps/bot).',
     );
   },
+  editMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.editMessage` nécessite un host (apps/bot).',
+    );
+  },
   getGuildName: () => null,
   getRoleName: () => null,
 });
