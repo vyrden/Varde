@@ -25,6 +25,13 @@ interface NavLink {
   readonly href: string;
   readonly icon: ReactNode;
   readonly statusDot?: 'on' | 'off';
+  /**
+   * Si true, l'entrée n'est active que sur `currentPath === href`. À
+   * utiliser pour les liens dont la href est un préfixe d'autres
+   * pages (typiquement « Modules » → `/guilds/[id]`, qui est le
+   * préfixe de toutes les sous-pages de la guild).
+   */
+  readonly exact?: boolean;
 }
 
 const iconModules = (
@@ -89,7 +96,9 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
       </p>
       <ul className="space-y-0.5">
         {items.map((it) => {
-          const active = currentPath === it.href || currentPath.startsWith(`${it.href}/`);
+          const active = it.exact
+            ? currentPath === it.href
+            : currentPath === it.href || currentPath.startsWith(`${it.href}/`);
           return (
             <li key={it.key}>
               <Link
@@ -134,7 +143,13 @@ export function GuildSidebar({ guildId, guildName, modules }: GuildSidebarProps)
   const pathname = usePathname() ?? '';
 
   const gestion: NavLink[] = [
-    { key: 'modules', label: 'Modules', href: `/guilds/${guildId}`, icon: iconModules },
+    {
+      key: 'modules',
+      label: 'Modules',
+      href: `/guilds/${guildId}`,
+      icon: iconModules,
+      exact: true,
+    },
     { key: 'audit', label: 'Audit', href: `/guilds/${guildId}/audit`, icon: iconAudit },
     {
       key: 'onboarding',
