@@ -12,6 +12,7 @@ const msg = {
   messageId: '222',
   message: 'Choisis ton continent',
   mode: 'unique' as const,
+  feedback: 'dm' as const,
   pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: '333' }],
 };
 

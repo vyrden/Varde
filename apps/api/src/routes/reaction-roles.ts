@@ -66,6 +66,7 @@ const publishBodySchema = z.object({
   channelId: z.string().regex(/^\d{17,19}$/),
   message: z.string().min(1).max(2000),
   mode: z.enum(['normal', 'unique', 'verifier']),
+  feedback: z.enum(['dm', 'none']).default('dm'),
   pairs: z.array(pairSchema).min(1).max(20),
 });
 
@@ -74,6 +75,7 @@ const syncBodySchema = z.object({
   channelId: z.string().regex(/^\d{17,19}$/),
   message: z.string().min(1).max(2000),
   mode: z.enum(['normal', 'unique', 'verifier']),
+  feedback: z.enum(['dm', 'none']).default('dm'),
   pairs: z.array(pairSchema).min(1).max(20),
 });
 
@@ -93,6 +95,7 @@ interface RRMessage {
   readonly messageId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
+  readonly feedback: 'dm' | 'none';
   readonly pairs: readonly ResolvedPair[];
 }
 
@@ -250,6 +253,7 @@ export function registerReactionRolesRoutes(
         messageId: postedMessageId,
         message: body.message,
         mode: body.mode,
+        feedback: body.feedback,
         pairs: resolvedPairs,
       };
 
@@ -398,6 +402,7 @@ export function registerReactionRolesRoutes(
           messageId: postedMessageId,
           message: body.message,
           mode: body.mode,
+          feedback: body.feedback,
           pairs: resolvedNewPairs,
         };
         const updatedMessages = existingMessages.map((m, i) => (i === entryIndex ? movedEntry : m));
@@ -489,6 +494,7 @@ export function registerReactionRolesRoutes(
         label: body.label,
         message: body.message,
         mode: body.mode,
+        feedback: body.feedback,
         pairs: resolvedNewPairs,
       };
       const updatedMessages = existingMessages.map((m, i) => (i === entryIndex ? updatedEntry : m));

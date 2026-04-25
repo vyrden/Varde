@@ -32,6 +32,7 @@ export type PairDraft =
   | { uid: string; emoji: string; roleMode: 'create'; roleName: string };
 
 type EditorMode = 'normal' | 'unique' | 'verifier';
+type EditorFeedback = 'dm' | 'none';
 
 interface FeedbackState {
   kind: 'success' | 'error';
@@ -310,6 +311,9 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
   const [mode, setMode] = useState<EditorMode>(
     isNew ? props.template.defaultMode : props.existing.mode,
   );
+  const [feedbackChoice, setFeedbackChoice] = useState<EditorFeedback>(
+    isNew ? 'dm' : props.existing.feedback,
+  );
   const [pairs, setPairs] = useState<PairDraft[]>(
     isNew ? pairsFromTemplate(props.template) : pairsFromExisting(props.existing),
   );
@@ -360,6 +364,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           channelId,
           message: message.trim(),
           mode,
+          feedback: feedbackChoice,
           pairs: apiPairs,
         });
 
@@ -388,6 +393,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           messageId: result.messageId,
           message: message.trim(),
           mode,
+          feedback: feedbackChoice,
           pairs: clientPairs,
         });
       } else {
@@ -398,6 +404,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           channelId,
           message: message.trim(),
           mode,
+          feedback: feedbackChoice,
           pairs: apiPairs,
         });
 
@@ -425,6 +432,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           messageId: result.messageId ?? props.existing.messageId,
           message: message.trim(),
           mode,
+          feedback: feedbackChoice,
           pairs: clientPairs,
         });
       }
@@ -552,6 +560,51 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
             </label>
           ))}
         </div>
+      </fieldset>
+
+      {/* Confirmation utilisateur */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Confirmation à l'utilisateur</legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(
+            [
+              {
+                value: 'dm',
+                label: 'DM (message privé)',
+                desc: 'Le bot envoie un MP à chaque ajout / retrait',
+              },
+              {
+                value: 'none',
+                label: 'Aucune',
+                desc: 'Silencieux',
+              },
+            ] as const
+          ).map((f) => (
+            <label
+              key={f.value}
+              className={`flex cursor-pointer flex-col gap-1 rounded-md border p-3 text-sm transition-colors ${
+                feedbackChoice === f.value
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-muted-foreground'
+              }`}
+            >
+              <input
+                type="radio"
+                name="rr-feedback"
+                value={f.value}
+                checked={feedbackChoice === f.value}
+                onChange={() => setFeedbackChoice(f.value)}
+                className="sr-only"
+              />
+              <span className="font-medium">{f.label}</span>
+              <span className="text-xs text-muted-foreground">{f.desc}</span>
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Discord ne permet pas les messages éphémères (« Seul toi peut voir ») en réponse à une
+          réaction — seules les interactions (boutons, slash-commands) y ont accès.
+        </p>
       </fieldset>
 
       {/* Paires emoji → rôle */}

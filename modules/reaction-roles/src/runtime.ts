@@ -24,11 +24,18 @@ const formatGuildLabel = (ctx: ModuleContext, guildId: GuildId): string =>
   ctx.discord.getGuildName(guildId) ?? 'le serveur';
 
 /**
- * Tente d'envoyer un DM de feedback. Les échecs (DMs fermés, erreur réseau,
- * etc.) sont avalés : un retour visuel raté ne doit jamais bloquer le
- * fonctionnement métier de l'attribution de rôle.
+ * Tente d'envoyer un DM de feedback selon la préférence du message
+ * (`feedback === 'dm'`). En mode `'none'` la fonction est un no-op.
+ * Les échecs (DMs fermés, erreur réseau, etc.) sont avalés : un retour
+ * visuel raté ne doit jamais bloquer le fonctionnement métier.
  */
-const notifyUser = async (ctx: ModuleContext, userId: UserId, content: string): Promise<void> => {
+const notifyUser = async (
+  ctx: ModuleContext,
+  feedback: ReactionRoleMessage['feedback'],
+  userId: UserId,
+  content: string,
+): Promise<void> => {
+  if (feedback === 'none') return;
   try {
     await ctx.discord.sendDirectMessage(userId, content);
   } catch (error) {
@@ -127,6 +134,7 @@ export async function handleReactionAdd(
 
   void notifyUser(
     ctx,
+    message.feedback,
     typedUserId,
     `✅ Tu as obtenu le rôle **${formatRoleLabel(ctx, typedGuildId, typedRoleId)}** dans **${formatGuildLabel(ctx, typedGuildId)}**.`,
   );
@@ -185,6 +193,7 @@ export async function handleReactionAdd(
 
       void notifyUser(
         ctx,
+        message.feedback,
         typedUserId,
         `🔄 Le rôle **${formatRoleLabel(ctx, typedGuildId, otherPair.roleId as RoleId)}** t'a été retiré dans **${formatGuildLabel(ctx, typedGuildId)}** (mode unique).`,
       );
@@ -247,6 +256,7 @@ export async function handleReactionRemove(
 
   void notifyUser(
     ctx,
+    match.message.feedback,
     typedUserId,
     `❌ Le rôle **${formatRoleLabel(ctx, typedGuildId, typedRoleId)}** t'a été retiré dans **${formatGuildLabel(ctx, typedGuildId)}**.`,
   );

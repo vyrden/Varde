@@ -18,6 +18,7 @@ export interface PublishReactionRoleInput {
   readonly channelId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
+  readonly feedback: 'dm' | 'none';
   readonly pairs: ReadonlyArray<{
     readonly emoji:
       | { readonly type: 'unicode'; readonly value: string }
@@ -88,6 +89,7 @@ export interface SyncReactionRoleInput {
   readonly channelId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
+  readonly feedback: 'dm' | 'none';
   readonly pairs: PublishReactionRoleInput['pairs'];
 }
 

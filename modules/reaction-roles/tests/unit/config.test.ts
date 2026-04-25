@@ -51,6 +51,7 @@ describe('reactionRoleMessageSchema', () => {
     expect(reactionRoleMessageSchema.parse(validMessage)).toEqual({
       ...validMessage,
       message: '',
+      feedback: 'dm',
       pairs: [{ emoji: { type: 'unicode', value: '🇪🇺' }, roleId: SNOWFLAKE_C }],
     });
   });

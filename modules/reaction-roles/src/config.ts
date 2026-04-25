@@ -35,6 +35,19 @@ export type ReactionRolePair = z.infer<typeof reactionRolePairSchema>;
 export const reactionRoleModeSchema = z.enum(['normal', 'unique', 'verifier']);
 export type ReactionRoleMode = z.infer<typeof reactionRoleModeSchema>;
 
+/**
+ * Type de retour visuel envoyé à l'utilisateur après attribution / retrait.
+ * - `dm` : message privé du bot (vrai message « visible que par lui »).
+ * - `none` : aucun feedback (silencieux).
+ *
+ * Note : Discord ne permet pas les messages éphémères en réponse à une
+ * réaction (l'API ephemeral exige un contexte d'interaction). Si on
+ * voulait du « Seul toi peux voir » il faudrait passer ce module sur des
+ * boutons Discord à la place des réactions.
+ */
+export const reactionRoleFeedbackSchema = z.enum(['dm', 'none']);
+export type ReactionRoleFeedback = z.infer<typeof reactionRoleFeedbackSchema>;
+
 export const reactionRoleMessageSchema = z.object({
   id: z.string().uuid(),
   label: z.string().min(1).max(64),
@@ -48,6 +61,8 @@ export const reactionRoleMessageSchema = z.object({
    */
   message: z.string().max(2000).default(''),
   mode: reactionRoleModeSchema,
+  /** Type de feedback envoyé à l'utilisateur après une réaction. */
+  feedback: reactionRoleFeedbackSchema.default('dm'),
   pairs: z.array(reactionRolePairSchema).min(1).max(20),
 });
 export type ReactionRoleMessage = z.infer<typeof reactionRoleMessageSchema>;

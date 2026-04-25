@@ -34,6 +34,7 @@ interface RawRRMessage {
   messageId?: unknown;
   message?: unknown;
   mode?: unknown;
+  feedback?: unknown;
   pairs?: unknown;
 }
 
@@ -77,6 +78,7 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
           return { emoji: clientEmoji, roleId: String(p.roleId ?? '') };
         });
       const mode = m.mode;
+      const feedback = m.feedback;
       return {
         id: String(m.id ?? ''),
         label: String(m.label ?? ''),
@@ -84,6 +86,7 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
         messageId: String(m.messageId ?? ''),
         message: typeof m.message === 'string' ? m.message : '',
         mode: mode === 'unique' || mode === 'verifier' ? mode : 'normal',
+        feedback: feedback === 'none' ? 'none' : 'dm',
         pairs,
       };
     });

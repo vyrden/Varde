@@ -15,6 +15,7 @@ export interface ReactionRoleMessageClient {
   readonly messageId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
+  readonly feedback: 'dm' | 'none';
   readonly pairs: readonly {
     readonly emoji:
       | { type: 'unicode'; value: string }
