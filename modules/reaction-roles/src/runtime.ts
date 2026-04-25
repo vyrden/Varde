@@ -17,6 +17,28 @@ import { emojiKey, type SelfCausedTracker } from './self-caused.js';
 const ACTION_ASSIGNED = 'reaction-roles.role.assigned' as ActionId;
 const ACTION_UNASSIGNED = 'reaction-roles.role.unassigned' as ActionId;
 
+const formatRoleLabel = (ctx: ModuleContext, guildId: GuildId, roleId: RoleId): string =>
+  ctx.discord.getRoleName(guildId, roleId) ?? 'un rôle';
+
+const formatGuildLabel = (ctx: ModuleContext, guildId: GuildId): string =>
+  ctx.discord.getGuildName(guildId) ?? 'le serveur';
+
+/**
+ * Tente d'envoyer un DM de feedback. Les échecs (DMs fermés, erreur réseau,
+ * etc.) sont avalés : un retour visuel raté ne doit jamais bloquer le
+ * fonctionnement métier de l'attribution de rôle.
+ */
+const notifyUser = async (ctx: ModuleContext, userId: UserId, content: string): Promise<void> => {
+  try {
+    await ctx.discord.sendDirectMessage(userId, content);
+  } catch (error) {
+    ctx.logger.debug('reaction-roles : sendDirectMessage a échoué', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 /**
  * Recherche la paire (message, pair) correspondant à un event entrant.
  * Retourne null si aucun reaction-role ne matche (event pour un message
@@ -68,19 +90,23 @@ export async function handleReactionAdd(
   event: GuildMessageReactionAddEvent,
   tracker: SelfCausedTracker,
 ): Promise<void> {
+  ctx.logger.info('reaction-roles : reactionAdd reçu', {
+    guildId: event.guildId,
+    userId: event.userId,
+    messageId: event.messageId,
+  });
   const cfg = await loadConfig(ctx, event.guildId);
   if (cfg === null) return;
   const match = findPair(cfg, event.channelId, event.messageId, event.emoji);
   if (!match) return;
 
   const { message, roleId } = match;
+  const typedGuildId = event.guildId as GuildId;
+  const typedUserId = event.userId as UserId;
+  const typedRoleId = roleId as RoleId;
 
   try {
-    await ctx.discord.addMemberRole(
-      event.guildId as GuildId,
-      event.userId as UserId,
-      roleId as RoleId,
-    );
+    await ctx.discord.addMemberRole(typedGuildId, typedUserId, typedRoleId);
   } catch (error) {
     ctx.logger.warn('reaction-roles : addMemberRole a échoué', {
       guildId: event.guildId,
@@ -92,12 +118,18 @@ export async function handleReactionAdd(
   }
 
   void ctx.audit.log({
-    guildId: event.guildId as GuildId,
+    guildId: typedGuildId,
     action: ACTION_ASSIGNED,
-    actor: { type: 'user', id: event.userId as UserId },
+    actor: { type: 'user', id: typedUserId },
     severity: 'info',
     metadata: { messageId: event.messageId, roleId, mode: message.mode },
   });
+
+  void notifyUser(
+    ctx,
+    typedUserId,
+    `✅ Tu as obtenu le rôle **${formatRoleLabel(ctx, typedGuildId, typedRoleId)}** dans **${formatGuildLabel(ctx, typedGuildId)}**.`,
+  );
 
   if (message.mode === 'unique') {
     // Pour chaque autre paire du même message, si le user a ce rôle,
@@ -106,18 +138,14 @@ export async function handleReactionAdd(
       if (emojiKey(otherPair.emoji) === emojiKey(event.emoji)) continue;
 
       const hasRole = await ctx.discord.memberHasRole(
-        event.guildId as GuildId,
-        event.userId as UserId,
+        typedGuildId,
+        typedUserId,
         otherPair.roleId as RoleId,
       );
       if (!hasRole) continue;
 
       try {
-        await ctx.discord.removeMemberRole(
-          event.guildId as GuildId,
-          event.userId as UserId,
-          otherPair.roleId as RoleId,
-        );
+        await ctx.discord.removeMemberRole(typedGuildId, typedUserId, otherPair.roleId as RoleId);
       } catch (error) {
         ctx.logger.warn('reaction-roles : removeMemberRole (unique) a échoué', {
           guildId: event.guildId,
@@ -144,7 +172,7 @@ export async function handleReactionAdd(
       }
 
       void ctx.audit.log({
-        guildId: event.guildId as GuildId,
+        guildId: typedGuildId,
         action: ACTION_UNASSIGNED,
         actor: { type: 'module', id: 'reaction-roles' as never },
         severity: 'info',
@@ -154,6 +182,12 @@ export async function handleReactionAdd(
           cause: 'unique-swap',
         },
       });
+
+      void notifyUser(
+        ctx,
+        typedUserId,
+        `🔄 Le rôle **${formatRoleLabel(ctx, typedGuildId, otherPair.roleId as RoleId)}** t'a été retiré dans **${formatGuildLabel(ctx, typedGuildId)}** (mode unique).`,
+      );
     }
   }
   // modes 'normal' et 'verifier' : rien de plus à faire sur add.
@@ -168,6 +202,11 @@ export async function handleReactionRemove(
   event: GuildMessageReactionRemoveEvent,
   tracker: SelfCausedTracker,
 ): Promise<void> {
+  ctx.logger.info('reaction-roles : reactionRemove reçu', {
+    guildId: event.guildId,
+    userId: event.userId,
+    messageId: event.messageId,
+  });
   if (tracker.isSelfCaused(event.userId, event.messageId, emojiKey(event.emoji))) {
     ctx.logger.debug('reaction-roles : ignore self-caused reaction remove');
     return;
@@ -181,13 +220,13 @@ export async function handleReactionRemove(
   if (match.message.mode === 'verifier') return;
   if (match.message.mode === 'unique') return;
 
+  const typedGuildId = event.guildId as GuildId;
+  const typedUserId = event.userId as UserId;
+  const typedRoleId = match.roleId as RoleId;
+
   // mode 'normal' : retirer le rôle
   try {
-    await ctx.discord.removeMemberRole(
-      event.guildId as GuildId,
-      event.userId as UserId,
-      match.roleId as RoleId,
-    );
+    await ctx.discord.removeMemberRole(typedGuildId, typedUserId, typedRoleId);
   } catch (error) {
     ctx.logger.warn('reaction-roles : removeMemberRole (normal) a échoué', {
       error: error instanceof Error ? error.message : String(error),
@@ -196,9 +235,9 @@ export async function handleReactionRemove(
   }
 
   void ctx.audit.log({
-    guildId: event.guildId as GuildId,
+    guildId: typedGuildId,
     action: ACTION_UNASSIGNED,
-    actor: { type: 'user', id: event.userId as UserId },
+    actor: { type: 'user', id: typedUserId },
     severity: 'info',
     metadata: {
       messageId: event.messageId,
@@ -206,4 +245,10 @@ export async function handleReactionRemove(
       cause: 'normal',
     },
   });
+
+  void notifyUser(
+    ctx,
+    typedUserId,
+    `❌ Le rôle **${formatRoleLabel(ctx, typedGuildId, typedRoleId)}** t'a été retiré dans **${formatGuildLabel(ctx, typedGuildId)}**.`,
+  );
 }

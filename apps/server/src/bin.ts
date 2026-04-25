@@ -265,10 +265,10 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessageReactions,
     ],
-    // Sans Message + Reaction en partials, discord.js ignore silencieusement
-    // les réactions sur des messages non présents en cache (cas typique :
-    // un message reaction-roles posté avant le redémarrage du bot).
-    partials: [Partials.Message, Partials.Reaction],
+    // Sans ces partials, discord.js ignore silencieusement les réactions
+    // sur des objets pas en cache (cas typiques : message posté avant le
+    // redémarrage du bot, utilisateur jamais vu récemment).
+    partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember],
   });
   const bridge = createOnboardingDiscordBridge(client);
   const sender = createDiscordJsChannelSender(client);

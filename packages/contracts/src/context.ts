@@ -222,6 +222,22 @@ export interface DiscordService {
       readonly color?: number;
     },
   ) => Promise<{ readonly id: RoleId }>;
+
+  /**
+   * Envoie un message privé à un utilisateur. Échoue silencieusement
+   * (résout en `false`) si l'utilisateur a désactivé les DMs venant
+   * du serveur ; les autres erreurs lèvent `DiscordSendError`.
+   */
+  readonly sendDirectMessage: (userId: UserId, content: string) => Promise<boolean>;
+
+  /** Retourne le nom de la guild si elle est en cache, `null` sinon. */
+  readonly getGuildName: (guildId: GuildId) => string | null;
+
+  /**
+   * Retourne le nom d'un rôle si la guild et le rôle sont en cache,
+   * `null` sinon. Pas d'appel réseau.
+   */
+  readonly getRoleName: (guildId: GuildId, roleId: RoleId) => string | null;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */

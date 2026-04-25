@@ -24,6 +24,9 @@ const makeCtx = (configForGuild: unknown): ModuleContext => {
       removeMemberRole: vi.fn().mockResolvedValue(undefined),
       memberHasRole: vi.fn().mockResolvedValue(false),
       removeUserReaction: vi.fn().mockResolvedValue(undefined),
+      sendDirectMessage: vi.fn().mockResolvedValue(true),
+      getGuildName: vi.fn().mockReturnValue('Test Guild'),
+      getRoleName: vi.fn().mockReturnValue('Test Role'),
     },
     audit: { log: vi.fn().mockResolvedValue(undefined) },
   } as unknown as ModuleContext;

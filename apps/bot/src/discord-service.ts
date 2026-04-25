@@ -152,10 +152,12 @@ interface GuildMemberLike {
 
 /** Forme minimale d'une Guild discord.js pour la gestion des membres. */
 interface GuildLike {
+  readonly name: string;
   readonly members: {
     readonly fetch: (userId: string) => Promise<GuildMemberLike>;
   };
   readonly roles: {
+    readonly cache: { get: (roleId: string) => { name: string } | undefined };
     readonly create: (options: {
       readonly name: string;
       readonly mentionable?: boolean;
@@ -164,6 +166,16 @@ interface GuildLike {
       readonly colors?: { readonly primaryColor?: number };
     }) => Promise<{ readonly id: string }>;
   };
+}
+
+/** Forme minimale d'un User discord.js pour les DMs. */
+interface UserLike {
+  readonly send: (content: string) => Promise<unknown>;
+}
+
+/** Forme minimale d'un UserManager discord.js pour `users.fetch`. */
+interface UsersManagerLike {
+  readonly fetch: (userId: string) => Promise<UserLike>;
 }
 
 /**
@@ -442,6 +454,41 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           `DiscordService.createRole : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    },
+
+    async sendDirectMessage(userId, content) {
+      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      if (!users) {
+        throw new DiscordSendError('unknown', 'DiscordService.sendDirectMessage : client absent');
+      }
+      try {
+        const user = await users.fetch(userId);
+        await user.send(content);
+        return true;
+      } catch (err) {
+        // Code 50007 = "Cannot send messages to this user" (DMs fermés).
+        // On considère ça comme un échec attendu et on retourne false.
+        const code = (err as { code?: unknown } | null)?.code;
+        if (code === 50007) {
+          logger.debug('sendDirectMessage : DMs fermés', { userId });
+          return false;
+        }
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.sendDirectMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    getGuildName(guildId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.name ?? null;
+    },
+
+    getRoleName(guildId, roleId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.roles.cache.get(roleId)?.name ?? null;
     },
   };
 }
