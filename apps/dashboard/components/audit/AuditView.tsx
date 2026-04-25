@@ -18,6 +18,7 @@ import type {
   AuditSeverity,
 } from '../../lib/api-client';
 import { loadAuditPage } from '../../lib/audit-actions';
+import { formatRelativeDate } from '../../lib/format-relative-date';
 
 export interface AuditViewProps {
   readonly guildId: string;
@@ -71,50 +72,7 @@ const activeFilterCount = (s: FiltersState): number => {
   return n;
 };
 
-// --- Date / actor / action / severity helpers ---
-
-const RELATIVE_THRESHOLD = {
-  minute: 60_000,
-  hour: 3_600_000,
-  day: 86_400_000,
-};
-
-function formatRelativeDate(iso: string): { primary: string; iso: string } {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { primary: iso, iso };
-  const now = Date.now();
-  const delta = now - d.getTime();
-  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-
-  if (delta < RELATIVE_THRESHOLD.minute) return { primary: "À l'instant", iso };
-  if (delta < RELATIVE_THRESHOLD.hour) {
-    const min = Math.floor(delta / RELATIVE_THRESHOLD.minute);
-    return { primary: `Il y a ${min} min`, iso };
-  }
-  if (delta < RELATIVE_THRESHOLD.day) {
-    const h = Math.floor(delta / RELATIVE_THRESHOLD.hour);
-    return { primary: `Il y a ${h}h`, iso };
-  }
-  if (delta < 2 * RELATIVE_THRESHOLD.day) return { primary: `Hier à ${time}`, iso };
-
-  const months = [
-    'janv.',
-    'févr.',
-    'mars',
-    'avr.',
-    'mai',
-    'juin',
-    'juil.',
-    'août',
-    'sept.',
-    'oct.',
-    'nov.',
-    'déc.',
-  ];
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = months[d.getMonth()] ?? '';
-  return { primary: `${day} ${month} à ${time}`, iso };
-}
+// --- Action / actor / severity helpers ---
 
 function splitAction(action: string): { namespace: string; suffix: string } {
   const idx = action.indexOf('.');

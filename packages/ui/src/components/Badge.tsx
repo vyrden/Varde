@@ -26,6 +26,9 @@ const badgeVariants = cva(
         warning: 'bg-warning/20 text-warning',
         danger: 'bg-destructive/20 text-destructive',
         outline: 'border border-border text-foreground bg-transparent',
+        // Module système (non pilotable côté admin) — pourpre Discord
+        // Nitro pour démarquer visuellement de active/inactive.
+        system: 'bg-[#2a1a2e] text-[#c27adb]',
         // Alias rétrocompatibles avec l'ancien design system shadcn.
         // Les pages migrées vers la DA utilisent active / inactive / etc.
         default: 'bg-primary text-primary-foreground rounded-sm tracking-normal',

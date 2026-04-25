@@ -1,10 +1,10 @@
 import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import { WelcomeConfigEditor } from '../../../../../components/welcome/WelcomeConfigEditor';
 import {
   ApiError,
@@ -201,20 +201,9 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Modules
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">
-            {welcomeModule.name}
-          </span>
-        </nav>
+        <PageBreadcrumb
+          items={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: welcomeModule.name }]}
+        />
         <div className="flex items-center gap-3">
           <div
             className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${

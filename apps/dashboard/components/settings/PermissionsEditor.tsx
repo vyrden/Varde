@@ -203,7 +203,7 @@ function SidebarStats({
             <div className="h-1.5 overflow-hidden rounded-full bg-surface-active">
               <div
                 aria-hidden="true"
-                className="h-full bg-primary transition-all duration-300 ease-out"
+                className="h-full bg-primary transition-all duration-150 ease-out"
                 style={{ width: `${ratio}%` }}
               />
             </div>

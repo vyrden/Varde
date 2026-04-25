@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 
 import { auth } from '../../../auth';
 import { ModuleList } from '../../../components/ModuleList';
+import { PageBreadcrumb } from '../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   type AuditLogItemDto,
@@ -13,6 +14,7 @@ import {
   fetchAudit,
   fetchModules,
 } from '../../../lib/api-client';
+import { formatRelativeDate } from '../../../lib/format-relative-date';
 
 interface GuildPageProps {
   readonly params: Promise<{ readonly guildId: string }>;
@@ -36,21 +38,6 @@ const SEVERITY_DOT: Record<AuditSeverity, string> = {
   warn: 'bg-warning',
   error: 'bg-destructive',
 };
-
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const delta = Date.now() - d.getTime();
-  const min = Math.floor(delta / 60_000);
-  if (min < 1) return "À l'instant";
-  if (min < 60) return `Il y a ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `Il y a ${h} h`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `Il y a ${days} j`;
-  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${time}`;
-}
 
 interface RecentActivityProps {
   readonly items: readonly AuditLogItemDto[];
@@ -78,7 +65,9 @@ function RecentActivity({ items, guildId }: RecentActivityProps): ReactElement {
               <code className="block truncate font-mono text-[11px] text-foreground">
                 {item.action}
               </code>
-              <span className="text-muted-foreground">{formatRelative(item.createdAt)}</span>
+              <span className="text-muted-foreground">
+                {formatRelativeDate(item.createdAt).primary}
+              </span>
             </div>
           </li>
         ))}
@@ -139,13 +128,7 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <span className="font-medium uppercase tracking-wider">Gestion</span>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">Modules</span>
-        </nav>
+        <PageBreadcrumb items={[{ label: 'Gestion' }, { label: 'Modules' }]} />
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -193,7 +176,7 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
                     <div className="h-1.5 overflow-hidden rounded-full bg-surface-active">
                       <div
                         aria-hidden="true"
-                        className="h-full bg-primary transition-all duration-300 ease-out"
+                        className="h-full bg-primary transition-all duration-150 ease-out"
                         style={{
                           width: `${modules.length === 0 ? 0 : Math.round((activeCount / modules.length) * 100)}%`,
                         }}

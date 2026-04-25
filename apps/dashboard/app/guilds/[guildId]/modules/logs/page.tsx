@@ -4,10 +4,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  ReadonlySwitch,
   Separator,
   UnboundPermissionsBanner,
 } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -15,6 +15,7 @@ import { auth } from '../../../../../auth';
 import { LogsConfigEditor } from '../../../../../components/logs/LogsConfigEditor';
 import type { LogsConfigClient } from '../../../../../components/logs/LogsConfigEditor';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -109,20 +110,12 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Modules
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">
-            {logsModule.name}
-          </span>
-        </nav>
+        <PageBreadcrumb
+          items={[
+            { label: 'Modules', href: `/guilds/${guildId}` },
+            { label: logsModule.name },
+          ]}
+        />
         <div className="flex items-center gap-3">
           <div
             className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
@@ -191,18 +184,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
                   <span className="text-muted-foreground">Statut</span>
                   <div className="flex items-center gap-3">
                     <span className="text-foreground">{isEnabled ? 'Actif' : 'Inactif'}</span>
-                    <span
-                      aria-hidden="true"
-                      className={`relative inline-flex h-5.5 w-10 shrink-0 items-center rounded-full opacity-50 ${
-                        isEnabled ? 'bg-success' : 'bg-[#4e5058]'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.75 left-0.75 h-4 w-4 rounded-full bg-white shadow ${
-                          isEnabled ? 'translate-x-4.5' : 'translate-x-0'
-                        }`}
-                      />
-                    </span>
+                    <ReadonlySwitch enabled={isEnabled} />
                   </div>
                 </div>
                 <p className="pt-1 text-xs text-muted-foreground">

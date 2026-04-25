@@ -21,9 +21,15 @@ export { Header, type HeaderProps } from './components/Header.js';
 export { InlineConfirm, type InlineConfirmProps } from './components/InlineConfirm.js';
 export { Input, type InputProps } from './components/Input.js';
 export { Label, type LabelProps } from './components/Label.js';
+export {
+  type BreadcrumbItem,
+  PageBreadcrumb,
+  type PageBreadcrumbProps,
+} from './components/PageBreadcrumb.js';
 export { PageHeader, type PageHeaderProps } from './components/PageHeader.js';
 export { PageTitle, type PageTitleProps } from './components/PageTitle.js';
 export { Progress, type ProgressProps } from './components/Progress.js';
+export { ReadonlySwitch, type ReadonlySwitchProps } from './components/ReadonlySwitch.js';
 export { Select, type SelectProps } from './components/Select.js';
 export { Separator, type SeparatorProps } from './components/Separator.js';
 export {
@@ -32,6 +38,7 @@ export {
   type SidebarItemProps,
   type SidebarProps,
 } from './components/Sidebar.js';
+export { Skeleton } from './components/Skeleton.js';
 export { Tab, type TabProps, TabsList, type TabsListProps } from './components/Tabs.js';
 export { Textarea, type TextareaProps } from './components/Textarea.js';
 export {

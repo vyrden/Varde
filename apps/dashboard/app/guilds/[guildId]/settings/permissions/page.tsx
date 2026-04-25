@@ -1,5 +1,4 @@
 import { Separator } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -9,6 +8,7 @@ import {
   type ModulePermissionsData,
   PermissionsEditor,
 } from '../../../../../components/settings/PermissionsEditor';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -85,18 +85,7 @@ export default async function PermissionsPage({
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}/settings/permissions`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Paramètres
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">Permissions</span>
-        </nav>
+        <PageBreadcrumb items={[{ label: 'Paramètres' }, { label: 'Permissions' }]} />
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">

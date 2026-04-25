@@ -1,6 +1,5 @@
 import { PRESET_CATALOG } from '@varde/presets';
 import { Separator } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -10,6 +9,7 @@ import { BuilderCanvas } from '../../../../components/onboarding/BuilderCanvas';
 import { FinishedStep } from '../../../../components/onboarding/FinishedStep';
 import { PresetPicker } from '../../../../components/onboarding/PresetPicker';
 import { PreviewStep } from '../../../../components/onboarding/PreviewStep';
+import { PageBreadcrumb } from '../../../../components/shell/PageBreadcrumb';
 import { ApiError, fetchAdminGuilds } from '../../../../lib/api-client';
 import {
   fetchCurrentOnboardingSession,
@@ -63,18 +63,9 @@ export default async function OnboardingPage({
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Gestion
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">Onboarding</span>
-        </nav>
+        <PageBreadcrumb
+          items={[{ label: 'Gestion', href: `/guilds/${guildId}` }, { label: 'Onboarding' }]}
+        />
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">

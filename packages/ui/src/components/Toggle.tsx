@@ -39,7 +39,7 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
         'transition-colors duration-150 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'bg-success' : 'bg-[#4e5058]',
+        checked ? 'bg-success' : 'bg-secondary',
         className,
       )}
       {...props}

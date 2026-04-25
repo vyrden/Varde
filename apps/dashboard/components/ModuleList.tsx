@@ -68,12 +68,7 @@ export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement 
                         {module.name}
                       </span>
                       {isSystem ? (
-                        <Badge
-                          variant="outline"
-                          className="border-purple-500/30 bg-[#2a1a2e] text-[#c27adb]"
-                        >
-                          Système
-                        </Badge>
+                        <Badge variant="system">Système</Badge>
                       ) : (
                         <Badge variant={enabled ? 'active' : 'inactive'}>
                           {enabled ? 'Actif' : 'Inactif'}

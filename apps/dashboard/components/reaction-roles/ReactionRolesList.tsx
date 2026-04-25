@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   InlineConfirm,
+  ReadonlySwitch,
 } from '@varde/ui';
 import { useState } from 'react';
 
@@ -273,18 +274,7 @@ export function ReactionRolesList({
               <span className="text-muted-foreground">Statut</span>
               <div className="flex items-center gap-3">
                 <span className="text-foreground">{isEnabled ? 'Actif' : 'Inactif'}</span>
-                <span
-                  aria-hidden="true"
-                  className={`relative inline-flex h-5.5 w-10 shrink-0 items-center rounded-full opacity-50 ${
-                    isEnabled ? 'bg-success' : 'bg-[#4e5058]'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.75 left-0.75 h-4 w-4 rounded-full bg-white shadow ${
-                      isEnabled ? 'translate-x-4.5' : 'translate-x-0'
-                    }`}
-                  />
-                </span>
+                <ReadonlySwitch enabled={isEnabled} />
               </div>
             </div>
             <p className="pt-1 text-xs text-muted-foreground">

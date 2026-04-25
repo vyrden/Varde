@@ -1,5 +1,4 @@
 import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -7,6 +6,7 @@ import { auth } from '../../../../../auth';
 import type { ReactionRoleMessageClient } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
 import { ReactionRolesConfigEditor } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -143,20 +143,9 @@ export default async function ReactionRolesPage({
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Modules
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">
-            {rrModule.name}
-          </span>
-        </nav>
+        <PageBreadcrumb
+          items={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: rrModule.name }]}
+        />
         <div className="flex items-center gap-3">
           <div
             className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${

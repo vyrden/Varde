@@ -1,10 +1,10 @@
 import { Separator } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../auth';
 import { AuditView } from '../../../../components/audit/AuditView';
+import { PageBreadcrumb } from '../../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   type AuditActorType,
@@ -99,18 +99,9 @@ export default async function AuditPage({
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
-          <Link
-            href={`/guilds/${guildId}`}
-            className="font-medium uppercase tracking-wider hover:text-foreground"
-          >
-            Gestion
-          </Link>
-          <span aria-hidden="true" className="mx-2">
-            →
-          </span>
-          <span className="font-medium uppercase tracking-wider text-foreground">Audit</span>
-        </nav>
+        <PageBreadcrumb
+          items={[{ label: 'Gestion', href: `/guilds/${guildId}` }, { label: 'Audit' }]}
+        />
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
