@@ -1,4 +1,4 @@
-import { Badge, EmptyState } from '@varde/ui';
+import { Badge, buttonVariants, EmptyState } from '@varde/ui';
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 
@@ -11,18 +11,15 @@ export interface ModuleListProps {
 }
 
 /**
- * Liste des modules d'une guild — design inspiré des cards Discord
- * Nitro (discord.com/store) :
+ * Liste des modules d'une guild — format « integration list » (Vercel,
+ * Stripe, Linear). Une ligne par module : icône + nom/description,
+ * badge statut et CTA outline à droite. Description et CTA sont
+ * toujours visibles.
  *
- * - Card en flex-col avec asset, texte, CTA empilés.
- * - Badge d'état en absolu top-left.
- * - Description masquée par défaut, révélée au hover (transition
- *   `max-height` 0 → 4rem + opacity 0 → 1).
- * - CTA « Configurer → » poussé en bas (mt-auto) et révélé au hover
- *   (translate-y + opacity). Reste en flux pour ne pas chevaucher
- *   la description.
- * - Card scale 1.02 + ombre + ring au hover. Le bezier custom
- *   (0.36, 0.35, 0.1, 1.23) reproduit le ressort Discord.
+ * Le `<Link>` enveloppe toute la ligne pour rester cliquable au
+ * clavier comme à la souris ; le faux bouton « Configurer » est un
+ * `<span>` stylé via `buttonVariants` pour éviter d'imbriquer un
+ * `<button>` dans un `<a>` (HTML invalide).
  */
 export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement {
   if (modules.length === 0) {
@@ -35,66 +32,41 @@ export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement 
   }
 
   return (
-    <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
       {modules.map((module) => {
         const enabled = module.enabled;
         return (
           <li key={module.id}>
             <Link
               href={`/guilds/${guildId}/modules/${module.id}`}
-              className="group relative flex h-72 flex-col overflow-hidden rounded-2xl bg-card p-5 ring-1 ring-white/5 transition-[transform,box-shadow,background-color] duration-400 ease-[cubic-bezier(0.36,0.35,0.1,1.23)] hover:bg-surface-hover hover:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)] hover:ring-white/10 focus-visible:bg-surface-hover focus-visible:shadow-[0_4px_20px_-2px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:transform-[scale(1.02)]"
+              className="group flex items-center gap-4 px-4 py-3 transition-colors hover:bg-surface-hover focus-visible:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <Badge
-                variant={enabled ? 'active' : 'inactive'}
-                className="absolute left-4 top-4 z-10"
+              <div
+                className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+                  enabled ? 'bg-primary/15 text-primary' : 'bg-surface-active text-muted-foreground'
+                }`}
               >
-                {enabled ? 'Actif' : 'Inactif'}
-              </Badge>
-
-              {/* Asset : icône module agrandie, centrée, teintée selon l'état */}
-              <div className="flex h-24 shrink-0 items-center justify-center">
-                <div
-                  className={`flex h-20 w-20 items-center justify-center rounded-2xl transition-transform duration-400 ease-[cubic-bezier(0.36,0.35,0.1,1.23)] group-hover:transform-[scale(1.08)] ${
-                    enabled
-                      ? 'bg-primary/15 text-primary'
-                      : 'bg-surface-active text-muted-foreground'
-                  }`}
-                >
-                  {moduleIcon(module.id, 36)}
-                </div>
+                {moduleIcon(module.id, 20)}
               </div>
 
-              {/* Bloc texte */}
-              <div className="mt-2">
-                <p className="text-xs text-muted-foreground">v{module.version}</p>
-                <h3 className="mt-0.5 text-lg font-semibold leading-tight text-foreground">
-                  {module.name}
-                </h3>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {module.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">v{module.version}</span>
+                </div>
+                <p className="line-clamp-1 text-sm text-muted-foreground">
                   {module.description || 'Aucune description fournie par le manifest.'}
                 </p>
               </div>
 
-              {/* CTA — en flux, poussé en bas par mt-auto, révélé au hover */}
-              <div className="mt-auto translate-y-2 pt-3 opacity-0 transition-[translate,opacity] duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
-                <span className="group/cta flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-primary text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-(--primary-hover)">
+              <div className="flex shrink-0 items-center gap-3">
+                <Badge variant={enabled ? 'active' : 'inactive'}>
+                  {enabled ? 'Actif' : 'Inactif'}
+                </Badge>
+                <span className={buttonVariants({ variant: 'outline', size: 'sm' })}>
                   Configurer
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="none"
-                    aria-hidden="true"
-                    className="transition-transform duration-200 ease-out group-hover/cta:translate-x-0.5"
-                  >
-                    <path
-                      d="M5 3l4 4-4 4"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
                 </span>
               </div>
             </Link>
