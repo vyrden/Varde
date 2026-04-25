@@ -1,10 +1,10 @@
 'use client';
 
-import { Button } from '@varde/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Label, Select } from '@varde/ui';
 import { useMemo, useState } from 'react';
 
 import { createLogsChannel, saveLogsConfig, testLogsRoute } from '../../lib/logs-actions';
-import { EVENT_GROUPS } from './event-catalog';
+import { EVENT_GROUPS, type LogEventGroup } from './event-catalog';
 import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsConfigEditor';
 
 /**
@@ -14,6 +14,13 @@ import type { ChannelOption, LogsConfigClient, LogsRouteClient } from './LogsCon
  * ses propres routes.
  */
 const SIMPLE_ROUTE_ID = '00000000-0000-4000-8000-000000000001';
+
+const GROUP_ICONS: Readonly<Record<LogEventGroup['id'], string>> = {
+  members: '👤',
+  messages: '💬',
+  channels: '#',
+  roles: '🏷️',
+};
 
 /** Sous-ensemble de reason qu'on traduit en français pour l'utilisateur. */
 function formatTestReason(reason: string): string {
@@ -50,10 +57,10 @@ export interface LogsSimpleModeProps {
 }
 
 /**
- * Mode simple : une grille de cases à cocher groupée par famille
- * d'events, un salon cible unique, un toggle "ignorer les bots".
- * Sauvegarde non-destructive : remplace la route SIMPLE_ROUTE_ID
- * existante ou l'ajoute, préserve les autres routes avancées.
+ * Mode simple : sélection du salon, grille 2×2 des familles d'events,
+ * options globales, footer d'actions. Mise en page en cards façon
+ * Discord settings, sans titres redondants — l'éditeur tient en une
+ * seule colonne du layout 2/3 ↔ 1/3 de la page.
  */
 export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSimpleModeProps) {
   const existingSimpleRoute = useMemo(
@@ -168,18 +175,19 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
   };
 
   return (
-    <div className="space-y-6">
-      {/* Salon */}
-      <div className="space-y-2">
-        <label htmlFor="simple-channel" className="block text-sm font-semibold">
-          Salon de destination
-        </label>
-        <div className="flex gap-2">
-          <select
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Salon de destination</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="simple-channel" className="sr-only">
+            Salon de destination
+          </Label>
+          <Select
             id="simple-channel"
             value={channelId}
             onChange={(e) => setChannelId(e.target.value)}
-            className="h-9 flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Salon de destination"
           >
             <option value="">— Sélectionne un salon —</option>
@@ -188,74 +196,86 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
                 #{c.name}
               </option>
             ))}
-          </select>
-          <Button
+          </Select>
+          <button
             type="button"
-            variant="secondary"
-            disabled={isCreating}
             onClick={() => void handleCreateChannel()}
+            disabled={isCreating}
+            className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCreating ? 'Création…' : '+ Créer un salon #logs'}
-          </Button>
-        </div>
-      </div>
+          </button>
+        </CardContent>
+      </Card>
 
-      {/* Events groupés */}
-      <div className="space-y-3">
-        <div className="block text-sm font-semibold">Events à surveiller</div>
-        {EVENT_GROUPS.map((group) => {
-          const groupEventIds = group.events.map((e) => e.id);
-          const allChecked = groupEventIds.every((id) => selectedEventIds.has(id));
-          return (
-            <div key={group.id} data-testid="event-group" className="space-y-2">
-              <div className="flex items-center justify-between border-b border-border pb-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {group.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(groupEventIds)}
-                  className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                  aria-label={`${allChecked ? 'Tout décocher' : 'Tout cocher'} le groupe ${group.label}`}
-                >
-                  {allChecked ? 'Tout décocher' : 'Tout cocher'}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 gap-2 pl-2 sm:grid-cols-2">
-                {group.events.map((event) => (
-                  <label key={event.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedEventIds.has(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      aria-label={event.label}
-                    />
-                    <span>{event.label}</span>
-                    {event.hint ? (
-                      <span className="text-xs text-muted-foreground">({event.hint})</span>
-                    ) : null}
-                  </label>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Événements à surveiller</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+            {EVENT_GROUPS.map((group) => {
+              const groupEventIds = group.events.map((e) => e.id);
+              const allChecked = groupEventIds.every((id) => selectedEventIds.has(id));
+              return (
+                <div key={group.id} data-testid="event-group" className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <span aria-hidden="true">{GROUP_ICONS[group.id]}</span>
+                      <span>{group.label}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(groupEventIds)}
+                      className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                      aria-label={`${allChecked ? 'Tout décocher' : 'Tout cocher'} le groupe ${group.label}`}
+                    >
+                      {allChecked ? 'Tout décocher' : 'Tout cocher'}
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {group.events.map((event) => (
+                      <label
+                        key={event.id}
+                        className="flex items-center gap-2 text-sm text-foreground"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedEventIds.has(event.id)}
+                          onChange={() => toggleEvent(event.id)}
+                          aria-label={event.label}
+                          className="h-4 w-4 rounded border border-input"
+                        />
+                        <span>{event.label}</span>
+                        {event.hint === 'bruyant' ? <Badge variant="warning">bruyant</Badge> : null}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Options */}
-      <div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={excludeBots}
-            onChange={(e) => setExcludeBots(e.target.checked)}
-          />
-          <span>Ignorer les messages de bots</span>
-          <span className="text-xs text-muted-foreground">(recommandé)</span>
-        </label>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Options</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={excludeBots}
+              onChange={(e) => setExcludeBots(e.target.checked)}
+              className="h-4 w-4 rounded border border-input"
+            />
+            <span>Ignorer les messages de bots</span>
+            <Badge variant="active">recommandé</Badge>
+          </label>
+        </CardContent>
+      </Card>
 
-      {/* Feedback */}
       {feedback ? (
         <p
           role={feedback.kind === 'error' ? 'alert' : 'status'}
@@ -269,11 +289,10 @@ export function LogsSimpleMode({ guildId, config, setConfig, channels }: LogsSim
         </p>
       ) : null}
 
-      {/* Actions */}
-      <div className="flex items-center gap-3 border-t border-border pt-4">
+      <div className="flex items-center justify-between pt-2">
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           disabled={isTesting || !channelId}
           onClick={() => void handleTest()}
         >

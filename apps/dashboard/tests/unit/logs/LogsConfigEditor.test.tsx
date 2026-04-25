@@ -43,7 +43,7 @@ describe('LogsConfigEditor', () => {
         roles={[]}
       />,
     );
-    expect(screen.getByText(/events à surveiller/i)).toBeDefined();
+    expect(screen.getByText(/événements à surveiller/i)).toBeDefined();
   });
 
   it('affiche les routes cassées avec banner quand brokenRoutes non vide', () => {
