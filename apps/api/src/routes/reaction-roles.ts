@@ -176,13 +176,17 @@ export function registerReactionRolesRoutes(
             });
             roleId = created.id;
           } catch (error) {
+            request.log.warn({ err: error }, 'reaction-roles: createRole a échoué');
             if (error instanceof DiscordSendError) {
               return reply.code(502).send({
                 reason: 'role-creation-failed',
-                detail: error.reason,
+                detail: error.reason === 'unknown' ? error.message : error.reason,
               });
             }
-            return reply.code(500).send({ reason: 'unknown' });
+            return reply.code(500).send({
+              reason: 'unknown',
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
         }
         resolvedPairs.push({ emoji: pair.emoji as Emoji, roleId });
@@ -194,10 +198,17 @@ export function registerReactionRolesRoutes(
         const posted = await discordService.postMessage(typedChannelId, body.message);
         postedMessageId = posted.id;
       } catch (error) {
+        request.log.warn({ err: error }, 'reaction-roles: postMessage a échoué');
         if (error instanceof DiscordSendError) {
-          return reply.code(502).send({ reason: error.reason });
+          return reply.code(502).send({
+            reason: error.reason,
+            ...(error.reason === 'unknown' ? { detail: error.message } : {}),
+          });
         }
-        return reply.code(500).send({ reason: 'unknown' });
+        return reply.code(500).send({
+          reason: 'unknown',
+          detail: error instanceof Error ? error.message : String(error),
+        });
       }
 
       // Étape 3 : ajouter les réactions (50 ms entre chaque)
@@ -205,10 +216,17 @@ export function registerReactionRolesRoutes(
         try {
           await discordService.addReaction(typedChannelId, postedMessageId, pair.emoji);
         } catch (error) {
+          request.log.warn({ err: error }, 'reaction-roles: addReaction (publish) a échoué');
           if (error instanceof DiscordSendError) {
-            return reply.code(502).send({ reason: error.reason });
+            return reply.code(502).send({
+              reason: error.reason,
+              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
+            });
           }
-          return reply.code(500).send({ reason: 'unknown' });
+          return reply.code(500).send({
+            reason: 'unknown',
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
         await new Promise((r) => setTimeout(r, 50));
       }
@@ -297,13 +315,17 @@ export function registerReactionRolesRoutes(
             });
             roleId = created.id;
           } catch (error) {
+            request.log.warn({ err: error }, 'reaction-roles: createRole a échoué');
             if (error instanceof DiscordSendError) {
               return reply.code(502).send({
                 reason: 'role-creation-failed',
-                detail: error.reason,
+                detail: error.reason === 'unknown' ? error.message : error.reason,
               });
             }
-            return reply.code(500).send({ reason: 'unknown' });
+            return reply.code(500).send({
+              reason: 'unknown',
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
         }
         resolvedNewPairs.push({ emoji: pair.emoji as Emoji, roleId });
@@ -325,10 +347,17 @@ export function registerReactionRolesRoutes(
         try {
           await discordService.addReaction(typedChannelId, typedMessageId, pair.emoji);
         } catch (error) {
+          request.log.warn({ err: error }, 'reaction-roles: addReaction (sync) a échoué');
           if (error instanceof DiscordSendError) {
-            return reply.code(502).send({ reason: error.reason });
+            return reply.code(502).send({
+              reason: error.reason,
+              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
+            });
           }
-          return reply.code(500).send({ reason: 'unknown' });
+          return reply.code(500).send({
+            reason: 'unknown',
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
         await new Promise((r) => setTimeout(r, 50));
       }
@@ -338,10 +367,17 @@ export function registerReactionRolesRoutes(
         try {
           await discordService.removeOwnReaction(typedChannelId, typedMessageId, pair.emoji);
         } catch (error) {
+          request.log.warn({ err: error }, 'reaction-roles: removeOwnReaction (sync) a échoué');
           if (error instanceof DiscordSendError) {
-            return reply.code(502).send({ reason: error.reason });
+            return reply.code(502).send({
+              reason: error.reason,
+              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
+            });
           }
-          return reply.code(500).send({ reason: 'unknown' });
+          return reply.code(500).send({
+            reason: 'unknown',
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
         await new Promise((r) => setTimeout(r, 50));
       }

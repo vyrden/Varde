@@ -24,7 +24,9 @@ export function formatReactionRoleReason(reason: string, detail?: string): strin
     case 'network':
       return "Impossible de joindre l'API. Vérifie la connexion au serveur.";
     case 'unknown':
-      return 'Erreur inattendue côté serveur. Consulte les logs.';
+      return detail !== undefined && detail.length > 0
+        ? `Erreur inattendue : ${detail}`
+        : 'Erreur inattendue côté serveur.';
     default:
       if (reason.startsWith('http-')) {
         return `Erreur HTTP ${reason.slice(5)}.`;
@@ -46,6 +48,8 @@ function formatDiscordReason(reason: string): string {
     case 'emoji-not-found':
       return 'emoji introuvable.';
     default:
-      return 'erreur Discord inattendue.';
+      // Si l'API a remonté un message brut (cas reason='unknown' côté
+      // DiscordSendError), on le surface tel quel pour aider au diagnostic.
+      return reason.length > 0 ? reason : 'erreur Discord inattendue.';
   }
 }
