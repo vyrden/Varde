@@ -40,5 +40,6 @@ export {
   useToast,
 } from './components/Toaster.js';
 export { Toggle, type ToggleProps } from './components/Toggle.js';
+export { Tooltip, type TooltipProps } from './components/Tooltip.js';
 export * from './components/UnboundPermissionsBanner.js';
 export { cn } from './lib/cn.js';

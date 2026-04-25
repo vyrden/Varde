@@ -145,6 +145,15 @@ function ToastItem({
   readonly toast: InternalToast;
   readonly onDismiss: () => void;
 }): ReactElement {
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    // Bascule entered=true au premier rAF pour déclencher la
+    // transition d'entrée (slide depuis la droite + fade).
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   useEffect(() => {
     const handle = setTimeout(onDismiss, toast.durationMs ?? 4000);
     return () => clearTimeout(handle);
@@ -158,6 +167,8 @@ function ToastItem({
       role="status"
       className={cn(
         'pointer-events-auto flex gap-3 rounded-md border p-3 shadow-lg backdrop-blur-sm',
+        'transition-all duration-200 ease-out',
+        entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0',
         style.container,
       )}
     >

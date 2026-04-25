@@ -55,7 +55,9 @@ export default async function GuildLayout({
       <div className="flex min-h-screen bg-rail text-foreground">
         <GuildRail guilds={guilds} currentGuildId={guildId} />
         <GuildSidebar guildId={guildId} guildName={currentGuild.name} modules={sidebarModules} />
-        <main className="flex min-w-0 flex-1 flex-col bg-surface">{children}</main>
+        <main className="animate-page-enter flex min-w-0 flex-1 flex-col bg-surface">
+          {children}
+        </main>
       </div>
     </Toaster>
   );

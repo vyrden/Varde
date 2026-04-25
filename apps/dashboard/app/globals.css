@@ -1,3 +1,36 @@
 @import "tailwindcss";
 @import "@varde/ui/theme.css";
 @source "../../../packages/ui/src";
+
+/*
+ * Animations Discord-style. Toutes courtes (<= 200 ms) et ease-out :
+ * pas de bounce, pas de transitions décoratives. Cf. DA.md.
+ */
+@layer utilities {
+  @keyframes varde-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-page-enter {
+    animation: varde-fade-in 0.18s ease-out both;
+  }
+
+  /* Réduit toutes les animations à 0 si l'utilisateur le demande. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

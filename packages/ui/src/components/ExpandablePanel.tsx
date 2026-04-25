@@ -57,8 +57,8 @@ export function ExpandablePanel({
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-lg border border-border bg-card transition-colors',
-        enabled ? '' : 'opacity-80',
+        'overflow-hidden rounded-lg border border-border bg-card transition-all duration-150 ease-out',
+        enabled ? 'shadow-sm hover:border-border/80' : 'opacity-75 hover:opacity-90',
         className,
       )}
     >
@@ -68,7 +68,7 @@ export function ExpandablePanel({
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
           aria-controls={bodyId}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          className="group flex min-w-0 flex-1 items-center gap-2 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <svg
             width="12"
@@ -77,7 +77,7 @@ export function ExpandablePanel({
             fill="none"
             aria-hidden="true"
             className={cn(
-              'shrink-0 text-muted-foreground transition-transform duration-150',
+              'shrink-0 text-muted-foreground transition-transform duration-200 ease-out group-hover:text-foreground',
               expanded ? 'rotate-90' : '',
             )}
           >
@@ -98,15 +98,28 @@ export function ExpandablePanel({
         </button>
         <Toggle checked={enabled} onCheckedChange={onEnabledChange} label={`Activer ${title}`} />
       </header>
-      {expanded ? (
-        <section
-          id={bodyId}
-          aria-labelledby={headerId}
-          className="border-t border-border px-4 py-4"
-        >
-          {children}
-        </section>
-      ) : null}
+      {/*
+        Animation expand/collapse via grid-rows : `1fr` ↔ `0fr` se prête
+        à la transition CSS sur grid-template-rows alors que `height: auto`
+        ne s'anime pas. Le child interne en `min-h-0 overflow-hidden`
+        est obligatoire pour que la transition s'applique.
+      */}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-out',
+          expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <section
+            id={bodyId}
+            aria-labelledby={headerId}
+            className="border-t border-border px-4 py-4"
+          >
+            {children}
+          </section>
+        </div>
+      </div>
     </section>
   );
 }

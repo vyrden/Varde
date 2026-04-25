@@ -127,11 +127,11 @@ interface SidebarSectionProps {
 
 function SidebarSection({ label, items, currentPath }: SidebarSectionProps): ReactElement {
   return (
-    <div className="px-2 pt-4 pb-1">
-      <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+    <div className="px-3 pt-3 pb-1">
+      <p className="px-2 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <ul className="space-y-px">
+      <ul className="space-y-0.5">
         {items.map((it) => {
           const active = currentPath === it.href || currentPath.startsWith(`${it.href}/`);
           return (
@@ -139,14 +139,14 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
               <Link
                 href={it.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-2.5 rounded px-2 py-1.5 text-sm transition-colors ${
+                className={`group flex items-center gap-3 rounded px-2.5 py-2 text-[14px] font-medium transition-all duration-100 ease-out ${
                   active
-                    ? 'bg-surface-active text-foreground'
+                    ? 'bg-surface-active text-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                 }`}
               >
                 <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center ${active ? 'opacity-100' : 'opacity-60'}`}
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center transition-opacity duration-100 ease-out ${active ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
                 >
                   {it.icon}
                 </span>
@@ -154,8 +154,8 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
                 {it.statusDot ? (
                   <span
                     aria-hidden="true"
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      it.statusDot === 'on' ? 'bg-success' : 'bg-muted-foreground/50'
+                    className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
+                      it.statusDot === 'on' ? 'bg-success' : 'bg-muted-foreground/40'
                     }`}
                   />
                 ) : null}
@@ -216,17 +216,24 @@ export function GuildSidebar({ guildId, guildName, modules }: GuildSidebarProps)
   return (
     <aside
       aria-label={`Navigation pour ${guildName}`}
-      className="flex w-58 shrink-0 flex-col overflow-y-auto bg-sidebar"
+      className="flex w-64 shrink-0 flex-col overflow-y-auto bg-sidebar"
     >
-      <div className="flex h-12 shrink-0 items-center border-b border-black/30 px-4">
-        <span className="truncate text-base font-bold text-foreground">{guildName}</span>
+      <div className="flex h-16 shrink-0 items-center border-b border-black/30 px-5 shadow-sm">
+        <span
+          className="truncate text-lg font-bold leading-tight tracking-tight text-foreground"
+          title={guildName}
+        >
+          {guildName}
+        </span>
       </div>
 
-      <SidebarSection label="Gestion" items={gestion} currentPath={pathname} />
-      <SidebarSection label="Paramètres" items={settings} currentPath={pathname} />
-      {moduleLinks.length > 0 ? (
-        <SidebarSection label="Modules" items={moduleLinks} currentPath={pathname} />
-      ) : null}
+      <div className="space-y-1 py-2">
+        <SidebarSection label="Gestion" items={gestion} currentPath={pathname} />
+        <SidebarSection label="Paramètres" items={settings} currentPath={pathname} />
+        {moduleLinks.length > 0 ? (
+          <SidebarSection label="Modules" items={moduleLinks} currentPath={pathname} />
+        ) : null}
+      </div>
 
       <div className="mt-auto" />
     </aside>

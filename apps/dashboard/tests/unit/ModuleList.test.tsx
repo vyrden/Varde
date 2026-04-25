@@ -37,10 +37,10 @@ describe('ModuleList', () => {
     expect(welcomeLink.getAttribute('href')).toBe('/guilds/g1/modules/welcome');
   });
 
-  it('affiche un badge activé / désactivé selon enabled', () => {
+  it('affiche un badge actif / inactif selon enabled', () => {
     render(<ModuleList guildId="g1" modules={[mod('a', 'A', true), mod('b', 'B', false)]} />);
-    expect(screen.getByText('Activé')).toBeDefined();
-    expect(screen.getByText('Désactivé')).toBeDefined();
+    expect(screen.getByText('Actif')).toBeDefined();
+    expect(screen.getByText('Inactif')).toBeDefined();
   });
 
   it('retombe sur un texte par défaut si description vide', () => {
