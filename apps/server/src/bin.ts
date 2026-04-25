@@ -37,7 +37,7 @@ import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
 import { logs } from '@varde/module-logs';
 import { reactionRoles } from '@varde/module-reaction-roles';
-import { ChannelType, Client, GatewayIntentBits } from 'discord.js';
+import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
 
 import { createServer } from './server.js';
 
@@ -260,7 +260,15 @@ interface DiscordBinding {
  */
 function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessageReactions,
+    ],
+    // Sans Message + Reaction en partials, discord.js ignore silencieusement
+    // les réactions sur des messages non présents en cache (cas typique :
+    // un message reaction-roles posté avant le redémarrage du bot).
+    partials: [Partials.Message, Partials.Reaction],
   });
   const bridge = createOnboardingDiscordBridge(client);
   const sender = createDiscordJsChannelSender(client);
