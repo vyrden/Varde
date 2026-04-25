@@ -39,13 +39,17 @@ export function Tooltip({ text, side = 'top', children, className }: TooltipProp
   };
 
   return (
-    <span className={cn('group relative inline-flex', className)}>
+    // `<div>` plutôt que `<span>` — un span ne peut pas contenir de
+    // contenu de type block (ex. `<form>` pour les server actions du
+    // rail). Le parser HTML auto-fermait le span avant le form, ce qui
+    // cassait le contexte `relative` et la détection de hover.
+    <div className={cn('group relative inline-flex', className)}>
       {children}
       <span
         role="tooltip"
         className={cn(
           'pointer-events-none invisible absolute z-50 whitespace-nowrap rounded bg-rail px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-lg',
-          'transition-[opacity,transform] duration-150 ease-out',
+          'transition-opacity duration-150 ease-out',
           'group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
           positions[side],
         )}
@@ -53,6 +57,6 @@ export function Tooltip({ text, side = 'top', children, className }: TooltipProp
         {text}
         <span aria-hidden="true" className={cn('absolute h-0 w-0 border-4', arrows[side])} />
       </span>
-    </span>
+    </div>
   );
 }
