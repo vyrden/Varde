@@ -17,13 +17,37 @@ export interface GuildRailProps {
 }
 
 /**
+ * Construit l'URL OAuth2 d'invitation du bot. Le client ID Discord
+ * est lu depuis `VARDE_DISCORD_CLIENT_ID` côté serveur. Permissions
+ * fixées à `8` (Administrator) — ajustable en cas de durcissement
+ * sécu, mais pour un bot auto-hébergé c'est l'usage habituel.
+ */
+function buildInviteUrl(): string | null {
+  // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on process.env
+  const clientId = process.env['VARDE_DISCORD_CLIENT_ID'];
+  if (!clientId) return null;
+  const params = new URLSearchParams({
+    client_id: clientId,
+    scope: 'bot applications.commands',
+    permissions: '8',
+  });
+  return `https://discord.com/oauth2/authorize?${params.toString()}`;
+}
+
+/**
  * Rail vertical des guilds (72 px) — calque exact du rail Discord.
  * Icône carrée arrondie en cercle, qui devient un rectangle à coins
  * arrondis quand on hover ou que la guild est sélectionnée. Initiales
  * en fallback si pas d'icône. Tooltips Discord-style à droite des
  * icônes (`Tooltip side="right"`).
+ *
+ * Sous la liste des guilds, un bouton « + » ouvre la flow d'invitation
+ * Discord OAuth2 dans un nouvel onglet — masqué si
+ * `VARDE_DISCORD_CLIENT_ID` n'est pas défini.
  */
 export function GuildRail({ guilds, currentGuildId }: GuildRailProps): ReactElement {
+  const inviteUrl = buildInviteUrl();
+
   return (
     <nav
       aria-label="Mes serveurs"
@@ -65,6 +89,30 @@ export function GuildRail({ guilds, currentGuildId }: GuildRailProps): ReactElem
           </Tooltip>
         );
       })}
+
+      {inviteUrl !== null ? (
+        <>
+          <div className="my-1 h-0.5 w-8 rounded bg-surface" aria-hidden="true" />
+          <Tooltip text="Inviter le bot sur un serveur" side="right">
+            <a
+              href={inviteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-active text-success transition-all duration-200 ease-out hover:rounded-xl hover:bg-success hover:text-white focus-visible:rounded-xl focus-visible:bg-success focus-visible:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="sr-only">Inviter le bot sur un serveur</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 5v14M5 12h14"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </a>
+          </Tooltip>
+        </>
+      ) : null}
 
       <div className="mt-auto" />
 
