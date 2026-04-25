@@ -4,6 +4,7 @@ import { Button } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
+  formatReactionRoleReason,
   type PublishReactionRoleInput,
   publishReactionRole,
   syncReactionRole,
@@ -362,7 +363,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         if (!result.ok) {
           setFeedback({
             kind: 'error',
-            message: result.detail ?? result.reason,
+            message: formatReactionRoleReason(result.reason, result.detail),
           });
           return;
         }
@@ -397,7 +398,7 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
         if (!result.ok) {
           setFeedback({
             kind: 'error',
-            message: result.reason,
+            message: formatReactionRoleReason(result.reason),
           });
           return;
         }
@@ -591,16 +592,28 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
 
       {/* Feedback */}
       {feedback !== null ? (
-        <p
-          role="status"
+        <div
+          role={feedback.kind === 'error' ? 'alert' : 'status'}
           className={
             feedback.kind === 'success'
-              ? 'text-sm text-green-700 dark:text-green-300'
-              : 'text-sm text-red-700 dark:text-red-300'
+              ? 'flex gap-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-950 dark:text-green-100'
+              : 'flex gap-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100'
           }
         >
-          {feedback.message}
-        </p>
+          <span aria-hidden="true" className="font-semibold">
+            {feedback.kind === 'success' ? '✓' : '⚠'}
+          </span>
+          <div className="flex-1">
+            <p className="font-semibold">
+              {feedback.kind === 'success'
+                ? 'Succès'
+                : isNew
+                  ? 'Échec de la publication'
+                  : 'Échec de la synchronisation'}
+            </p>
+            <p className="mt-0.5">{feedback.message}</p>
+          </div>
+        </div>
       ) : null}
 
       {/* Actions */}
