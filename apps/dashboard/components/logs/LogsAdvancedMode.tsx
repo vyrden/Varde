@@ -1,6 +1,17 @@
 'use client';
 
-import { Button, Select } from '@varde/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+} from '@varde/ui';
 import { useState } from 'react';
 
 import type { TestLogsRouteError } from '../../lib/logs-actions';
@@ -14,7 +25,6 @@ import type {
   RoleOption,
 } from './LogsConfigEditor';
 
-/** Alias locaux non-exportés — évitent une réécriture massive du JSX qui référence EVENT_LABELS[ev] et EVENTS.map(...). */
 const EVENT_LABELS = EVENT_LABEL;
 const EVENTS = ALL_EVENT_IDS;
 
@@ -56,8 +66,96 @@ export interface LogsAdvancedModeProps {
   readonly roles: readonly RoleOption[];
 }
 
+// --- Icônes inline pour les actions de lignes ---
+
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M9.5 2.5l2 2-7 7H2.5v-2l7-7z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M4 2.5v9l7-4.5-7-4.5z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        fill="currentColor"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v4M8 6.5v4"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M3 7.5l3 3 5-6"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M3.5 3.5l7 7M10.5 3.5l-7 7"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function RouteIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="26" cy="26" r="3" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M9 6h7a5 5 0 015 5v6a5 5 0 005 5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 /**
- * Ligne du tableau des routes — supporte un mode édition inline.
+ * Ligne du tableau des routes. Mode lecture par défaut, bascule en
+ * édition inline avec un brouillon local. Les actions sont des icon
+ * buttons compacts avec aria-label explicite.
  */
 function RouteRow({
   route,
@@ -75,7 +173,6 @@ function RouteRow({
   onUpdate: (updated: LogsRouteClient) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  /** Copie locale mutable pendant l'édition. */
   const [draft, setDraft] = useState<RouteDraft>({
     label: route.label,
     events: [...route.events],
@@ -86,7 +183,6 @@ function RouteRow({
   const channelName = channels.find((c) => c.id === route.channelId)?.name ?? route.channelId;
 
   const handleEdit = () => {
-    /* Réinitialise le brouillon à partir de la valeur actuelle de la route. */
     setDraft({
       label: route.label,
       events: [...route.events],
@@ -96,9 +192,7 @@ function RouteRow({
     setIsEditing(true);
   };
 
-  const handleCancel = () => {
-    setIsEditing(false);
-  };
+  const handleCancel = () => setIsEditing(false);
 
   const handleValidate = () => {
     if (!isDraftValid(draft)) return;
@@ -115,26 +209,22 @@ function RouteRow({
 
   if (isEditing) {
     return (
-      <tr className="border-b last:border-0 bg-muted/20">
-        {/* Label */}
-        <td className="px-3 py-2">
-          <input
+      <tr className="border-b border-border last:border-0 bg-surface-active/30">
+        <td className="px-3 py-2 align-top">
+          <Input
             type="text"
             value={draft.label}
             maxLength={64}
             onChange={(e) => setDraft((prev) => ({ ...prev, label: e.target.value }))}
-            className="h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Label de la route"
           />
         </td>
-
-        {/* Événements — checkboxes multi-sélection */}
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 align-top">
           <fieldset>
             <legend className="sr-only">Événements de la route</legend>
             <div className="flex flex-col gap-1">
               {EVENTS.map((ev) => (
-                <label key={ev} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                <label key={ev} className="flex cursor-pointer items-center gap-1.5 text-xs">
                   <input
                     type="checkbox"
                     checked={draft.events.includes(ev)}
@@ -148,13 +238,10 @@ function RouteRow({
             </div>
           </fieldset>
         </td>
-
-        {/* Salon */}
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 align-top">
           <Select
             value={draft.channelId}
             onChange={(e) => setDraft((prev) => ({ ...prev, channelId: e.target.value }))}
-            className="h-9"
             aria-label="Salon de destination"
           >
             <option value="">— Choisir —</option>
@@ -165,9 +252,7 @@ function RouteRow({
             ))}
           </Select>
         </td>
-
-        {/* Verbosité */}
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 align-top">
           <Select
             value={draft.verbosity}
             onChange={(e) =>
@@ -176,7 +261,6 @@ function RouteRow({
                 verbosity: e.target.value as 'compact' | 'detailed',
               }))
             }
-            className="h-9"
             aria-label="Verbosité de la route"
             title="Compact : une ligne par événement. Détaillé : embed complet avec tous les champs."
           >
@@ -184,28 +268,28 @@ function RouteRow({
             <option value="detailed">Détaillé</option>
           </Select>
         </td>
-
-        {/* Actions */}
-        <td className="px-3 py-2">
-          <div className="flex items-center gap-2">
+        <td className="px-3 py-2 align-top">
+          <div className="flex items-center gap-1">
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={handleValidate}
               disabled={!isDraftValid(draft)}
               aria-label="Valider les modifications"
+              title="Valider"
             >
-              Valider
+              <CheckIcon />
             </Button>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={handleCancel}
               aria-label="Annuler les modifications"
+              title="Annuler"
             >
-              Annuler
+              <CloseIcon />
             </Button>
           </div>
         </td>
@@ -214,43 +298,56 @@ function RouteRow({
   }
 
   return (
-    <tr className="border-b last:border-0">
-      <td className="px-3 py-2 text-sm">{route.label}</td>
-      <td className="px-3 py-2 text-sm">
-        <span className="text-muted-foreground">{route.events.join(', ')}</span>
+    <tr className="border-b border-border last:border-0">
+      <td className="px-3 py-3 text-sm font-medium text-foreground">{route.label}</td>
+      <td className="max-w-xs px-3 py-3" title={route.events.join(', ')}>
+        <code className="block truncate font-mono text-xs text-muted-foreground">
+          {route.events.join(', ')}
+        </code>
       </td>
-      <td className="px-3 py-2 text-sm">#{channelName}</td>
-      <td className="px-3 py-2 text-sm capitalize">{route.verbosity}</td>
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-2">
+      <td className="px-3 py-3">
+        <Badge variant="outline" className="font-normal">
+          #{channelName}
+        </Badge>
+      </td>
+      <td className="px-3 py-3">
+        <Badge variant={route.verbosity === 'detailed' ? 'default' : 'inactive'}>
+          {route.verbosity}
+        </Badge>
+      </td>
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={handleEdit}
             aria-label={`Éditer la route ${route.label}`}
+            title="Éditer"
           >
-            Éditer
+            <PencilIcon />
           </Button>
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={onTest}
             disabled={isTesting}
             aria-label={`Tester la route ${route.label}`}
+            title="Tester"
           >
-            {isTesting ? 'Test…' : 'Tester'}
+            <PlayIcon />
           </Button>
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={onDelete}
             aria-label={`Supprimer la route ${route.label}`}
-            className="text-destructive hover:text-destructive"
+            title="Supprimer"
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
-            Supprimer
+            <TrashIcon />
           </Button>
         </div>
       </td>
@@ -259,8 +356,8 @@ function RouteRow({
 }
 
 /**
- * Formulaire inline d'ajout de route — affiché sous le tableau au clic
- * sur "+ Nouvelle route". Disparaît après validation ou annulation.
+ * Formulaire d'ajout inline. Affiché en bas de la card Routes au clic
+ * sur « + Nouvelle route ».
  */
 function AddRouteForm({
   channels,
@@ -289,18 +386,15 @@ function AddRouteForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-dashed border-primary/40 bg-muted/20 p-4 space-y-4"
+      className="space-y-4 rounded-lg border border-dashed border-primary/40 bg-surface-active/20 p-4"
       aria-label="Formulaire d'ajout de route"
     >
-      <p className="text-sm font-semibold">Nouvelle route</p>
+      <p className="text-sm font-semibold text-foreground">Nouvelle route</p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Label */}
         <div className="space-y-1">
-          <label htmlFor="new-route-label" className="block text-sm font-medium">
-            Label
-          </label>
-          <input
+          <Label htmlFor="new-route-label">Label</Label>
+          <Input
             id="new-route-label"
             type="text"
             value={draft.label}
@@ -308,16 +402,12 @@ function AddRouteForm({
             onChange={(e) => setDraft((prev) => ({ ...prev, label: e.target.value }))}
             placeholder="ex : Modération"
             required
-            className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Label de la nouvelle route (64 caractères max)"
           />
         </div>
 
-        {/* Salon */}
         <div className="space-y-1">
-          <label htmlFor="new-route-channel" className="block text-sm font-medium">
-            Salon
-          </label>
+          <Label htmlFor="new-route-channel">Salon</Label>
           <Select
             id="new-route-channel"
             value={draft.channelId}
@@ -335,7 +425,6 @@ function AddRouteForm({
         </div>
       </div>
 
-      {/* Événements */}
       <div className="space-y-1">
         <p className="text-sm font-medium" id="new-route-events-label">
           Événements
@@ -350,7 +439,7 @@ function AddRouteForm({
           <legend className="sr-only">Événements à envoyer sur cette route</legend>
           <div className="flex flex-wrap gap-3">
             {EVENTS.map((ev) => (
-              <label key={ev} className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <label key={ev} className="flex cursor-pointer items-center gap-1.5 text-sm">
                 <input
                   type="checkbox"
                   checked={draft.events.includes(ev)}
@@ -365,9 +454,8 @@ function AddRouteForm({
         </fieldset>
       </div>
 
-      {/* Verbosité */}
       <div className="space-y-1">
-        <label htmlFor="new-route-verbosity" className="block text-sm font-medium">
+        <Label htmlFor="new-route-verbosity">
           Verbosité
           <span
             className="ml-1 text-xs text-muted-foreground"
@@ -375,7 +463,7 @@ function AddRouteForm({
           >
             (?)
           </span>
-        </label>
+        </Label>
         <Select
           id="new-route-verbosity"
           value={draft.verbosity}
@@ -417,10 +505,7 @@ export function parseUserIdInput(raw: string): string | null {
   return null;
 }
 
-/**
- * Parse une liste d'entrées séparées par virgule.
- * Retourne les IDs valides et les entrées invalides séparément.
- */
+/** Parse une liste d'entrées séparées par virgule. */
 export function parseUserIdList(input: string): {
   readonly ok: readonly string[];
   readonly invalid: readonly string[];
@@ -442,7 +527,7 @@ export function parseUserIdList(input: string): {
   return { ok, invalid };
 }
 
-/** Éditeur de la liste d'exclusions avec selects pour salons/rôles et validation mention pour utilisateurs. */
+/** Éditeur des exclusions globales — utilisateurs, rôles, salons, bots. */
 function ExclusionsEditor({
   exclusions,
   roles,
@@ -454,9 +539,7 @@ function ExclusionsEditor({
   channels: readonly ChannelOption[];
   onChange: (e: LogsExclusionsClient) => void;
 }) {
-  /** Valeur brute de l'input utilisateurs (texte libre). */
   const [usersRaw, setUsersRaw] = useState<string>(exclusions.userIds.join(', '));
-  /** Entrées invalides détectées au blur. */
   const [usersInvalid, setUsersInvalid] = useState<readonly string[]>([]);
 
   const handleUsersBlur = () => {
@@ -466,53 +549,43 @@ function ExclusionsEditor({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Utilisateurs */}
+    <div className="space-y-5">
       <div className="space-y-1">
-        <label htmlFor="excl-users" className="block text-sm font-medium">
-          Utilisateurs exclus
-        </label>
-        <input
+        <Label htmlFor="excl-users">Utilisateurs exclus</Label>
+        <Input
           id="excl-users"
           type="text"
           value={usersRaw}
           onChange={(e) => {
             setUsersRaw(e.target.value);
-            /* Réinitialise les erreurs dès que l'utilisateur retape. */
             setUsersInvalid([]);
           }}
           onBlur={handleUsersBlur}
           placeholder="<@123456789>, 987654321"
-          className={[
-            'flex h-9 w-full max-w-sm rounded-md border bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            usersInvalid.length > 0 ? 'border-destructive' : 'border-input',
-          ].join(' ')}
+          className={usersInvalid.length > 0 ? 'border-destructive' : ''}
           aria-label="Utilisateurs exclus — mentions Discord ou IDs numériques, séparés par des virgules"
           aria-describedby="excl-users-help excl-users-error"
         />
-        {usersInvalid.length > 0 && (
+        {usersInvalid.length > 0 ? (
           <p id="excl-users-error" className="text-xs text-destructive" role="alert">
             Format invalide : copie-colle une mention Discord (@nom) ou un ID numérique.{' '}
             <span className="font-medium">Ignorés : {usersInvalid.join(', ')}</span>
           </p>
-        )}
-        {exclusions.userIds.length > 0 && usersInvalid.length === 0 && (
+        ) : null}
+        {exclusions.userIds.length > 0 && usersInvalid.length === 0 ? (
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {exclusions.userIds.length} utilisateur{exclusions.userIds.length > 1 ? 's' : ''} exclu
             {exclusions.userIds.length > 1 ? 's' : ''}.
           </p>
-        )}
+        ) : null}
         <p id="excl-users-help" className="text-xs text-muted-foreground">
-          Pour obtenir l'ID d'un utilisateur : active le mode développeur Discord (Paramètres &gt;
-          Avancé &gt; Mode développeur), puis clique droit sur l'utilisateur → Copier l'ID.
+          Mode développeur Discord puis clic droit → Copier l'ID. Mentions ou IDs séparés par
+          virgules.
         </p>
       </div>
 
-      {/* Rôles */}
       <div className="space-y-1">
-        <label htmlFor="excl-roles" className="block text-sm font-medium">
-          Rôles exclus
-        </label>
+        <Label htmlFor="excl-roles">Rôles exclus</Label>
         <Select
           id="excl-roles"
           multiple
@@ -522,7 +595,6 @@ function ExclusionsEditor({
             const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
             onChange({ ...exclusions, roleIds: selected });
           }}
-          wrapperClassName="max-w-sm"
           aria-label="Rôles exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
         >
           {roles.map((r) => (
@@ -532,15 +604,12 @@ function ExclusionsEditor({
           ))}
         </Select>
         <p className="text-xs text-muted-foreground">
-          Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs rôles.
+          Ctrl+clic (Cmd+clic sur Mac) pour sélectionner plusieurs rôles.
         </p>
       </div>
 
-      {/* Salons exclus */}
       <div className="space-y-1">
-        <label htmlFor="excl-channels" className="block text-sm font-medium">
-          Salons exclus
-        </label>
+        <Label htmlFor="excl-channels">Salons exclus</Label>
         <Select
           id="excl-channels"
           multiple
@@ -550,7 +619,6 @@ function ExclusionsEditor({
             const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
             onChange({ ...exclusions, channelIds: selected });
           }}
-          wrapperClassName="max-w-sm"
           aria-label="Salons exclus (sélection multiple — Ctrl/Cmd+clic pour sélectionner plusieurs)"
         >
           {channels.map((c) => (
@@ -560,12 +628,11 @@ function ExclusionsEditor({
           ))}
         </Select>
         <p className="text-xs text-muted-foreground">
-          Ctrl+clic (ou Cmd+clic sur Mac) pour sélectionner plusieurs salons.
+          Ctrl+clic (Cmd+clic sur Mac) pour sélectionner plusieurs salons.
         </p>
       </div>
 
-      {/* Exclure les bots */}
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
         <input
           type="checkbox"
           checked={exclusions.excludeBots}
@@ -579,31 +646,8 @@ function ExclusionsEditor({
   );
 }
 
-/** Encart informatif sur les limites techniques du module logs. */
-function LimitsNotice() {
-  return (
-    <details className="rounded-md border border-border p-3">
-      <summary className="cursor-pointer select-none text-sm font-semibold text-muted-foreground">
-        ⓘ Limites techniques du module
-      </summary>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-        <li>
-          Contenu &gt; 1024 caractères → pièce jointe <code>.txt</code>.
-        </li>
-        <li>100 events bufferisés max par route cassée (bouton Rejouer pour vider).</li>
-        <li>Rate-limit Discord appliqué automatiquement (50 msg/s/bot).</li>
-      </ul>
-    </details>
-  );
-}
-
-/** Compte le nombre de filtres actifs dans les exclusions pour l'affichage du récapitulatif. */
-function activeFilterCount(ex: {
-  readonly userIds: readonly string[];
-  readonly roleIds: readonly string[];
-  readonly channelIds: readonly string[];
-  readonly excludeBots: boolean;
-}): number {
+/** Compteur de filtres actifs pour le récap du footer. */
+function activeFilterCount(ex: LogsExclusionsClient): number {
   let n = 0;
   if (ex.userIds.length > 0) n += 1;
   if (ex.roleIds.length > 0) n += 1;
@@ -613,9 +657,10 @@ function activeFilterCount(ex: {
 }
 
 /**
- * Mode avancé : tableau des routes + exclusions + encart limites.
- * Permet d'ajouter une route via un formulaire inline et d'éditer
- * chaque ligne individuellement.
+ * Mode avancé : Card des routes (header + table + add form), Card
+ * des filtres globaux, Card discrète des limites techniques, footer
+ * Save + counter. Le header de page et la sidebar sont rendus par
+ * le parent (page logs).
  */
 export function LogsAdvancedMode({
   guildId,
@@ -626,12 +671,10 @@ export function LogsAdvancedMode({
 }: LogsAdvancedModeProps) {
   const [routes, setRoutes] = useState<readonly LogsRouteClient[]>(config.routes);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  /** ID de la route en cours de test (null si aucun test en cours). */
   const [testingRouteId, setTestingRouteId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(
     null,
   );
-  /** Contrôle la visibilité du formulaire d'ajout inline. */
   const [showAddForm, setShowAddForm] = useState(false);
 
   const syncRoutes = (next: readonly LogsRouteClient[]) => {
@@ -661,11 +704,6 @@ export function LogsAdvancedMode({
     }
   };
 
-  const handleAddRoute = () => {
-    setShowAddForm(true);
-  };
-
-  /** Reçoit le brouillon validé depuis AddRouteForm et l'ajoute aux routes. */
   const handleConfirmAdd = (draft: RouteDraft) => {
     const newRoute: LogsRouteClient = {
       id: crypto.randomUUID(),
@@ -675,10 +713,6 @@ export function LogsAdvancedMode({
       verbosity: draft.verbosity,
     };
     syncRoutes([...routes, newRoute]);
-    setShowAddForm(false);
-  };
-
-  const handleCancelAdd = () => {
     setShowAddForm(false);
   };
 
@@ -701,62 +735,69 @@ export function LogsAdvancedMode({
     }
   };
 
-  return (
-    <div className="space-y-8">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Configuration avancée des logs</h2>
-        <p className="text-sm text-muted-foreground">
-          Définissez plusieurs routes avec des événements et salons distincts.
-        </p>
-      </div>
+  const filtersActive = activeFilterCount(config.exclusions);
 
-      {/* Tableau des routes */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold">Routes de destination</h3>
-            <p className="text-sm text-muted-foreground">
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1.5">
+            <CardTitle>Routes de destination</CardTitle>
+            <CardDescription>
               Dispatche différents events vers différents salons. Utile pour séparer modération et
               activité.
-            </p>
+            </CardDescription>
           </div>
           <Button
             type="button"
+            variant="outline"
             size="sm"
-            onClick={handleAddRoute}
+            onClick={() => setShowAddForm(true)}
             disabled={showAddForm}
             aria-expanded={showAddForm}
             aria-controls="add-route-form"
           >
             + Nouvelle route
           </Button>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {routes.length === 0 && !showAddForm ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+              <span className="opacity-40">
+                <RouteIcon />
+              </span>
+              <p className="text-sm">Aucune route configurée.</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddForm(true)}
+              >
+                + Créer une première route
+              </Button>
+            </div>
+          ) : null}
 
-        {routes.length === 0 && !showAddForm ? (
-          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Aucune route configurée.
-          </p>
-        ) : (
-          routes.length > 0 && (
-            <div className="overflow-x-auto rounded-lg border">
+          {routes.length > 0 ? (
+            <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full text-left">
-                <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                <thead className="bg-surface-active/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Label</th>
                     <th
-                      className="px-3 py-2 cursor-help"
-                      title="Types d'événements Discord captés par cette route. Cliquer sur Éditer pour modifier."
+                      className="cursor-help px-3 py-2"
+                      title="Types d'événements Discord captés par cette route."
                     >
                       Événements
                     </th>
                     <th className="px-3 py-2">Salon</th>
                     <th
-                      className="px-3 py-2 cursor-help"
-                      title="Compact = 1 champ par événement (moins visuel, idéal pour archivage). Détaillé = tous les champs disponibles (auteur, avant/après, timestamps)."
+                      className="cursor-help px-3 py-2"
+                      title="Compact = 1 ligne par event. Détaillé = embed complet."
                     >
                       Verbosité
                     </th>
-                    <th className="px-3 py-2">Actions</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -774,62 +815,72 @@ export function LogsAdvancedMode({
                 </tbody>
               </table>
             </div>
-          )
-        )}
+          ) : null}
 
-        {/* Formulaire d'ajout inline */}
-        {showAddForm && (
-          <div id="add-route-form">
-            <AddRouteForm channels={channels} onAdd={handleConfirmAdd} onCancel={handleCancelAdd} />
-          </div>
-        )}
-      </div>
+          {showAddForm ? (
+            <div id="add-route-form">
+              <AddRouteForm
+                channels={channels}
+                onAdd={handleConfirmAdd}
+                onCancel={() => setShowAddForm(false)}
+              />
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      {/* Filtres globaux */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-base font-semibold">Filtres globaux</h3>
-          <p className="text-sm text-muted-foreground">
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtres globaux</CardTitle>
+          <CardDescription>
             S'appliquent à toutes les routes. Un event lié à un utilisateur, rôle ou salon filtré
             sera ignoré.
-          </p>
-        </div>
-        <ExclusionsEditor
-          exclusions={config.exclusions}
-          roles={roles}
-          channels={channels}
-          onChange={handleExclusionsChange}
-        />
-      </div>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExclusionsEditor
+            exclusions={config.exclusions}
+            roles={roles}
+            channels={channels}
+            onChange={handleExclusionsChange}
+          />
+        </CardContent>
+      </Card>
 
-      {/* Limites techniques */}
-      <LimitsNotice />
+      <details className="rounded-md border border-border bg-card px-4 py-3 text-sm">
+        <summary className="cursor-pointer select-none font-medium text-muted-foreground">
+          Limites techniques du module
+        </summary>
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+          <li>
+            Contenu &gt; 1024 caractères → pièce jointe <code>.txt</code>.
+          </li>
+          <li>100 events bufferisés max par route cassée (bouton Rejouer pour vider).</li>
+          <li>Rate-limit Discord appliqué automatiquement (50 msg/s/bot).</li>
+        </ul>
+      </details>
 
-      {/* Retour d'action */}
-      {feedback !== null && (
+      {feedback !== null ? (
         <p
-          role="status"
+          role={feedback.kind === 'error' ? 'alert' : 'status'}
           className={
             feedback.kind === 'success'
-              ? 'text-sm text-green-700 dark:text-green-400'
+              ? 'text-sm text-emerald-600 dark:text-emerald-400'
               : 'text-sm text-destructive'
           }
         >
           {feedback.message}
         </p>
-      )}
+      ) : null}
 
-      {/* Action globale Enregistrer */}
-      <div className="flex items-center gap-3 border-t border-border pt-4">
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-xs text-muted-foreground">
+          {routes.length} route{routes.length > 1 ? 's' : ''} · {filtersActive} filtre
+          {filtersActive > 1 ? 's' : ''} actif{filtersActive > 1 ? 's' : ''}
+        </span>
         <Button type="button" disabled={isSaving} onClick={() => void handleSave()}>
           {isSaving ? 'Enregistrement…' : 'Enregistrer la configuration'}
         </Button>
-        <span className="text-xs text-muted-foreground">
-          {routes.length} route{routes.length > 1 ? 's' : ''} ·{' '}
-          {activeFilterCount(config.exclusions)} filtre
-          {activeFilterCount(config.exclusions) > 1 ? 's' : ''} actif
-          {activeFilterCount(config.exclusions) > 1 ? 's' : ''}
-        </span>
       </div>
     </div>
   );
