@@ -97,7 +97,7 @@ export async function handleReactionAdd(
   event: GuildMessageReactionAddEvent,
   tracker: SelfCausedTracker,
 ): Promise<void> {
-  ctx.logger.info('reaction-roles : reactionAdd reçu', {
+  ctx.logger.debug('reaction-roles : reactionAdd reçu', {
     guildId: event.guildId,
     userId: event.userId,
     messageId: event.messageId,
@@ -213,7 +213,7 @@ export async function handleReactionRemove(
   event: GuildMessageReactionRemoveEvent,
   tracker: SelfCausedTracker,
 ): Promise<void> {
-  ctx.logger.info('reaction-roles : reactionRemove reçu', {
+  ctx.logger.debug('reaction-roles : reactionRemove reçu', {
     guildId: event.guildId,
     userId: event.userId,
     messageId: event.messageId,
