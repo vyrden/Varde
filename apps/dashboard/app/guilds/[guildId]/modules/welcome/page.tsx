@@ -29,14 +29,24 @@ const DEFAULT_CONFIG: WelcomeConfigClient = {
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+    card: {
+      enabled: false,
+      backgroundColor: '#2C2F33',
+      backgroundImagePath: null,
+      text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' },
+    },
   },
   goodbye: {
     enabled: false,
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+    card: {
+      enabled: false,
+      backgroundColor: '#2C2F33',
+      backgroundImagePath: null,
+      text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' },
+    },
   },
   autorole: { enabled: false, roleIds: [], delaySeconds: 0 },
   accountAgeFilter: {
@@ -99,6 +109,20 @@ function normalizeConfig(raw: unknown): WelcomeConfigClient {
           typeof card['backgroundImagePath'] === 'string'
             ? (card['backgroundImagePath'] as string)
             : null,
+        text: (() => {
+          const t = (
+            typeof card['text'] === 'object' && card['text'] !== null ? card['text'] : {}
+          ) as Record<string, unknown>;
+          const ff = t['fontFamily'];
+          return {
+            titleFontSize:
+              typeof t['titleFontSize'] === 'number' ? (t['titleFontSize'] as number) : 32,
+            subtitleFontSize:
+              typeof t['subtitleFontSize'] === 'number' ? (t['subtitleFontSize'] as number) : 20,
+            fontFamily:
+              ff === 'serif' || ff === 'monospace' ? (ff as 'serif' | 'monospace') : 'sans-serif',
+          };
+        })(),
       },
       ...(fallback === DEFAULT_CONFIG.welcome
         ? {

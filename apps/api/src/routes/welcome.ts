@@ -49,6 +49,13 @@ const previewBodySchema = z.object({
    * de fond persistée pour cette cible et on l'utilise au rendu.
    */
   backgroundTarget: z.enum(['welcome', 'goodbye']).optional(),
+  text: z
+    .object({
+      titleFontSize: z.number().int().min(16).max(72).optional(),
+      subtitleFontSize: z.number().int().min(10).max(48).optional(),
+      fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).optional(),
+    })
+    .optional(),
 });
 
 const backgroundQuerySchema = z.object({
@@ -110,6 +117,18 @@ export function registerWelcomeRoutes(
         );
       }
 
+      const textOpts =
+        body.text !== undefined
+          ? {
+              ...(body.text.titleFontSize !== undefined
+                ? { titleFontSize: body.text.titleFontSize }
+                : {}),
+              ...(body.text.subtitleFontSize !== undefined
+                ? { subtitleFontSize: body.text.subtitleFontSize }
+                : {}),
+              ...(body.text.fontFamily !== undefined ? { fontFamily: body.text.fontFamily } : {}),
+            }
+          : undefined;
       try {
         const png = await renderWelcomeCard({
           title: body.title,
@@ -117,6 +136,7 @@ export function registerWelcomeRoutes(
           avatarUrl: body.avatarUrl ?? '',
           backgroundColor: body.backgroundColor,
           ...(backgroundImagePath !== undefined ? { backgroundImagePath } : {}),
+          ...(textOpts !== undefined ? { text: textOpts } : {}),
         });
         return reply.code(200).header('content-type', 'image/png').send(png);
       } catch (error) {
@@ -291,6 +311,7 @@ export function registerWelcomeRoutes(
             avatarUrl: userInfo?.avatarUrl ?? '',
             backgroundColor: draft.welcome.card.backgroundColor,
             ...(backgroundImagePath !== undefined ? { backgroundImagePath } : {}),
+            text: draft.welcome.card.text,
           });
           files.push({ name: 'welcome-card.png', data: png });
         } catch (error) {

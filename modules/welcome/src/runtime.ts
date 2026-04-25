@@ -76,6 +76,7 @@ const buildCardAttachment = async (
       avatarUrl,
       backgroundColor: block.card.backgroundColor,
       ...(backgroundImagePath !== undefined ? { backgroundImagePath } : {}),
+      text: block.card.text,
     });
     return { name: 'welcome-card.png', data };
   } catch {

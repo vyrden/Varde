@@ -25,14 +25,24 @@ const baseConfig = (): WelcomeConfig => ({
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: true, backgroundColor: '#2C2F33', backgroundImagePath: null },
+    card: {
+      enabled: true,
+      backgroundColor: '#2C2F33',
+      backgroundImagePath: null,
+      text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+    },
   },
   goodbye: {
     enabled: false,
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+    card: {
+      enabled: false,
+      backgroundColor: '#2C2F33',
+      backgroundImagePath: null,
+      text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+    },
   },
   autorole: { enabled: false, roleIds: [], delaySeconds: 0 },
   accountAgeFilter: {
@@ -55,7 +65,12 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         ...baseConfig().welcome,
         message:
           'Yo {user.mention}, bienvenue sur **{guild}** ! Tu es notre {memberCount}ᵉ membre. GG, tu peux te lancer.',
-        card: { enabled: true, backgroundColor: '#1F2937', backgroundImagePath: null },
+        card: {
+          enabled: true,
+          backgroundColor: '#1F2937',
+          backgroundImagePath: null,
+          text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+        },
       },
       goodbye: {
         ...baseConfig().goodbye,
@@ -75,7 +90,12 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         message:
           "Bienvenue {user.mention} sur **{guild}**. N'hésitez pas à vous présenter dans le salon dédié — vous êtes le {memberCount}ᵉ membre.",
         embed: { enabled: true, color: '#0EA5E9' },
-        card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+        card: {
+          enabled: false,
+          backgroundColor: '#2C2F33',
+          backgroundImagePath: null,
+          text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+        },
       },
       goodbye: {
         ...baseConfig().goodbye,
@@ -95,12 +115,22 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         ...baseConfig().welcome,
         message:
           "Bienvenue {user.mention} 🎉 Heureux de t'accueillir sur **{guild}** ! Montre-nous ce que tu fais.",
-        card: { enabled: true, backgroundColor: '#7C3AED', backgroundImagePath: null },
+        card: {
+          enabled: true,
+          backgroundColor: '#7C3AED',
+          backgroundImagePath: null,
+          text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+        },
       },
       goodbye: {
         ...baseConfig().goodbye,
         message: 'Au revoir {user.tag}, prends soin de toi. ✨',
-        card: { enabled: true, backgroundColor: '#1E1B4B', backgroundImagePath: null },
+        card: {
+          enabled: true,
+          backgroundColor: '#1E1B4B',
+          backgroundImagePath: null,
+          text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+        },
       },
     },
   },
@@ -114,7 +144,12 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
       welcome: {
         ...baseConfig().welcome,
         message: 'Bienvenue {user.mention} sur {guild} !',
-        card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+        card: {
+          enabled: false,
+          backgroundColor: '#2C2F33',
+          backgroundImagePath: null,
+          text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+        },
       },
     },
   },

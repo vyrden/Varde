@@ -1,7 +1,6 @@
 'use client';
 
-import { Button } from '@varde/ui';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { previewWelcomeCard, type WelcomeConfigClient } from '../../lib/welcome-actions';
 import { renderTemplateClient } from './templates';
@@ -57,6 +56,7 @@ export function DiscordMessagePreview({ guildId, block, variant }: DiscordMessag
   const [cardDataUrl, setCardDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const lastRequestId = useRef(0);
 
   const renderedContent = useMemo(
     () => renderTemplateClient(block.message, SAMPLE_VARS),
@@ -64,39 +64,68 @@ export function DiscordMessagePreview({ guildId, block, variant }: DiscordMessag
   );
   const messageHtml = useMemo(() => renderInlineMarkdown(renderedContent), [renderedContent]);
 
+  // Clé déterministe sur tout ce qui affecte le rendu de carte. Quand
+  // une de ces valeurs change, on relance une preview après debounce.
+  const cardKey = useMemo(
+    () =>
+      JSON.stringify({
+        enabled: block.card.enabled,
+        bg: block.card.backgroundColor,
+        bgPath: block.card.backgroundImagePath,
+        text: block.card.text,
+      }),
+    [
+      block.card.enabled,
+      block.card.backgroundColor,
+      block.card.backgroundImagePath,
+      block.card.text,
+    ],
+  );
+
   const refreshCard = () => {
     setError(null);
     if (!block.card.enabled) {
       setCardDataUrl(null);
       return;
     }
+    const myId = ++lastRequestId.current;
     startTransition(async () => {
       const result = await previewWelcomeCard(guildId, {
         title: variant === 'welcome' ? 'Bienvenue, Alice !' : 'Au revoir, Alice',
         subtitle: variant === 'welcome' ? 'Tu es le 42ᵉ membre' : '41 membres restants',
         backgroundColor: block.card.backgroundColor,
         backgroundTarget: variant,
+        text: block.card.text,
       });
+      // Ignore si une requête plus récente a été lancée entre-temps.
+      if (myId !== lastRequestId.current) return;
       if (result.ok) setCardDataUrl(result.dataUrl);
       else setError(result.reason);
     });
   };
+
+  // Auto-refresh debouncé : 500 ms après la dernière modif de carte.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshCard est stable au sein du closure
+  useEffect(() => {
+    if (!block.card.enabled) {
+      setCardDataUrl(null);
+      return;
+    }
+    const handle = setTimeout(refreshCard, 500);
+    return () => clearTimeout(handle);
+  }, [cardKey]);
 
   const embedColor = `#${block.embed.color.replace('#', '')}`;
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium">Aperçu Discord</p>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={refreshCard}
-          disabled={pending}
-        >
-          {pending ? 'Rendu…' : 'Actualiser'}
-        </Button>
+        <p className="text-xs font-medium">
+          Aperçu Discord{' '}
+          <span className="text-muted-foreground">
+            {pending ? '(rendu…)' : '(mise à jour automatique)'}
+          </span>
+        </p>
       </div>
 
       {/* Cadre Discord */}
@@ -164,9 +193,7 @@ export function DiscordMessagePreview({ guildId, block, variant }: DiscordMessag
                   height={250}
                 />
               ) : (
-                <p className="mt-1 text-xs text-[#949ba4] italic">
-                  Clique « Actualiser » pour générer la carte.
-                </p>
+                <p className="mt-1 text-xs text-[#949ba4] italic">Génération de la carte…</p>
               )
             ) : null}
           </div>

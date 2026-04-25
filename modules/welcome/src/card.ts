@@ -25,6 +25,12 @@ export interface RenderCardOptions {
    * d'erreur de lecture).
    */
   readonly backgroundImagePath?: string;
+  /** Réglages typographiques. Défauts utilisés si omis. */
+  readonly text?: {
+    readonly titleFontSize?: number;
+    readonly subtitleFontSize?: number;
+    readonly fontFamily?: string;
+  };
 }
 
 const CARD_WIDTH = 700;
@@ -138,14 +144,17 @@ export async function renderWelcomeCard(opts: RenderCardOptions): Promise<Buffer
 
   // Texte.
   const textMaxWidth = CARD_WIDTH - TEXT_X - 30;
+  const titleSize = opts.text?.titleFontSize ?? 32;
+  const subtitleSize = opts.text?.subtitleFontSize ?? 20;
+  const fontFamily = opts.text?.fontFamily ?? 'sans-serif';
 
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 32px sans-serif';
+  ctx.font = `bold ${titleSize}px ${fontFamily}`;
   ctx.textBaseline = 'middle';
   ctx.fillText(fitText(ctx, opts.title, textMaxWidth), TEXT_X, TEXT_TITLE_Y);
 
   ctx.fillStyle = '#B9BBBE';
-  ctx.font = '20px sans-serif';
+  ctx.font = `${subtitleSize}px ${fontFamily}`;
   ctx.fillText(fitText(ctx, opts.subtitle, textMaxWidth), TEXT_X, TEXT_SUBTITLE_Y);
 
   return canvas.toBuffer('image/png');

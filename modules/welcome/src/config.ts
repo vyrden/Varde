@@ -52,8 +52,27 @@ const messageBlockSchema = z.object({
        * au rendu. Stocké via les routes upload/delete background.
        */
       backgroundImagePath: z.string().max(256).nullable().default(null),
+      /**
+       * Réglages typographiques du titre et du sous-titre rendus sur
+       * la carte. `fontFamily` est une famille générique disponible
+       * sur la plupart des systèmes (sans-serif / serif / monospace) ;
+       * pour des polices custom il faudrait registerFromPath au
+       * démarrage du bot.
+       */
+      text: z
+        .object({
+          titleFontSize: z.number().int().min(16).max(72).default(32),
+          subtitleFontSize: z.number().int().min(10).max(48).default(20),
+          fontFamily: z.enum(['sans-serif', 'serif', 'monospace']).default('sans-serif'),
+        })
+        .default({ titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' }),
     })
-    .default({ enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null }),
+    .default({
+      enabled: false,
+      backgroundColor: '#2C2F33',
+      backgroundImagePath: null,
+      text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' },
+    }),
 });
 export type WelcomeMessageBlock = z.infer<typeof messageBlockSchema>;
 
@@ -68,7 +87,12 @@ const DEFAULT_MESSAGE_BLOCK = {
   channelId: null,
   message: '',
   embed: { enabled: false, color: '#5865F2' },
-  card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
+  card: {
+    enabled: false,
+    backgroundColor: '#2C2F33',
+    backgroundImagePath: null,
+    text: { titleFontSize: 32, subtitleFontSize: 20, fontFamily: 'sans-serif' as const },
+  },
 } as const;
 
 const DEFAULT_WELCOME_BLOCK = {

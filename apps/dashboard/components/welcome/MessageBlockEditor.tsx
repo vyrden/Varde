@@ -291,6 +291,76 @@ export function MessageBlockEditor<B extends Block>({
                       } as B[keyof B])
                     }
                   />
+
+                  {/* Réglages typographiques de la carte */}
+                  <div className="grid gap-2 rounded-md border border-border bg-background/40 p-2 sm:grid-cols-2">
+                    <label className="text-xs">
+                      <span className="block font-medium text-muted-foreground">Police</span>
+                      <select
+                        value={block.card.text.fontFamily}
+                        onChange={(e) =>
+                          updateBlock('card', {
+                            ...block.card,
+                            text: {
+                              ...block.card.text,
+                              fontFamily: e.target.value as 'sans-serif' | 'serif' | 'monospace',
+                            },
+                          } as B[keyof B])
+                        }
+                        className="mt-0.5 h-7 w-full rounded border border-input bg-background px-2 text-xs"
+                      >
+                        <option value="sans-serif">Sans-serif</option>
+                        <option value="serif">Serif</option>
+                        <option value="monospace">Monospace</option>
+                      </select>
+                    </label>
+                    <label className="text-xs">
+                      <span className="block font-medium text-muted-foreground">
+                        Taille du titre :{' '}
+                        <span className="font-mono">{block.card.text.titleFontSize}px</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={16}
+                        max={72}
+                        step={1}
+                        value={block.card.text.titleFontSize}
+                        onChange={(e) =>
+                          updateBlock('card', {
+                            ...block.card,
+                            text: {
+                              ...block.card.text,
+                              titleFontSize: Number(e.target.value),
+                            },
+                          } as B[keyof B])
+                        }
+                        className="mt-1 w-full"
+                      />
+                    </label>
+                    <label className="text-xs sm:col-span-2">
+                      <span className="block font-medium text-muted-foreground">
+                        Taille du sous-titre :{' '}
+                        <span className="font-mono">{block.card.text.subtitleFontSize}px</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={10}
+                        max={48}
+                        step={1}
+                        value={block.card.text.subtitleFontSize}
+                        onChange={(e) =>
+                          updateBlock('card', {
+                            ...block.card,
+                            text: {
+                              ...block.card.text,
+                              subtitleFontSize: Number(e.target.value),
+                            },
+                          } as B[keyof B])
+                        }
+                        className="mt-1 w-full"
+                      />
+                    </label>
+                  </div>
                 </>
               ) : null}
             </div>

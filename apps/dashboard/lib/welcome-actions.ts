@@ -26,6 +26,11 @@ export interface WelcomeConfigClient {
       readonly enabled: boolean;
       readonly backgroundColor: string;
       readonly backgroundImagePath: string | null;
+      readonly text: {
+        readonly titleFontSize: number;
+        readonly subtitleFontSize: number;
+        readonly fontFamily: 'sans-serif' | 'serif' | 'monospace';
+      };
     };
   };
   readonly goodbye: {
@@ -37,6 +42,11 @@ export interface WelcomeConfigClient {
       readonly enabled: boolean;
       readonly backgroundColor: string;
       readonly backgroundImagePath: string | null;
+      readonly text: {
+        readonly titleFontSize: number;
+        readonly subtitleFontSize: number;
+        readonly fontFamily: 'sans-serif' | 'serif' | 'monospace';
+      };
     };
   };
   readonly autorole: {
@@ -129,6 +139,11 @@ export async function previewWelcomeCard(
     readonly avatarUrl?: string;
     /** Demande au serveur d'utiliser l'image de fond persistée pour cette cible. */
     readonly backgroundTarget?: 'welcome' | 'goodbye';
+    readonly text?: {
+      readonly titleFontSize?: number;
+      readonly subtitleFontSize?: number;
+      readonly fontFamily?: 'sans-serif' | 'serif' | 'monospace';
+    };
   },
 ): Promise<PreviewCardResult> {
   try {
