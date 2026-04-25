@@ -1,6 +1,5 @@
 import { PRESET_CATALOG } from '@varde/presets';
-import { PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { PageHeader } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -62,19 +61,16 @@ export default async function OnboardingPage({
 
   return (
     <>
-      <div className="mx-auto max-w-5xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← Retour au serveur
-          </Link>
-        </div>
-        <PageTitle
-          title={`Onboarding — ${guild.name}`}
-          description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
-        />
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Onboarding' },
+        ]}
+        title={`Onboarding — ${guild.name}`}
+        description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
+      />
+      <div className="mx-auto w-full max-w-5xl space-y-5 px-6 py-6">
         <StepRouter guildId={guildId} session={onboarding} />
       </div>
     </>

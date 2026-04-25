@@ -1,5 +1,4 @@
-import { EmptyState, PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { Badge, EmptyState, PageHeader } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -51,24 +50,28 @@ export default async function ModuleConfigPage({
   const module = modules.find((m) => m.id === moduleId);
   if (!guild || !module) notFound();
 
+  const isEnabled = module.enabled !== false;
+
   return (
     <>
-      <div className="mx-auto max-w-3xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← {guild.name}
-          </Link>
-        </div>
-        <PageTitle
-          title={module.name}
-          description={
-            module.description || `Configuration du module ${module.name} (v${module.version}).`
-          }
-        />
-
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Modules', href: `/guilds/${guildId}` },
+          { label: module.name },
+        ]}
+        title={module.name}
+        description={
+          module.description || `Configuration du module ${module.name} (v${module.version}).`
+        }
+        actions={
+          <Badge variant={isEnabled ? 'active' : 'inactive'}>
+            {isEnabled ? 'Actif' : 'Inactif'}
+          </Badge>
+        }
+      />
+      <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
         {moduleConfig.configUi && moduleConfig.configUi.fields.length > 0 ? (
           <ConfigForm
             guildId={guildId}

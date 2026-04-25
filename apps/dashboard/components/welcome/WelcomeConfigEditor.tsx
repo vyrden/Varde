@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@varde/ui';
+import { Button, ExpandablePanel } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
@@ -212,17 +212,38 @@ export function WelcomeConfigEditor({
         </>
       )}
 
-      <AutoroleSection
-        value={config.autorole}
-        onChange={(autorole) => setConfig({ ...config, autorole })}
-        roles={roles}
-      />
+      <ExpandablePanel
+        title="Auto-rôle"
+        description="Attribuer automatiquement un ou plusieurs rôles à l'arrivée."
+        enabled={config.autorole.enabled}
+        onEnabledChange={(enabled) =>
+          setConfig({ ...config, autorole: { ...config.autorole, enabled } })
+        }
+      >
+        <AutoroleSection
+          value={config.autorole}
+          onChange={(autorole) => setConfig({ ...config, autorole })}
+          roles={roles}
+        />
+      </ExpandablePanel>
 
-      <AccountAgeFilterSection
-        value={config.accountAgeFilter}
-        onChange={(accountAgeFilter) => setConfig({ ...config, accountAgeFilter })}
-        roles={roles}
-      />
+      <ExpandablePanel
+        title="Filtre comptes neufs"
+        description="Anti-raid basique : kick ou quarantaine pour les comptes Discord trop récents."
+        enabled={config.accountAgeFilter.enabled}
+        onEnabledChange={(enabled) =>
+          setConfig({
+            ...config,
+            accountAgeFilter: { ...config.accountAgeFilter, enabled },
+          })
+        }
+      >
+        <AccountAgeFilterSection
+          value={config.accountAgeFilter}
+          onChange={(accountAgeFilter) => setConfig({ ...config, accountAgeFilter })}
+          roles={roles}
+        />
+      </ExpandablePanel>
 
       {feedback !== null ? (
         <div

@@ -1,5 +1,4 @@
-import { PageTitle, UnboundPermissionsBanner } from '@varde/ui';
-import Link from 'next/link';
+import { Badge, PageHeader, UnboundPermissionsBanner } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -195,75 +194,39 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
 
   const initialConfig = normalizeConfig(moduleConfig.config);
 
+  const isEnabled = welcomeModule.enabled !== false;
+
   return (
     <>
-      <div className="mx-auto max-w-4xl space-y-6 p-6">
-        <nav aria-label="Fil d'Ariane" className="text-sm text-muted-foreground">
-          <ol className="flex items-center gap-2">
-            <li>
-              <Link
-                href="/"
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                Mes serveurs
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link
-                href={`/guilds/${guildId}`}
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                {guild.name}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link
-                href={`/guilds/${guildId}`}
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                Modules
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li className="font-medium text-foreground" aria-current="page">
-              {welcomeModule.name}
-            </li>
-          </ol>
-        </nav>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Modules', href: `/guilds/${guildId}` },
+          { label: welcomeModule.name },
+        ]}
+        title={welcomeModule.name}
+        description="Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs."
+        actions={
+          <Badge variant={isEnabled ? 'active' : 'inactive'}>
+            {isEnabled ? 'Actif' : 'Inactif'}
+          </Badge>
+        }
+      />
 
-        <PageTitle
-          title={welcomeModule.name}
-          description="Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs."
-        />
-
-        <div className="mt-2 flex items-center gap-2">
-          <span
-            className={
-              welcomeModule.enabled === false
-                ? 'inline-block h-2 w-2 rounded-full bg-muted-foreground/50'
-                : 'inline-block h-2 w-2 rounded-full bg-emerald-500'
-            }
-            aria-hidden="true"
-          />
-          <span className="text-xs text-muted-foreground">
-            {welcomeModule.enabled === false ? 'Module désactivé' : 'Module activé'}
-          </span>
-        </div>
-
+      <div className="mx-auto w-full max-w-4xl space-y-5 px-6 py-6">
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
           configureHref={`/guilds/${guildId}/settings/permissions?focus=welcome`}
         />
 
-        {welcomeModule.enabled === false ? (
+        {!isEnabled ? (
           <div
             role="status"
-            className="rounded-lg border border-blue-300 bg-blue-50 p-6 text-blue-900 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-100"
+            className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
           >
             <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-            <p className="mt-2 text-sm">
+            <p className="mt-1 text-sm text-muted-foreground">
               Tant que le module n'est pas activé, aucun message d'accueil ne sera posté.
             </p>
           </div>

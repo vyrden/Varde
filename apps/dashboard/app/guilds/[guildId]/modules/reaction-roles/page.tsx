@@ -1,5 +1,4 @@
-import { PageTitle, UnboundPermissionsBanner } from '@varde/ui';
-import Link from 'next/link';
+import { Badge, PageHeader, UnboundPermissionsBanner } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -136,70 +135,32 @@ export default async function ReactionRolesPage({
 
   const initialMessages = normalizeMessages(moduleConfig.config);
 
+  const isEnabled = rrModule.enabled !== false;
+
   return (
     <>
-      <div className="mx-auto max-w-4xl space-y-6 p-6">
-        {/* Fil d'Ariane */}
-        <nav aria-label="Fil d'Ariane" className="text-sm text-muted-foreground">
-          <ol className="flex items-center gap-2">
-            <li>
-              <Link
-                href="/"
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                Mes serveurs
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link
-                href={`/guilds/${guildId}`}
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                {guild.name}
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li>
-              <Link
-                href={`/guilds/${guildId}`}
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                Modules
-              </Link>
-            </li>
-            <li aria-hidden="true">/</li>
-            <li className="font-medium text-foreground" aria-current="page">
-              {rrModule.name}
-            </li>
-          </ol>
-        </nav>
-
-        <PageTitle
-          title={rrModule.name}
-          description="Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour les couleurs de nom, les notifications, la vérification, etc."
-        />
-
-        <div className="mt-2 flex items-center gap-2">
-          <span
-            className={
-              rrModule.enabled === false
-                ? 'inline-block h-2 w-2 rounded-full bg-muted-foreground/50'
-                : 'inline-block h-2 w-2 rounded-full bg-emerald-500'
-            }
-            aria-hidden="true"
-          />
-          <span className="text-xs text-muted-foreground">
-            {rrModule.enabled === false ? 'Module désactivé' : 'Module activé'}
-          </span>
-        </div>
-
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Modules', href: `/guilds/${guildId}` },
+          { label: rrModule.name },
+        ]}
+        title={rrModule.name}
+        description="Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour les couleurs de nom, les notifications, la vérification, etc."
+        actions={
+          <Badge variant={isEnabled ? 'active' : 'inactive'}>
+            {isEnabled ? 'Actif' : 'Inactif'}
+          </Badge>
+        }
+      />
+      <div className="mx-auto w-full max-w-4xl space-y-5 px-6 py-6">
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
           configureHref={`/guilds/${guildId}/settings/permissions?focus=reaction-roles`}
         />
 
-        {rrModule.enabled === false ? (
+        {!isEnabled ? (
           <div
             role="status"
             className="rounded-lg border border-blue-300 bg-blue-50 p-6 text-blue-900 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-100"

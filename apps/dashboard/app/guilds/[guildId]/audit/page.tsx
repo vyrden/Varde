@@ -1,4 +1,4 @@
-import { PageTitle } from '@varde/ui';
+import { PageHeader } from '@varde/ui';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
@@ -114,19 +114,16 @@ export default async function AuditPage({
 
   return (
     <>
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← {guild.name}
-          </Link>
-        </div>
-        <PageTitle
-          title="Journal d'audit"
-          description="Historique des actions sur le serveur. Filtrez par type, sévérité ou fenêtre temporelle."
-        />
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Audit' },
+        ]}
+        title="Journal d'audit"
+        description="Historique des actions sur le serveur. Filtrez par type, sévérité ou fenêtre temporelle."
+      />
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
         <AuditFilters guildId={guildId} values={filters} knownActions={knownActions} />
         <AuditTable items={page.items} />
         {page.nextCursor ? (

@@ -1,5 +1,4 @@
-import { PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { PageHeader } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -88,41 +87,17 @@ export default async function PermissionsPage({
 
   return (
     <>
-      <div className="mx-auto max-w-3xl space-y-6 p-6">
-        {/* Fil d'Ariane */}
-        <nav aria-label="Fil d'Ariane">
-          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-            <li>
-              <Link
-                href="/"
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                Mes serveurs
-              </Link>
-            </li>
-            <li aria-hidden>{'/'}</li>
-            <li>
-              <Link
-                href={`/guilds/${guildId}`}
-                className="hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-              >
-                {guild.name}
-              </Link>
-            </li>
-            <li aria-hidden>{'/'}</li>
-            <li>Paramètres</li>
-            <li aria-hidden>{'/'}</li>
-            <li aria-current="page" className="text-foreground font-medium">
-              Permissions
-            </li>
-          </ol>
-        </nav>
-
-        <PageTitle
-          title="Permissions des modules"
-          description="Liez les permissions déclarées par chaque module à des rôles Discord. Une permission sans rôle bloque toutes les actions correspondantes."
-        />
-
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Paramètres' },
+          { label: 'Permissions' },
+        ]}
+        title="Permissions des modules"
+        description="Liez les permissions déclarées par chaque module à des rôles Discord. Une permission sans rôle bloque toutes les actions correspondantes."
+      />
+      <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
         {/* Scroll vers le module ciblé par ?focus= au montage */}
         {focus !== undefined && focus.length > 0 ? <FocusScroller targetId={focus} /> : null}
 

@@ -1,5 +1,4 @@
-import { PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { PageHeader } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -45,19 +44,17 @@ export default async function AiSettingsPage({
 
   return (
     <>
-      <div className="mx-auto max-w-3xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← Retour au serveur
-          </Link>
-        </div>
-        <PageTitle
-          title={`Paramètres IA — ${guild.name}`}
-          description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
-        />
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name, href: `/guilds/${guildId}` },
+          { label: 'Paramètres' },
+          { label: 'IA' },
+        ]}
+        title={`Paramètres IA — ${guild.name}`}
+        description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
+      />
+      <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
         <AIProviderForm guildId={guildId} initial={settings} />
       </div>
     </>
