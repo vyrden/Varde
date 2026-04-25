@@ -88,12 +88,7 @@ export default async function PermissionsPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Paramètres' },
-          { label: 'Permissions' },
-        ]}
+        breadcrumbs={[{ label: 'Paramètres' }, { label: 'Permissions' }]}
         title="Permissions des modules"
         description="Liez les permissions déclarées par chaque module à des rôles Discord. Une permission sans rôle bloque toutes les actions correspondantes."
       />

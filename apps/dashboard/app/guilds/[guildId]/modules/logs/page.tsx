@@ -96,12 +96,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Modules', href: `/guilds/${guildId}` },
-          { label: logsModule.name },
-        ]}
+        breadcrumbs={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: logsModule.name }]}
         title={logsModule.name}
         description="Publie dans un salon Discord les événements importants de ton serveur — arrivées, départs, modifications de rôles, messages supprimés, etc. Utile pour un audit de modération ou un suivi des changements."
         actions={

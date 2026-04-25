@@ -55,12 +55,7 @@ export default async function ModuleConfigPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Modules', href: `/guilds/${guildId}` },
-          { label: module.name },
-        ]}
+        breadcrumbs={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: module.name }]}
         title={module.name}
         description={
           module.description || `Configuration du module ${module.name} (v${module.version}).`

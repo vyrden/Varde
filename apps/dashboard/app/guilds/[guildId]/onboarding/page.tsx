@@ -62,12 +62,7 @@ export default async function OnboardingPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Onboarding' },
-        ]}
-        title={`Onboarding — ${guild.name}`}
+        title="Onboarding"
         description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
       />
       <div className="mx-auto w-full max-w-5xl space-y-5 px-6 py-6">

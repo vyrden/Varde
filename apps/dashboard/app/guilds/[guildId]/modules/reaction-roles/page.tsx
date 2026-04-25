@@ -140,12 +140,7 @@ export default async function ReactionRolesPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Modules', href: `/guilds/${guildId}` },
-          { label: rrModule.name },
-        ]}
+        breadcrumbs={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: rrModule.name }]}
         title={rrModule.name}
         description="Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour les couleurs de nom, les notifications, la vérification, etc."
         actions={

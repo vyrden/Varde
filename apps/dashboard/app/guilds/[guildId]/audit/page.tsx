@@ -115,11 +115,6 @@ export default async function AuditPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Audit' },
-        ]}
         title="Journal d'audit"
         description="Historique des actions sur le serveur. Filtrez par type, sévérité ou fenêtre temporelle."
       />

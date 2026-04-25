@@ -200,8 +200,6 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
     <>
       <PageHeader
         breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
           { label: 'Modules', href: `/guilds/${guildId}` },
           { label: welcomeModule.name },
         ]}

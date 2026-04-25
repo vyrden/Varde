@@ -45,13 +45,8 @@ export default async function AiSettingsPage({
   return (
     <>
       <PageHeader
-        breadcrumbs={[
-          { label: 'Mes serveurs', href: '/' },
-          { label: guild.name, href: `/guilds/${guildId}` },
-          { label: 'Paramètres' },
-          { label: 'IA' },
-        ]}
-        title={`Paramètres IA — ${guild.name}`}
+        breadcrumbs={[{ label: 'Paramètres' }, { label: 'IA' }]}
+        title="Paramètres IA"
         description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
       />
       <div className="mx-auto w-full max-w-3xl space-y-5 px-6 py-6">
