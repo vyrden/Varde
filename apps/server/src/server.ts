@@ -22,6 +22,7 @@ import {
   registerReactionRolesRoutes,
   registerUnboundPermissionsRoutes,
   registerWelcomeRoutes,
+  type WelcomeUploadsService,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
@@ -179,6 +180,12 @@ export interface CreateServerOptions<D extends DbDriver> {
       guildName: string;
     }[];
   }>;
+  /**
+   * Service de persistance des images de fond welcome/goodbye.
+   * Câblé par `bin.ts` à partir de `VARDE_UPLOADS_DIR`. Omis → les
+   * routes upload/delete/get répondent 503.
+   */
+  readonly welcomeUploads?: WelcomeUploadsService;
   /**
    * Service Discord concret câblé par `bin.ts` quand le token est
    * présent. Omis → `createCtxFactory` utilise son stub interne
@@ -510,6 +517,7 @@ export async function createServer<D extends DbDriver>(
     discord,
     config,
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+    ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
   });
   registerModulesRoutes(api, { loader, config, discord });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });

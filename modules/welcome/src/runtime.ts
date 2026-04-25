@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from 'node:path';
+
 import type {
   ActionId,
   ChannelId,
@@ -12,6 +14,20 @@ import type {
 import { renderWelcomeCard } from './card.js';
 import { resolveConfig, type WelcomeConfig, type WelcomeMessageBlock } from './config.js';
 import { renderTemplate, type TemplateVariables } from './template-render.js';
+
+/**
+ * Résout un `backgroundImagePath` (relatif, persisté en config) en
+ * chemin absolu lisible par le renderer. Lit `VARDE_UPLOADS_DIR`
+ * depuis l'environnement avec un fallback sur `./uploads` (cwd).
+ *
+ * V1 : le module est partie du monolith et a accès à process.env.
+ * V2 : injecter un service uploads via ctx pour découpler.
+ */
+const resolveBackgroundAbsolute = (relativePath: string): string => {
+  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for process.env
+  const uploadsDir = process.env['VARDE_UPLOADS_DIR'] ?? './uploads';
+  return resolvePath(uploadsDir, relativePath);
+};
 
 const ACTION_WELCOMED = 'welcome.member.welcomed' as ActionId;
 const ACTION_GOODBYE = 'welcome.member.goodbye' as ActionId;
@@ -46,14 +62,20 @@ const buildCardAttachment = async (
   title: string,
   subtitle: string,
   avatarUrl: string,
+  resolveBackgroundAbsolute?: (relativePath: string) => string,
 ): Promise<{ name: string; data: Buffer } | null> => {
   if (!block.card.enabled) return null;
   try {
+    const backgroundImagePath =
+      block.card.backgroundImagePath !== null && resolveBackgroundAbsolute !== undefined
+        ? resolveBackgroundAbsolute(block.card.backgroundImagePath)
+        : undefined;
     const data = await renderWelcomeCard({
       title,
       subtitle,
       avatarUrl,
       backgroundColor: block.card.backgroundColor,
+      ...(backgroundImagePath !== undefined ? { backgroundImagePath } : {}),
     });
     return { name: 'welcome-card.png', data };
   } catch {
@@ -286,6 +308,7 @@ export async function handleMemberJoin(
     `Bienvenue, ${tag} !`,
     `Tu es le ${memberCount}ᵉ membre`,
     userInfo?.avatarUrl ?? '',
+    resolveBackgroundAbsolute,
   );
   const files = card !== null ? [card] : [];
   const embeds = buildEmbeds(cfg.welcome, content, card !== null);
@@ -344,6 +367,7 @@ export async function handleMemberLeave(
     `Au revoir, ${tag}`,
     `${memberCount} membre${memberCount > 1 ? 's' : ''} restant${memberCount > 1 ? 's' : ''}`,
     userInfo?.avatarUrl ?? '',
+    resolveBackgroundAbsolute,
   );
   const files = card !== null ? [card] : [];
   const embeds = buildEmbeds(cfg.goodbye, content, card !== null);

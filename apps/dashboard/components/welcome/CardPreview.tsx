@@ -23,6 +23,7 @@ export function CardPreview({ guildId, backgroundColor, variant }: CardPreviewPr
         title: variant === 'welcome' ? 'Bienvenue, Alice !' : 'Au revoir, Alice',
         subtitle: variant === 'welcome' ? 'Tu es le 42ᵉ membre' : '41 membres restants',
         backgroundColor,
+        backgroundTarget: variant,
       });
       if (result.ok) {
         setDataUrl(result.dataUrl);

@@ -25,14 +25,14 @@ const baseConfig = (): WelcomeConfig => ({
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: true, backgroundColor: '#2C2F33' },
+    card: { enabled: true, backgroundColor: '#2C2F33', backgroundImagePath: null },
   },
   goodbye: {
     enabled: false,
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33' },
+    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
   },
   autorole: { enabled: false, roleIds: [], delaySeconds: 0 },
   accountAgeFilter: {
@@ -55,7 +55,7 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         ...baseConfig().welcome,
         message:
           'Yo {user.mention}, bienvenue sur **{guild}** ! Tu es notre {memberCount}ᵉ membre. GG, tu peux te lancer.',
-        card: { enabled: true, backgroundColor: '#1F2937' },
+        card: { enabled: true, backgroundColor: '#1F2937', backgroundImagePath: null },
       },
       goodbye: {
         ...baseConfig().goodbye,
@@ -76,7 +76,7 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         message:
           "Bienvenue {user.mention} sur **{guild}**. N'hésitez pas à vous présenter dans le salon dédié — vous êtes le {memberCount}ᵉ membre.",
         embed: { enabled: true, color: '#0EA5E9' },
-        card: { enabled: false, backgroundColor: '#2C2F33' },
+        card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
       },
       goodbye: {
         ...baseConfig().goodbye,
@@ -97,13 +97,13 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
         ...baseConfig().welcome,
         message:
           "Bienvenue {user.mention} 🎉 Heureux de t'accueillir sur **{guild}** ! Montre-nous ce que tu fais.",
-        card: { enabled: true, backgroundColor: '#7C3AED' },
+        card: { enabled: true, backgroundColor: '#7C3AED', backgroundImagePath: null },
       },
       goodbye: {
         ...baseConfig().goodbye,
         enabled: true,
         message: 'Au revoir {user.tag}, prends soin de toi. ✨',
-        card: { enabled: true, backgroundColor: '#1E1B4B' },
+        card: { enabled: true, backgroundColor: '#1E1B4B', backgroundImagePath: null },
       },
     },
   },
@@ -117,7 +117,7 @@ export const WELCOME_TEMPLATES: readonly WelcomeTemplate[] = [
       welcome: {
         ...baseConfig().welcome,
         message: 'Bienvenue {user.mention} sur {guild} !',
-        card: { enabled: false, backgroundColor: '#2C2F33' },
+        card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
       },
     },
   },

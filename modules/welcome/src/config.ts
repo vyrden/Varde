@@ -46,8 +46,14 @@ const messageBlockSchema = z.object({
     .object({
       enabled: z.boolean().default(false),
       backgroundColor: z.string().regex(HEX_COLOR).default('#2C2F33'),
+      /**
+       * Chemin relatif (depuis VARDE_UPLOADS_DIR) vers une image de
+       * fond personnalisée. Si présent, supplante `backgroundColor`
+       * au rendu. Stocké via les routes upload/delete background.
+       */
+      backgroundImagePath: z.string().max(256).nullable().default(null),
     })
-    .default({ enabled: false, backgroundColor: '#2C2F33' }),
+    .default({ enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null }),
 });
 export type WelcomeMessageBlock = z.infer<typeof messageBlockSchema>;
 
@@ -62,7 +68,7 @@ const DEFAULT_MESSAGE_BLOCK = {
   channelId: null,
   message: '',
   embed: { enabled: false, color: '#5865F2' },
-  card: { enabled: false, backgroundColor: '#2C2F33' },
+  card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
 } as const;
 
 const DEFAULT_WELCOME_BLOCK = {

@@ -29,14 +29,14 @@ const DEFAULT_CONFIG: WelcomeConfigClient = {
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33' },
+    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
   },
   goodbye: {
     enabled: false,
     channelId: null,
     message: '',
     embed: { enabled: false, color: '#5865F2' },
-    card: { enabled: false, backgroundColor: '#2C2F33' },
+    card: { enabled: false, backgroundColor: '#2C2F33', backgroundImagePath: null },
   },
   autorole: { enabled: false, roleIds: [], delaySeconds: 0 },
   accountAgeFilter: {
@@ -95,6 +95,10 @@ function normalizeConfig(raw: unknown): WelcomeConfigClient {
           typeof card['backgroundColor'] === 'string'
             ? (card['backgroundColor'] as string)
             : '#2C2F33',
+        backgroundImagePath:
+          typeof card['backgroundImagePath'] === 'string'
+            ? (card['backgroundImagePath'] as string)
+            : null,
       },
       ...(fallback === DEFAULT_CONFIG.welcome
         ? {

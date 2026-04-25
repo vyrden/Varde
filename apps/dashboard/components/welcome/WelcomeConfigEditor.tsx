@@ -117,6 +117,7 @@ export function WelcomeConfigEditor({
         onChange={(welcome) => setConfig({ ...config, welcome })}
         channels={channels}
         variant="welcome"
+        guildId={guildId}
       />
       {config.welcome.enabled && config.welcome.card.enabled ? (
         <CardPreview
@@ -132,6 +133,7 @@ export function WelcomeConfigEditor({
         onChange={(goodbye) => setConfig({ ...config, goodbye })}
         channels={channels}
         variant="goodbye"
+        guildId={guildId}
       />
       {config.goodbye.enabled && config.goodbye.card.enabled ? (
         <CardPreview

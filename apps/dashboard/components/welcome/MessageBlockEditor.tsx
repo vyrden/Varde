@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
+import { BackgroundImageInput } from './BackgroundImageInput';
 import { TEMPLATE_VARIABLES_CLIENT } from './templates';
 
 type Block = WelcomeConfigClient['welcome'] | WelcomeConfigClient['goodbye'];
@@ -19,6 +20,8 @@ export interface MessageBlockEditorProps<B extends Block> {
   readonly channels: readonly ChannelOption[];
   /** Mode `welcome` autorise destination=channel|dm|both. `goodbye` est channel-only. */
   readonly variant: 'welcome' | 'goodbye';
+  /** Requis pour brancher l'upload d'image de fond sur l'API. */
+  readonly guildId: string;
 }
 
 const colorPresets = ['#5865F2', '#7C3AED', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#64748B'];
@@ -35,6 +38,7 @@ export function MessageBlockEditor<B extends Block>({
   onChange,
   channels,
   variant,
+  guildId,
 }: MessageBlockEditorProps<B>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -232,38 +236,51 @@ export function MessageBlockEditor<B extends Block>({
                 Carte d'avatar
               </label>
               {block.card.enabled ? (
-                <div className="flex flex-wrap gap-1">
-                  {cardPresets.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() =>
+                <>
+                  <div className="flex flex-wrap gap-1">
+                    {cardPresets.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() =>
+                          updateBlock('card', {
+                            ...block.card,
+                            backgroundColor: c,
+                          } as B[keyof B])
+                        }
+                        title={c}
+                        className={`h-6 w-6 rounded border-2 ${
+                          block.card.backgroundColor === c
+                            ? 'border-foreground'
+                            : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={block.card.backgroundColor}
+                      onChange={(e) =>
                         updateBlock('card', {
                           ...block.card,
-                          backgroundColor: c,
+                          backgroundColor: e.target.value,
                         } as B[keyof B])
                       }
-                      title={c}
-                      className={`h-6 w-6 rounded border-2 ${
-                        block.card.backgroundColor === c
-                          ? 'border-foreground'
-                          : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: c }}
+                      className="h-6 w-8"
                     />
-                  ))}
-                  <input
-                    type="color"
-                    value={block.card.backgroundColor}
-                    onChange={(e) =>
+                  </div>
+                  <BackgroundImageInput
+                    guildId={guildId}
+                    target={variant}
+                    currentPath={block.card.backgroundImagePath}
+                    onChange={(relativePath) =>
                       updateBlock('card', {
                         ...block.card,
-                        backgroundColor: e.target.value,
+                        backgroundImagePath: relativePath,
                       } as B[keyof B])
                     }
-                    className="h-6 w-8"
                   />
-                </div>
+                </>
               ) : null}
             </div>
           </div>

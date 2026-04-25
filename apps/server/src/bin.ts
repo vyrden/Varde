@@ -23,7 +23,13 @@
  * via l'API REST : à livrer quand la surface commandes sera stable.
  */
 
-import type { GuildRoleDto, GuildTextChannelDto } from '@varde/api';
+import { resolve as resolvePath } from 'node:path';
+
+import {
+  createWelcomeUploadsService,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
+} from '@varde/api';
 import {
   attachDiscordClient,
   createDiscordJsChannelSender,
@@ -392,6 +398,8 @@ async function main(): Promise<void> {
   const seedIds = seedGuildIds(readOptional('VARDE_SEED_GUILD_IDS', ''));
   const discordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
   const keystoreMasterKey = readKeystoreMasterKey();
+  const uploadsDir = resolvePath(readOptional('VARDE_UPLOADS_DIR', './uploads'));
+  const welcomeUploads = createWelcomeUploadsService(uploadsDir);
 
   const logger = createLogger({ level: logLevel });
 
@@ -417,6 +425,7 @@ async function main(): Promise<void> {
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          welcomeUploads,
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -430,6 +439,7 @@ async function main(): Promise<void> {
             : {}),
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          welcomeUploads,
         });
 
   handle.loader.register(helloWorld);

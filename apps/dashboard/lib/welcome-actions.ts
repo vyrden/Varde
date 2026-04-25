@@ -22,14 +22,22 @@ export interface WelcomeConfigClient {
     readonly channelId: string | null;
     readonly message: string;
     readonly embed: { readonly enabled: boolean; readonly color: string };
-    readonly card: { readonly enabled: boolean; readonly backgroundColor: string };
+    readonly card: {
+      readonly enabled: boolean;
+      readonly backgroundColor: string;
+      readonly backgroundImagePath: string | null;
+    };
   };
   readonly goodbye: {
     readonly enabled: boolean;
     readonly channelId: string | null;
     readonly message: string;
     readonly embed: { readonly enabled: boolean; readonly color: string };
-    readonly card: { readonly enabled: boolean; readonly backgroundColor: string };
+    readonly card: {
+      readonly enabled: boolean;
+      readonly backgroundColor: string;
+      readonly backgroundImagePath: string | null;
+    };
   };
   readonly autorole: {
     readonly enabled: boolean;
@@ -119,6 +127,8 @@ export async function previewWelcomeCard(
     readonly subtitle: string;
     readonly backgroundColor: string;
     readonly avatarUrl?: string;
+    /** Demande au serveur d'utiliser l'image de fond persistée pour cette cible. */
+    readonly backgroundTarget?: 'welcome' | 'goodbye';
   },
 ): Promise<PreviewCardResult> {
   try {
@@ -145,6 +155,108 @@ export async function previewWelcomeCard(
       ok: false,
       reason: error instanceof Error ? error.message : 'network',
     };
+  }
+}
+
+export type UploadBackgroundResult =
+  | { readonly ok: true; readonly relativePath: string }
+  | { readonly ok: false; readonly reason: string; readonly detail?: string };
+
+/**
+ * Persiste une image de fond pour la cible (welcome ou goodbye).
+ * Le `dataUrl` est attendu sous la forme `data:image/png;base64,...`
+ * — on le passe tel quel au backend qui décode et valide.
+ */
+export async function uploadWelcomeBackground(
+  guildId: string,
+  target: 'welcome' | 'goodbye',
+  dataUrl: string,
+): Promise<UploadBackgroundResult> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/welcome/background?target=${target}`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify({ dataUrl }),
+      },
+    );
+    if (response.ok) {
+      const body = (await response.json()) as { relativePath: string };
+      revalidatePath(`/guilds/${guildId}/modules/welcome`);
+      return { ok: true, relativePath: body.relativePath };
+    }
+    const errBody = (await response.json().catch(() => ({}))) as {
+      reason?: string;
+      detail?: string;
+    };
+    return {
+      ok: false,
+      reason: errBody.reason ?? `http-${response.status}`,
+      ...(errBody.detail !== undefined ? { detail: errBody.detail } : {}),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'network',
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Supprime l'image de fond persistée pour une cible. Idempotent. */
+export async function deleteWelcomeBackground(
+  guildId: string,
+  target: 'welcome' | 'goodbye',
+): Promise<{ readonly ok: boolean }> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/welcome/background?target=${target}`,
+      {
+        method: 'DELETE',
+        cache: 'no-store',
+        headers: { accept: 'application/json', cookie: await buildCookieHeader() },
+      },
+    );
+    if (response.ok || response.status === 204) {
+      revalidatePath(`/guilds/${guildId}/modules/welcome`);
+      return { ok: true };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Récupère l'image de fond persistée sous forme de data URL pour
+ * affichage en thumbnail. Retourne `null` si aucune image persistée
+ * ou erreur réseau.
+ */
+export async function fetchWelcomeBackgroundDataUrl(
+  guildId: string,
+  target: 'welcome' | 'goodbye',
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/welcome/background?target=${target}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { cookie: await buildCookieHeader() },
+      },
+    );
+    if (!response.ok) return null;
+    const mime = response.headers.get('content-type') ?? 'image/png';
+    const buf = Buffer.from(await response.arrayBuffer());
+    return `data:${mime};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
   }
 }
 

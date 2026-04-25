@@ -83,3 +83,9 @@ export {
   createApiServer,
   type SessionData,
 } from './server.js';
+export {
+  createWelcomeUploadsService,
+  type WelcomeBackgroundTarget,
+  WelcomeUploadError,
+  type WelcomeUploadsService,
+} from './welcome-uploads.js';
