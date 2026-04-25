@@ -1,7 +1,18 @@
 'use client';
 
 import type { ConfigFieldSpec, ConfigUi } from '@varde/contracts';
-import { Button, cn, Input, Label } from '@varde/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  cn,
+  Input,
+  Label,
+} from '@varde/ui';
 import { type FormEvent, type ReactElement, useState } from 'react';
 
 import { type SaveModuleConfigResult, saveModuleConfig } from '../lib/actions';
@@ -157,38 +168,45 @@ export function ConfigForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6" aria-label={`Config ${moduleName}`}>
-      {fields.map((field) => (
-        <FieldRow
-          key={field.path}
-          field={field}
-          value={state[field.path] ?? (field.widget === 'toggle' ? false : '')}
-          error={fieldErrors[field.path]}
-          onChange={(v) => updateField(field.path, v)}
-        />
-      ))}
+    <form onSubmit={onSubmit} aria-label={`Config ${moduleName}`}>
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuration générale</CardTitle>
+          <CardDescription>Paramètres exposés par le module {moduleName}.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {fields.map((field) => (
+            <FieldRow
+              key={field.path}
+              field={field}
+              value={state[field.path] ?? (field.widget === 'toggle' ? false : '')}
+              error={fieldErrors[field.path]}
+              onChange={(v) => updateField(field.path, v)}
+            />
+          ))}
 
-      {result?.ok === true ? (
-        <p role="status" className="text-sm text-emerald-600">
-          Configuration enregistrée.
-        </p>
-      ) : null}
-      {result?.ok === false && !result.details ? (
-        <p role="alert" className="text-sm text-destructive">
-          {result.message ?? `Erreur ${result.status ?? ''} lors de l'enregistrement.`}
-        </p>
-      ) : null}
-      {result?.ok === false && result.details ? (
-        <p role="alert" className="text-sm text-destructive">
-          Certains champs sont invalides, voir les messages ci-dessus.
-        </p>
-      ) : null}
-
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Enregistrement...' : 'Enregistrer'}
-        </Button>
-      </div>
+          {result?.ok === true ? (
+            <p role="status" className="text-sm text-emerald-600">
+              Configuration enregistrée.
+            </p>
+          ) : null}
+          {result?.ok === false && !result.details ? (
+            <p role="alert" className="text-sm text-destructive">
+              {result.message ?? `Erreur ${result.status ?? ''} lors de l'enregistrement.`}
+            </p>
+          ) : null}
+          {result?.ok === false && result.details ? (
+            <p role="alert" className="text-sm text-destructive">
+              Certains champs sont invalides, voir les messages ci-dessus.
+            </p>
+          ) : null}
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button type="submit" disabled={pending}>
+            {pending ? 'Enregistrement...' : 'Enregistrer'}
+          </Button>
+        </CardFooter>
+      </Card>
     </form>
   );
 }

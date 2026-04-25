@@ -25,6 +25,7 @@ export { PageHeader, type PageHeaderProps } from './components/PageHeader.js';
 export { PageTitle, type PageTitleProps } from './components/PageTitle.js';
 export { Progress, type ProgressProps } from './components/Progress.js';
 export { Select, type SelectProps } from './components/Select.js';
+export { Separator, type SeparatorProps } from './components/Separator.js';
 export {
   Sidebar,
   SidebarItem,
