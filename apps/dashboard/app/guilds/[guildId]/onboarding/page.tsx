@@ -5,7 +5,6 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../auth';
-import { DashboardHeader } from '../../../../components/DashboardHeader';
 import { AppliedStep } from '../../../../components/onboarding/AppliedStep';
 import { BuilderCanvas } from '../../../../components/onboarding/BuilderCanvas';
 import { FinishedStep } from '../../../../components/onboarding/FinishedStep';
@@ -62,9 +61,8 @@ export default async function OnboardingPage({
   if (!guild) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-5xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-5xl space-y-6 p-6">
         <div>
           <Link
             href={`/guilds/${guildId}`}
@@ -78,8 +76,8 @@ export default async function OnboardingPage({
           description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
         />
         <StepRouter guildId={guildId} session={onboarding} />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
 

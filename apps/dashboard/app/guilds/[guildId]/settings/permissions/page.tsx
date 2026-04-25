@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import { FocusScroller } from '../../../../../components/settings/FocusScroller';
 import {
   type ModulePermissionsData,
@@ -88,9 +87,8 @@ export default async function PermissionsPage({
     }));
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-3xl space-y-6 p-6">
         {/* Fil d'Ariane */}
         <nav aria-label="Fil d'Ariane">
           <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
@@ -129,7 +127,7 @@ export default async function PermissionsPage({
         {focus !== undefined && focus.length > 0 ? <FocusScroller targetId={focus} /> : null}
 
         <PermissionsEditor guildId={guildId} modules={modulesData} roles={roles} />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

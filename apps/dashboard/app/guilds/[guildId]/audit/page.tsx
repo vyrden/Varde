@@ -6,7 +6,6 @@ import type { ReactElement } from 'react';
 import { auth } from '../../../../auth';
 import { AuditFilters } from '../../../../components/AuditFilters';
 import { AuditTable } from '../../../../components/AuditTable';
-import { DashboardHeader } from '../../../../components/DashboardHeader';
 import {
   ApiError,
   type AuditActorType,
@@ -114,9 +113,8 @@ export default async function AuditPage({
   const knownActions = Array.from(new Set(page.items.map((item) => item.action))).sort();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-6xl space-y-6 p-6">
         <div>
           <Link
             href={`/guilds/${guildId}`}
@@ -141,7 +139,7 @@ export default async function AuditPage({
             </Link>
           </div>
         ) : null}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

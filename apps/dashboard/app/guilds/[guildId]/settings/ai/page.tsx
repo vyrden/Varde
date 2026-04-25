@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import { AIProviderForm } from '../../../../../components/settings/AIProviderForm';
 import {
   AiSettingsApiError,
@@ -45,9 +44,8 @@ export default async function AiSettingsPage({
   if (!guild) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-3xl space-y-6 p-6">
         <div>
           <Link
             href={`/guilds/${guildId}`}
@@ -61,7 +59,7 @@ export default async function AiSettingsPage({
           description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
         />
         <AIProviderForm guildId={guildId} initial={settings} />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

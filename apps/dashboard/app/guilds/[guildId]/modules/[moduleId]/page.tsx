@@ -5,7 +5,6 @@ import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import { ConfigForm } from '../../../../../components/ConfigForm';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -53,9 +52,8 @@ export default async function ModuleConfigPage({
   if (!guild || !module) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-3xl space-y-6 p-6">
         <div>
           <Link
             href={`/guilds/${guildId}`}
@@ -86,7 +84,7 @@ export default async function ModuleConfigPage({
             description="Ce module n'expose pas de schéma de configuration. Rien à régler ici."
           />
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

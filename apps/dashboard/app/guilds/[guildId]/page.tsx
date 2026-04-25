@@ -1,10 +1,9 @@
-import { PageTitle } from '@varde/ui';
+import { PageHeader } from '@varde/ui';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../auth';
-import { DashboardHeader } from '../../../components/DashboardHeader';
 import { ModuleList } from '../../../components/ModuleList';
 import { ApiError, fetchAdminGuilds, fetchModules } from '../../../lib/api-client';
 
@@ -37,21 +36,17 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
   if (!guild) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-5xl space-y-6 p-6">
-        <div>
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← Mes serveurs
-          </Link>
-        </div>
-        <PageTitle
-          title={guild.name}
-          description="Modules chargés pour ce serveur. Cliquez sur un module pour en éditer la configuration."
-        />
+    <>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Mes serveurs', href: '/' },
+          { label: guild.name },
+          { label: 'Modules' },
+        ]}
+        title="Modules"
+        description="Cliquez sur un module pour en éditer la configuration."
+      />
+      <div className="space-y-6 p-6">
         <div className="flex flex-wrap gap-4">
           <Link
             href={`/guilds/${guildId}/onboarding`}
@@ -73,7 +68,7 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
           </Link>
         </div>
         <ModuleList guildId={guildId} modules={modules} />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

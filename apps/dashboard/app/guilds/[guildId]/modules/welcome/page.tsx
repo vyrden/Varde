@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import { WelcomeConfigEditor } from '../../../../../components/welcome/WelcomeConfigEditor';
 import {
   ApiError,
@@ -197,9 +196,8 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
   const initialConfig = normalizeConfig(moduleConfig.config);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name ?? null} />
-      <main className="mx-auto max-w-4xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-4xl space-y-6 p-6">
         <nav aria-label="Fil d'Ariane" className="text-sm text-muted-foreground">
           <ol className="flex items-center gap-2">
             <li>
@@ -278,7 +276,7 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
             availableFonts={fonts.length > 0 ? fonts : ['sans-serif', 'serif', 'monospace']}
           />
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import { LogsConfigEditor } from '../../../../../components/logs/LogsConfigEditor';
 import type { LogsConfigClient } from '../../../../../components/logs/LogsConfigEditor';
 import {
@@ -94,9 +93,8 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
   if (!guild || !logsModule) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name ?? null} />
-      <main className="mx-auto max-w-4xl space-y-6 p-6">
+    <>
+      <div className="mx-auto max-w-4xl space-y-6 p-6">
         {/* Fil d'Ariane */}
         <nav aria-label="Fil d'Ariane" className="text-sm text-muted-foreground">
           <ol className="flex items-center gap-2">
@@ -182,7 +180,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
             roles={roles}
           />
         )}
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
