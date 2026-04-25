@@ -1,10 +1,12 @@
-import { Badge, PageHeader, UnboundPermissionsBanner } from '@varde/ui';
+import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import type { ReactionRoleMessageClient } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
 import { ReactionRolesConfigEditor } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
+import { moduleIcon } from '../../../../../components/shell/module-icons';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -20,11 +22,6 @@ interface ReactionRolesPageProps {
   readonly params: Promise<{ readonly guildId: string }>;
 }
 
-/**
- * Normalise la config brute retournée par l'API en un tableau de
- * `ReactionRoleMessageClient`. Retourne un tableau vide si la config est
- * absente ou malformée — la guild n'a pas encore de reaction-roles configurés.
- */
 /** Forme intermédiaire typée pour le parsing de la config brute. */
 interface RawRRMessage {
   id?: unknown;
@@ -50,6 +47,11 @@ interface RawRRPair {
   roleId?: unknown;
 }
 
+/**
+ * Normalise la config brute retournée par l'API en un tableau de
+ * `ReactionRoleMessageClient`. Retourne un tableau vide si la config est
+ * absente ou malformée — la guild n'a pas encore de reaction-roles configurés.
+ */
 function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
   const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation
@@ -92,9 +94,11 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
 }
 
 /**
- * Page de configuration du module reaction-roles pour une guild. Charge en
- * parallèle les données nécessaires : descripteur de module, config,
- * permissions non liées, salons texte et rôles Discord.
+ * Page de configuration du module reaction-roles. Layout custom :
+ * header (breadcrumb / icône / titre / badge / description) +
+ * Separator + bannières + éditeur (qui gère lui-même le grid 2/3 ↔
+ * 1/3 selon la vue active : liste avec sidebar « À propos », ou
+ * formulaire avec sidebar « Aperçu Discord »).
  */
 export default async function ReactionRolesPage({
   params,
@@ -134,22 +138,45 @@ export default async function ReactionRolesPage({
   if (!guild || !rrModule) notFound();
 
   const initialMessages = normalizeMessages(moduleConfig.config);
-
   const isEnabled = rrModule.enabled !== false;
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: rrModule.name }]}
-        title={rrModule.name}
-        description="Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour les couleurs de nom, les notifications, la vérification, etc."
-        actions={
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
+          <Link
+            href={`/guilds/${guildId}`}
+            className="font-medium uppercase tracking-wider hover:text-foreground"
+          >
+            Modules
+          </Link>
+          <span aria-hidden="true" className="mx-2">
+            →
+          </span>
+          <span className="font-medium uppercase tracking-wider text-foreground">
+            {rrModule.name}
+          </span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+              isEnabled ? 'bg-primary/15 text-primary' : 'bg-surface-active text-muted-foreground'
+            }`}
+          >
+            {moduleIcon('reaction-roles', 20)}
+          </div>
+          <h1 className="text-[22px] font-bold leading-tight text-foreground">{rrModule.name}</h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
-        }
-      />
-      <div className="mx-auto w-full max-w-4xl space-y-5 px-6 py-6">
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour
+          les couleurs de nom, les notifications, la vérification, etc.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
           configureHref={`/guilds/${guildId}/settings/permissions?focus=reaction-roles`}
@@ -176,6 +203,8 @@ export default async function ReactionRolesPage({
             channels={channels}
             roles={roles}
             emojis={emojis}
+            moduleVersion={rrModule.version}
+            isEnabled={isEnabled}
           />
         )}
       </div>

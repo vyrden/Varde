@@ -1,6 +1,18 @@
 'use client';
 
-import { Button, Select } from '@varde/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  Separator,
+  Textarea,
+} from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
@@ -149,7 +161,34 @@ function pairsFromExisting(existing: ReactionRoleMessageClient): PairDraft[] {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-component : éditeur de paires
+// Icônes
+// ---------------------------------------------------------------------------
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M2.5 4h9M5.5 4V2.5h3V4M3.5 4l.7 8h5.6l.7-8M6 6.5v4M8 6.5v4"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M7 6v3.5M7 4.2v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component : éditeur de paires (ligne compacte)
 // ---------------------------------------------------------------------------
 
 function PairRow({
@@ -180,33 +219,29 @@ function PairRow({
   };
 
   return (
-    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2">
-      {/* Emoji */}
-      <div className="relative flex flex-col gap-0.5">
-        <label className="text-xs text-muted-foreground" htmlFor={`pair-emoji-${index}`}>
-          Emoji
-        </label>
-        <div className="flex items-center gap-1">
-          <input
-            id={`pair-emoji-${index}`}
-            type="text"
-            value={pair.emoji}
-            placeholder="🌍 ou <:nom:id>"
-            maxLength={64}
-            onChange={(e) => setEmojiValue(e.target.value)}
-            className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`Emoji de la paire ${index + 1}`}
-          />
-          <button
-            type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            aria-label="Ouvrir le sélecteur d'emoji"
-            aria-expanded={pickerOpen}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background hover:bg-muted"
-          >
-            😀
-          </button>
-        </div>
+    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-3">
+      <div className="relative flex items-center gap-1">
+        <Input
+          id={`pair-emoji-${index}`}
+          type="text"
+          value={pair.emoji}
+          placeholder="😀"
+          maxLength={64}
+          onChange={(e) => setEmojiValue(e.target.value)}
+          className="h-9 w-20 text-center text-lg"
+          aria-label={`Emoji de la paire ${index + 1}`}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setPickerOpen((v) => !v)}
+          aria-label="Ouvrir le sélecteur d'emoji"
+          aria-expanded={pickerOpen}
+          title="Sélecteur d'emoji"
+        >
+          <span aria-hidden="true">😀</span>
+        </Button>
         {pickerOpen ? (
           <EmojiPicker
             catalog={emojis}
@@ -216,13 +251,8 @@ function PairRow({
         ) : null}
       </div>
 
-      {/* Mode rôle */}
-      <div className="flex flex-col gap-0.5">
-        <label className="text-xs text-muted-foreground" htmlFor={`pair-rolemode-${index}`}>
-          Rôle
-        </label>
+      <div className="flex gap-2">
         <Select
-          id={`pair-rolemode-${index}`}
           value={pair.roleMode}
           onChange={(e) => {
             const nextMode = e.target.value as 'existing' | 'create';
@@ -232,22 +262,15 @@ function PairRow({
               onChange({ uid: pair.uid, emoji: pair.emoji, roleMode: 'create', roleName: '' });
             }
           }}
-          className="h-8 text-xs"
+          wrapperClassName="w-44 shrink-0"
           aria-label={`Mode rôle de la paire ${index + 1}`}
         >
-          <option value="existing">Choisir un rôle</option>
+          <option value="existing">Rôle existant</option>
           <option value="create">Créer un rôle</option>
         </Select>
-      </div>
 
-      {/* Sélecteur / nom de rôle */}
-      {pair.roleMode === 'existing' ? (
-        <div className="flex flex-col gap-0.5">
-          <label className="text-xs text-muted-foreground" htmlFor={`pair-roleid-${index}`}>
-            Rôle existant
-          </label>
+        {pair.roleMode === 'existing' ? (
           <Select
-            id={`pair-roleid-${index}`}
             value={pair.roleId}
             onChange={(e) =>
               onChange({
@@ -257,7 +280,7 @@ function PairRow({
                 roleId: e.target.value,
               })
             }
-            className="h-8 text-xs"
+            wrapperClassName="flex-1"
             aria-label={`Rôle existant de la paire ${index + 1}`}
           >
             <option value="">— choisir —</option>
@@ -267,17 +290,11 @@ function PairRow({
               </option>
             ))}
           </Select>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-0.5">
-          <label className="text-xs text-muted-foreground" htmlFor={`pair-rolename-${index}`}>
-            Nom du rôle à créer
-          </label>
-          <input
-            id={`pair-rolename-${index}`}
+        ) : (
+          <Input
             type="text"
             value={pair.roleName}
-            placeholder="Nom du rôle"
+            placeholder="Nom du rôle à créer"
             maxLength={100}
             onChange={(e) =>
               onChange({
@@ -287,23 +304,76 @@ function PairRow({
                 roleName: e.target.value,
               })
             }
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex-1"
             aria-label={`Nom du rôle à créer pour la paire ${index + 1}`}
           />
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Supprimer */}
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onClick={onRemove}
         disabled={!canRemove}
         aria-label={`Supprimer la paire ${index + 1}`}
-        className="mt-4 rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+        title="Supprimer la paire"
+        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
       >
-        ×
-      </button>
+        <TrashIcon />
+      </Button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component : aperçu Discord
+// ---------------------------------------------------------------------------
+
+function DiscordPreview({
+  message,
+  pairs,
+}: {
+  readonly message: string;
+  readonly pairs: readonly PairDraft[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Aperçu Discord</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="rounded-md bg-[#36393f] p-3 font-sans text-sm text-white">
+          <p className="mb-1 text-xs font-semibold text-[#96989d]">Varde Bot</p>
+          <p className="whitespace-pre-wrap break-words">
+            {message.length > 0 ? message : <span className="opacity-50">Contenu du message…</span>}
+          </p>
+          {pairs.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {pairs.map((p) => {
+                const display =
+                  p.emoji.trim().length === 0
+                    ? '·'
+                    : p.emoji.startsWith('<')
+                      ? `:${p.emoji.replace(/^<a?:([^:]+):.*$/, '$1')}:`
+                      : p.emoji;
+                return (
+                  <span
+                    key={p.uid}
+                    className="rounded bg-[#2f3136] px-1.5 py-0.5 text-base leading-none"
+                  >
+                    {display}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Aperçu indicatif — le rendu final peut varier selon Discord.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -311,9 +381,40 @@ function PairRow({
 // Main component
 // ---------------------------------------------------------------------------
 
+const MODE_OPTIONS: ReadonlyArray<{
+  readonly value: EditorMode;
+  readonly label: string;
+  readonly desc: string;
+}> = [
+  {
+    value: 'normal',
+    label: 'Normal',
+    desc: 'Plusieurs rôles possibles, ajout/retrait libre.',
+  },
+  {
+    value: 'unique',
+    label: 'Unique',
+    desc: 'Un seul rôle à la fois (swap automatique).',
+  },
+  {
+    value: 'verifier',
+    label: 'Vérificateur',
+    desc: 'Pré-pensé pour la validation des règles.',
+  },
+];
+
+const FEEDBACK_OPTIONS: ReadonlyArray<{
+  readonly value: EditorFeedback;
+  readonly label: string;
+}> = [
+  { value: 'dm', label: 'DM (message privé)' },
+  { value: 'none', label: 'Aucune (silencieux)' },
+];
+
 /**
- * Écran 3 : formulaire de création (mode='new') ou d'édition (mode='edit')
- * d'un message reaction-roles.
+ * Formulaire de création (`mode='new'`) ou d'édition (`mode='edit'`)
+ * d'un message reaction-roles. Layout 2/3 ↔ 1/3 : cards à gauche
+ * (Informations / Comportement / Paires) + Aperçu Discord à droite.
  */
 export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
   const isNew = props.mode === 'new';
@@ -337,7 +438,6 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Validation
   const isValid =
     label.trim() !== '' &&
     channelId !== '' &&
@@ -393,7 +493,6 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           return;
         }
 
-        // Reconstruit le client object depuis les données retournées + state local
         const clientPairs = pairs.map((p) => {
           const emoji = buildClientEmoji(p.emoji);
           const roleId = p.roleMode === 'existing' ? p.roleId : '';
@@ -414,7 +513,6 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
           pairs: clientPairs,
         });
       } else {
-        // Mode édition
         const apiPairs = buildApiPairs();
         const result = await syncReactionRole(props.guildId, props.existing.messageId, {
           label: label.trim(),
@@ -456,245 +554,231 @@ export function ReactionRoleEditor(props: ReactionRoleEditorProps) {
     });
   };
 
+  const title = isNew ? 'Créer un reaction-role' : `Éditer « ${props.existing.label} »`;
+
   return (
-    <div className="space-y-5">
-      {/* En-tête */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold">
-          {isNew ? 'Créer un reaction-role' : `Éditer "${props.existing.label}"`}
-        </h3>
-        <Button type="button" variant="secondary" onClick={props.onCancel}>
-          ← Retour
-        </Button>
-      </div>
-
-      {/* Label */}
-      <div className="space-y-1">
-        <label className="block text-sm font-medium" htmlFor="rr-label">
-          Label
-        </label>
-        <input
-          id="rr-label"
-          type="text"
-          value={label}
-          placeholder="Ex. Couleurs de nom"
-          maxLength={64}
-          onChange={(e) => setLabel(e.target.value)}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      {/* Salon */}
-      <div className="space-y-1">
-        <label className="block text-sm font-medium" htmlFor="rr-channel">
-          Salon de publication
-        </label>
-        <Select id="rr-channel" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-          <option value="">— choisir un salon —</option>
-          {props.channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.name}
-            </option>
-          ))}
-        </Select>
-        {!isNew && channelId !== props.existing.channelId ? (
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Changer de salon supprime le message actuel et en repost un nouveau (les réactions
-            existantes des membres seront perdues).
-          </p>
-        ) : null}
-      </div>
-
-      {/* Message */}
-      <div className="space-y-1">
-        <label className="block text-sm font-medium" htmlFor="rr-message">
-          Contenu du message Discord
-        </label>
-        <textarea
-          id="rr-message"
-          value={message}
-          placeholder="Le texte qui apparaîtra dans le message Discord…"
-          maxLength={2000}
-          rows={3}
-          onChange={(e) => setMessage(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <p className="text-xs text-muted-foreground">{message.length}/2000</p>
-        {!isNew && props.existing.message === '' ? (
-          <p className="text-xs text-muted-foreground">
-            Le contenu actuel n'est pas connu (entrée créée avant cette mise à jour). Saisis le
-            nouveau texte si tu veux le modifier.
-          </p>
-        ) : null}
-      </div>
-
-      {/* Mode */}
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Mode d'attribution</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {(
-            [
-              {
-                value: 'normal',
-                label: 'Normal',
-                desc: 'Plusieurs rôles possibles, ajout/retrait libre',
-              },
-              {
-                value: 'unique',
-                label: 'Unique',
-                desc: 'Un seul rôle à la fois (swap automatique)',
-              },
-              {
-                value: 'verifier',
-                label: 'Vérificateur',
-                desc: 'Pré-pensé pour la validation des règles',
-              },
-            ] as const
-          ).map((m) => (
-            <label
-              key={m.value}
-              className={`flex cursor-pointer flex-col gap-1 rounded-md border p-3 text-sm transition-colors ${
-                mode === m.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground'
-              }`}
-            >
-              <input
-                type="radio"
-                name="rr-mode"
-                value={m.value}
-                checked={mode === m.value}
-                onChange={() => setMode(m.value)}
-                className="sr-only"
-              />
-              <span className="font-medium">{m.label}</span>
-              <span className="text-xs text-muted-foreground">{m.desc}</span>
-            </label>
-          ))}
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="flex flex-col gap-4 lg:col-span-2">
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="ghost" size="sm" onClick={props.onCancel}>
+            ← Retour
+          </Button>
+          <Separator orientation="vertical" className="h-4" />
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
         </div>
-      </fieldset>
 
-      {/* Confirmation utilisateur */}
-      <fieldset className="space-y-2">
-        <legend className="text-sm font-medium">Confirmation à l'utilisateur</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {(
-            [
-              {
-                value: 'dm',
-                label: 'DM (message privé)',
-                desc: 'Le bot envoie un MP à chaque ajout / retrait',
-              },
-              {
-                value: 'none',
-                label: 'Aucune',
-                desc: 'Silencieux',
-              },
-            ] as const
-          ).map((f) => (
-            <label
-              key={f.value}
-              className={`flex cursor-pointer flex-col gap-1 rounded-md border p-3 text-sm transition-colors ${
-                feedbackChoice === f.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground'
-              }`}
-            >
-              <input
-                type="radio"
-                name="rr-feedback"
-                value={f.value}
-                checked={feedbackChoice === f.value}
-                onChange={() => setFeedbackChoice(f.value)}
-                className="sr-only"
+        <Card>
+          <CardHeader>
+            <CardTitle>Informations générales</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="rr-label">Label</Label>
+              <Input
+                id="rr-label"
+                type="text"
+                value={label}
+                placeholder="Ex. Couleurs de nom"
+                maxLength={64}
+                onChange={(e) => setLabel(e.target.value)}
               />
-              <span className="font-medium">{f.label}</span>
-              <span className="text-xs text-muted-foreground">{f.desc}</span>
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Discord ne permet pas les messages éphémères (« Seul toi peut voir ») en réponse à une
-          réaction — seules les interactions (boutons, slash-commands) y ont accès.
-        </p>
-      </fieldset>
+            </div>
 
-      {/* Paires emoji → rôle */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">
-            Paires emoji → rôle{' '}
-            <span className="text-xs text-muted-foreground">
-              (collez un emoji unicode ou la forme &lt;:nom:id&gt;)
-            </span>
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={handleAddPair}
-            disabled={pairs.length >= 20}
+            <div className="space-y-1">
+              <Label htmlFor="rr-channel">Salon de publication</Label>
+              <Select
+                id="rr-channel"
+                value={channelId}
+                onChange={(e) => setChannelId(e.target.value)}
+              >
+                <option value="">— choisir un salon —</option>
+                {props.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
+              </Select>
+              {!isNew && channelId !== props.existing.channelId ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Changer de salon supprime le message actuel et en repost un nouveau (les réactions
+                  existantes des membres seront perdues).
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="rr-message">Contenu du message Discord</Label>
+              <Textarea
+                id="rr-message"
+                value={message}
+                placeholder="Le texte qui apparaîtra dans le message Discord…"
+                maxLength={2000}
+                rows={3}
+                onChange={(e) => setMessage(e.target.value)}
+              />
+              <div className="flex items-center justify-between gap-2">
+                {!isNew && props.existing.message === '' ? (
+                  <p className="text-xs text-muted-foreground">
+                    Contenu actuel inconnu — saisis un nouveau texte si tu veux le modifier.
+                  </p>
+                ) : (
+                  <span />
+                )}
+                <p className="text-xs text-muted-foreground">{message.length}/2000</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Comportement</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-foreground">Mode d'attribution</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {MODE_OPTIONS.map((m) => (
+                  <label
+                    key={m.value}
+                    className={`flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm transition-colors ${
+                      mode === m.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-muted-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="rr-mode"
+                        value={m.value}
+                        checked={mode === m.value}
+                        onChange={() => setMode(m.value)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="font-medium text-foreground">{m.label}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{m.desc}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-foreground">
+                Confirmation à l'utilisateur
+              </legend>
+              <div className="flex flex-wrap gap-4">
+                {FEEDBACK_OPTIONS.map((f) => (
+                  <label
+                    key={f.value}
+                    className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+                  >
+                    <input
+                      type="radio"
+                      name="rr-feedback"
+                      value={f.value}
+                      checked={feedbackChoice === f.value}
+                      onChange={() => setFeedbackChoice(f.value)}
+                      className="h-3.5 w-3.5"
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <span className="mt-0.5 shrink-0">
+                  <InfoIcon />
+                </span>
+                <span>
+                  Discord ne permet pas les messages éphémères en réponse à une réaction — seules
+                  les interactions (boutons, slash-commands) y ont accès.
+                </span>
+              </div>
+            </fieldset>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="space-y-1.5">
+              <CardTitle>Paires emoji → rôle</CardTitle>
+              <CardDescription>
+                Colle un emoji unicode ou la forme &lt;:nom:id&gt;. Jusqu'à 20 paires par message.
+              </CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddPair}
+              disabled={pairs.length >= 20}
+            >
+              + Ajouter
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col divide-y divide-border">
+              {pairs.map((pair, i) => (
+                <PairRow
+                  key={pair.uid}
+                  pair={pair}
+                  index={i}
+                  roles={props.roles}
+                  emojis={props.emojis}
+                  canRemove={pairs.length > 1}
+                  onChange={(updated) => handlePairChange(i, updated)}
+                  onRemove={() => handleRemovePair(i)}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {feedback !== null ? (
+          <div
+            role={feedback.kind === 'error' ? 'alert' : 'status'}
+            className={
+              feedback.kind === 'success'
+                ? 'flex gap-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-950 dark:text-green-100'
+                : 'flex gap-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100'
+            }
           >
-            + Ajouter
+            <span aria-hidden="true" className="font-semibold">
+              {feedback.kind === 'success' ? '✓' : '⚠'}
+            </span>
+            <div className="flex-1">
+              <p className="font-semibold">
+                {feedback.kind === 'success'
+                  ? 'Succès'
+                  : isNew
+                    ? 'Échec de la publication'
+                    : 'Échec de la synchronisation'}
+              </p>
+              <p className="mt-0.5">{feedback.message}</p>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <Button type="button" variant="outline" onClick={props.onCancel}>
+            Annuler
+          </Button>
+          <Button type="button" disabled={!isValid || isPending} onClick={handleSubmit}>
+            {isPending
+              ? isNew
+                ? 'Publication…'
+                : 'Enregistrement…'
+              : isNew
+                ? 'Publier'
+                : 'Enregistrer'}
           </Button>
         </div>
-        <div className="space-y-2">
-          {pairs.map((pair, i) => (
-            <PairRow
-              key={pair.uid}
-              pair={pair}
-              index={i}
-              roles={props.roles}
-              emojis={props.emojis}
-              canRemove={pairs.length > 1}
-              onChange={(updated) => handlePairChange(i, updated)}
-              onRemove={() => handleRemovePair(i)}
-            />
-          ))}
-        </div>
       </div>
 
-      {/* Feedback */}
-      {feedback !== null ? (
-        <div
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
-          className={
-            feedback.kind === 'success'
-              ? 'flex gap-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-950 dark:text-green-100'
-              : 'flex gap-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100'
-          }
-        >
-          <span aria-hidden="true" className="font-semibold">
-            {feedback.kind === 'success' ? '✓' : '⚠'}
-          </span>
-          <div className="flex-1">
-            <p className="font-semibold">
-              {feedback.kind === 'success'
-                ? 'Succès'
-                : isNew
-                  ? 'Échec de la publication'
-                  : 'Échec de la synchronisation'}
-            </p>
-            <p className="mt-0.5">{feedback.message}</p>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Actions */}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={props.onCancel}>
-          Annuler
-        </Button>
-        <Button type="button" disabled={!isValid || isPending} onClick={handleSubmit}>
-          {isPending
-            ? isNew
-              ? 'Publication…'
-              : 'Enregistrement…'
-            : isNew
-              ? 'Publier'
-              : 'Enregistrer'}
-        </Button>
-      </div>
+      <aside className="flex flex-col gap-4">
+        <DiscordPreview message={message} pairs={pairs} />
+      </aside>
     </div>
   );
 }

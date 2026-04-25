@@ -16,29 +16,24 @@ const msg = {
   pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: '333' }],
 };
 
+const baseProps = {
+  channelNameById: {},
+  version: '1.0.0',
+  isEnabled: true,
+  onAddNew: vi.fn(),
+  onEdit: vi.fn(),
+  onDelete: vi.fn(),
+};
+
 describe('ReactionRolesList', () => {
-  it("affiche 'Aucun message' quand liste vide", () => {
-    render(
-      <ReactionRolesList
-        messages={[]}
-        channelNameById={{}}
-        onAddNew={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/Aucun message/i)).toBeDefined();
+  it("affiche un état vide quand aucun message n'est configuré", () => {
+    render(<ReactionRolesList {...baseProps} messages={[]} />);
+    expect(screen.getByText(/Aucun reaction-role configuré/i)).toBeDefined();
   });
 
   it('affiche les messages avec label + mode', () => {
     render(
-      <ReactionRolesList
-        messages={[msg]}
-        channelNameById={{ '111': 'roles' }}
-        onAddNew={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-      />,
+      <ReactionRolesList {...baseProps} messages={[msg]} channelNameById={{ '111': 'roles' }} />,
     );
     expect(screen.getByText('Continents')).toBeDefined();
     expect(screen.getByText('#roles')).toBeDefined();
@@ -47,60 +42,29 @@ describe('ReactionRolesList', () => {
 
   it('clic + Nouveau appelle onAddNew', () => {
     const onAddNew = vi.fn();
-    render(
-      <ReactionRolesList
-        messages={[]}
-        channelNameById={{}}
-        onAddNew={onAddNew}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
+    render(<ReactionRolesList {...baseProps} messages={[]} onAddNew={onAddNew} />);
     fireEvent.click(screen.getByRole('button', { name: /Nouveau reaction-role/i }));
     expect(onAddNew).toHaveBeenCalled();
   });
 
   it("clic Éditer appelle onEdit avec l'id", () => {
     const onEdit = vi.fn();
-    render(
-      <ReactionRolesList
-        messages={[msg]}
-        channelNameById={{}}
-        onAddNew={vi.fn()}
-        onEdit={onEdit}
-        onDelete={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /Éditer/i }));
+    render(<ReactionRolesList {...baseProps} messages={[msg]} onEdit={onEdit} />);
+    fireEvent.click(screen.getByRole('button', { name: /Éditer Continents/i }));
     expect(onEdit).toHaveBeenCalledWith(msg.id);
   });
 
-  it("clic × appelle onDelete avec l'id", () => {
+  it("clic Supprimer puis Confirmer appelle onDelete avec l'id", () => {
     const onDelete = vi.fn();
-    render(
-      <ReactionRolesList
-        messages={[msg]}
-        channelNameById={{}}
-        onAddNew={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={onDelete}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /×/i }));
+    render(<ReactionRolesList {...baseProps} messages={[msg]} onDelete={onDelete} />);
+    fireEvent.click(screen.getByRole('button', { name: /Supprimer Continents/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Confirmer$/i }));
     expect(onDelete).toHaveBeenCalledWith(msg.id);
   });
 
   it('affiche le nombre correct de messages publiés', () => {
     const msg2 = { ...msg, id: 'aaaa', label: 'Couleurs', messageId: '555' };
-    render(
-      <ReactionRolesList
-        messages={[msg, msg2]}
-        channelNameById={{}}
-        onAddNew={vi.fn()}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
+    render(<ReactionRolesList {...baseProps} messages={[msg, msg2]} />);
     expect(screen.getByText(/2 messages publiés/i)).toBeDefined();
   });
 });

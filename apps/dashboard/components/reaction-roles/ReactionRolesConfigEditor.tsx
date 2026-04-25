@@ -53,6 +53,10 @@ export interface ReactionRolesConfigEditorProps {
   readonly channels: readonly ChannelOption[];
   readonly roles: readonly RoleOption[];
   readonly emojis: EmojiCatalog;
+  /** Version du module — affichée dans la sidebar « À propos ». */
+  readonly moduleVersion: string;
+  /** État d'activation du module — affiché dans la sidebar « À propos ». */
+  readonly isEnabled: boolean;
 }
 
 type View =
@@ -77,7 +81,6 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
   const handleDelete = (id: string) => {
     const target = messages.find((m) => m.id === id);
     if (!target) return;
-    if (!confirm('Supprimer ce reaction-role ? Le message Discord restera.')) return;
     startTransition(async () => {
       const result = await deleteReactionRole(props.guildId, target.messageId);
       if (result.ok) {
@@ -91,6 +94,8 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
       <ReactionRolesList
         messages={messages}
         channelNameById={channelNameById}
+        version={props.moduleVersion}
+        isEnabled={props.isEnabled}
         onAddNew={() => setView({ kind: 'picker' })}
         onEdit={(id) => setView({ kind: 'editor-edit', messageId: id })}
         onDelete={handleDelete}
