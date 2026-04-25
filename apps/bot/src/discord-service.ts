@@ -172,12 +172,16 @@ interface GuildLike {
   };
 }
 
-/** Payload accepté par les helpers d'envoi (texte + pièces jointes + embeds). */
+/**
+ * Payload accepté par discord.js pour `channel.send()` / `user.send()`.
+ * Note : la pièce jointe utilise la clé `attachment` (pas `data`) — c'est
+ * la forme attendue par MessagePayload.resolveBody dans discord.js v14.
+ */
 type SendPayload =
   | string
   | {
       readonly content: string;
-      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly attachment: Buffer }>;
       readonly embeds?: ReadonlyArray<unknown>;
     };
 
@@ -446,7 +450,12 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           options && (options.files !== undefined || options.embeds !== undefined)
             ? {
                 content,
-                ...(options.files !== undefined ? { files: options.files } : {}),
+                // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
+                ...(options.files !== undefined
+                  ? {
+                      files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
+                    }
+                  : {}),
                 ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
               }
             : content;
@@ -545,7 +554,12 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           options && (options.files !== undefined || options.embeds !== undefined)
             ? {
                 content,
-                ...(options.files !== undefined ? { files: options.files } : {}),
+                // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
+                ...(options.files !== undefined
+                  ? {
+                      files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
+                    }
+                  : {}),
                 ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
               }
             : content;
