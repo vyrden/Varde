@@ -18,11 +18,15 @@ export { Input, type InputProps } from './components/Input.js';
 export { Label, type LabelProps } from './components/Label.js';
 export { PageTitle, type PageTitleProps } from './components/PageTitle.js';
 export { Progress, type ProgressProps } from './components/Progress.js';
+export { Select, type SelectProps } from './components/Select.js';
 export {
   Sidebar,
   SidebarItem,
   type SidebarItemProps,
   type SidebarProps,
 } from './components/Sidebar.js';
+export { Tab, type TabProps, TabsList, type TabsListProps } from './components/Tabs.js';
+export { Textarea, type TextareaProps } from './components/Textarea.js';
+export { Toggle, type ToggleProps } from './components/Toggle.js';
 export * from './components/UnboundPermissionsBanner.js';
 export { cn } from './lib/cn.js';
