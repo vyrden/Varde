@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, ExpandablePanel } from '@varde/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, ExpandablePanel } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
@@ -14,6 +14,7 @@ import { AutoroleSection } from './AutoroleSection';
 import { DiscordMessagePreview } from './DiscordMessagePreview';
 import { MessageBlockEditor } from './MessageBlockEditor';
 import { TemplatePicker } from './TemplatePicker';
+import type { WelcomeTemplateClient } from './templates';
 
 interface ChannelOption {
   readonly id: string;
@@ -31,6 +32,8 @@ export interface WelcomeConfigEditorProps {
   readonly channels: readonly ChannelOption[];
   readonly roles: readonly RoleOption[];
   readonly availableFonts: readonly string[];
+  readonly moduleVersion: string;
+  readonly isModuleEnabled: boolean;
 }
 
 interface FeedbackBanner {
@@ -38,6 +41,8 @@ interface FeedbackBanner {
   readonly title: string;
   readonly message: string;
 }
+
+type ActiveTab = 'templates' | 'welcome' | 'goodbye';
 
 const formatTestReason = (reason: string): string => {
   switch (reason) {
@@ -62,16 +67,63 @@ const formatTestReason = (reason: string): string => {
   }
 };
 
+interface TabPillProps {
+  readonly icon: string;
+  readonly label: string;
+  readonly active: boolean;
+  readonly onSelect: () => void;
+  readonly statusDot?: 'on' | 'off';
+}
+
+function TabPill({ icon, label, active, onSelect, statusDot }: TabPillProps) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onSelect}
+      className={`group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-100 ease-out ${
+        active
+          ? 'bg-surface-active text-foreground shadow-sm'
+          : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
+      }`}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+      {statusDot ? (
+        <span
+          aria-hidden="true"
+          className={`ml-0.5 h-1.5 w-1.5 rounded-full ${
+            statusDot === 'on' ? 'bg-success' : 'bg-muted-foreground/40'
+          }`}
+        />
+      ) : null}
+    </button>
+  );
+}
+
+/**
+ * Éditeur welcome — layout 2 colonnes. Colonne gauche : navigation
+ * (Templates / Accueil / Départ) + formulaire de l'onglet actif +
+ * footer Tester/Sauvegarder. Colonne droite (sticky) : aperçu Discord
+ * en live + cards À propos / Auto-rôle / Filtre comptes neufs.
+ *
+ * Les templates ne sont plus affichés en permanence : ils vivent dans
+ * un onglet dédié. Sélectionner un template applique sa config et
+ * bascule l'onglet actif sur « Accueil » pour aller éditer.
+ */
 export function WelcomeConfigEditor({
   guildId,
   initialConfig,
   channels,
   roles,
   availableFonts,
+  moduleVersion,
+  isModuleEnabled,
 }: WelcomeConfigEditorProps) {
   const [config, setConfig] = useState<WelcomeConfigClient>(initialConfig);
   const [feedback, setFeedback] = useState<FeedbackBanner | null>(null);
-  const [activeTab, setActiveTab] = useState<'welcome' | 'goodbye'>('welcome');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('welcome');
   const [pending, startTransition] = useTransition();
 
   const handleSave = () => {
@@ -139,49 +191,50 @@ export function WelcomeConfigEditor({
     });
   };
 
+  const handleApplyTemplate = (template: WelcomeTemplateClient) => {
+    setConfig(template.config);
+    setActiveTab('welcome');
+  };
+
+  // L'aperçu suit l'onglet actif. Sur l'onglet Templates, on montre
+  // par défaut l'accueil — c'est ce que l'utilisateur ira éditer juste
+  // après avoir choisi un template.
+  const previewBlock = activeTab === 'goodbye' ? config.goodbye : config.welcome;
+  const previewVariant: 'welcome' | 'goodbye' = activeTab === 'goodbye' ? 'goodbye' : 'welcome';
+
   return (
-    <div className="space-y-6">
-      <TemplatePicker onApply={(t) => setConfig(t.config)} />
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+      <div className="flex flex-col gap-4 lg:col-span-3">
+        <div
+          role="tablist"
+          aria-label="Sections du module welcome"
+          className="flex w-fit gap-1 rounded-lg border border-border bg-card p-1"
+        >
+          <TabPill
+            icon="🎨"
+            label="Templates"
+            active={activeTab === 'templates'}
+            onSelect={() => setActiveTab('templates')}
+          />
+          <TabPill
+            icon="👋"
+            label="Accueil"
+            active={activeTab === 'welcome'}
+            onSelect={() => setActiveTab('welcome')}
+            statusDot={config.welcome.enabled ? 'on' : 'off'}
+          />
+          <TabPill
+            icon="🚪"
+            label="Départ"
+            active={activeTab === 'goodbye'}
+            onSelect={() => setActiveTab('goodbye')}
+            statusDot={config.goodbye.enabled ? 'on' : 'off'}
+          />
+        </div>
 
-      {/* Tabs Accueil / Départ */}
-      <div
-        role="tablist"
-        aria-label="Messages welcome et goodbye"
-        className="flex gap-2 border-b border-border"
-      >
-        {(
-          [
-            { id: 'welcome', label: "Message d'accueil", enabled: config.welcome.enabled },
-            { id: 'goodbye', label: 'Message de départ', enabled: config.goodbye.enabled },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === t.id
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              {t.label}
-              <span
-                aria-hidden="true"
-                className={`inline-block h-2 w-2 rounded-full ${
-                  t.enabled ? 'bg-emerald-500' : 'bg-muted-foreground/40'
-                }`}
-              />
-            </span>
-          </button>
-        ))}
-      </div>
+        {activeTab === 'templates' ? <TemplatePicker onApply={handleApplyTemplate} /> : null}
 
-      {activeTab === 'welcome' ? (
-        <>
+        {activeTab === 'welcome' ? (
           <MessageBlockEditor
             title="Message d'accueil"
             block={config.welcome}
@@ -191,12 +244,9 @@ export function WelcomeConfigEditor({
             guildId={guildId}
             availableFonts={availableFonts}
           />
-          {config.welcome.enabled ? (
-            <DiscordMessagePreview guildId={guildId} block={config.welcome} variant="welcome" />
-          ) : null}
-        </>
-      ) : (
-        <>
+        ) : null}
+
+        {activeTab === 'goodbye' ? (
           <MessageBlockEditor
             title="Message de départ"
             block={config.goodbye}
@@ -206,100 +256,161 @@ export function WelcomeConfigEditor({
             guildId={guildId}
             availableFonts={availableFonts}
           />
-          {config.goodbye.enabled ? (
-            <DiscordMessagePreview guildId={guildId} block={config.goodbye} variant="goodbye" />
-          ) : null}
-        </>
-      )}
+        ) : null}
 
-      <ExpandablePanel
-        title="Auto-rôle"
-        description="Attribuer automatiquement un ou plusieurs rôles à l'arrivée."
-        enabled={config.autorole.enabled}
-        onEnabledChange={(enabled) =>
-          setConfig({ ...config, autorole: { ...config.autorole, enabled } })
-        }
-      >
-        <AutoroleSection
-          value={config.autorole}
-          onChange={(autorole) => setConfig({ ...config, autorole })}
-          roles={roles}
-        />
-      </ExpandablePanel>
-
-      <ExpandablePanel
-        title="Filtre comptes neufs"
-        description="Anti-raid basique : kick ou quarantaine pour les comptes Discord trop récents."
-        enabled={config.accountAgeFilter.enabled}
-        onEnabledChange={(enabled) =>
-          setConfig({
-            ...config,
-            accountAgeFilter: { ...config.accountAgeFilter, enabled },
-          })
-        }
-      >
-        <AccountAgeFilterSection
-          value={config.accountAgeFilter}
-          onChange={(accountAgeFilter) => setConfig({ ...config, accountAgeFilter })}
-          roles={roles}
-        />
-      </ExpandablePanel>
-
-      {feedback !== null ? (
-        <div
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
-          className={
-            feedback.kind === 'success'
-              ? 'flex gap-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-950 dark:text-green-100'
-              : 'flex gap-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100'
-          }
-        >
-          <span aria-hidden="true" className="font-semibold">
-            {feedback.kind === 'success' ? '✓' : '⚠'}
-          </span>
-          <div className="flex-1">
-            <p className="font-semibold">{feedback.title}</p>
-            <p className="mt-0.5">{feedback.message}</p>
+        {feedback !== null ? (
+          <div
+            role={feedback.kind === 'error' ? 'alert' : 'status'}
+            className={
+              feedback.kind === 'success'
+                ? 'flex gap-3 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:border-green-700 dark:bg-green-950 dark:text-green-100'
+                : 'flex gap-3 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950 dark:text-red-100'
+            }
+          >
+            <span aria-hidden="true" className="font-semibold">
+              {feedback.kind === 'success' ? '✓' : '⚠'}
+            </span>
+            <div className="flex-1">
+              <p className="font-semibold">{feedback.title}</p>
+              <p className="mt-0.5">{feedback.message}</p>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => handleTestMessage('welcome')}
-          disabled={pending || !config.welcome.enabled}
-          title={!config.welcome.enabled ? "Active la section Message d'accueil" : undefined}
-        >
-          Tester accueil
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => handleTestMessage('goodbye')}
-          disabled={pending || !config.goodbye.enabled}
-          title={!config.goodbye.enabled ? 'Active la section Message de départ' : undefined}
-        >
-          Tester départ
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={handleTestAutorole}
-          disabled={pending || !config.autorole.enabled || config.autorole.roleIds.length === 0}
-          title={
-            !config.autorole.enabled || config.autorole.roleIds.length === 0
-              ? "Active l'auto-rôle avec au moins un rôle"
-              : undefined
-          }
-        >
-          Tester auto-rôle
-        </Button>
-        <Button type="button" onClick={handleSave} disabled={pending}>
-          {pending ? 'Sauvegarde…' : 'Sauvegarder'}
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleTestMessage('welcome')}
+              disabled={pending || !config.welcome.enabled}
+              title={!config.welcome.enabled ? "Active la section Message d'accueil" : undefined}
+            >
+              Tester accueil
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleTestMessage('goodbye')}
+              disabled={pending || !config.goodbye.enabled}
+              title={!config.goodbye.enabled ? 'Active la section Message de départ' : undefined}
+            >
+              Tester départ
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTestAutorole}
+              disabled={pending || !config.autorole.enabled || config.autorole.roleIds.length === 0}
+              title={
+                !config.autorole.enabled || config.autorole.roleIds.length === 0
+                  ? "Active l'auto-rôle avec au moins un rôle"
+                  : undefined
+              }
+            >
+              Tester auto-rôle
+            </Button>
+          </div>
+          <Button type="button" onClick={handleSave} disabled={pending}>
+            {pending ? 'Sauvegarde…' : 'Sauvegarder'}
+          </Button>
+        </div>
       </div>
+
+      <aside className="lg:col-span-2">
+        <div className="sticky top-6 flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Aperçu Discord</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {previewBlock.enabled ? (
+                <DiscordMessagePreview
+                  guildId={guildId}
+                  block={previewBlock}
+                  variant={previewVariant}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Active la section{' '}
+                  {previewVariant === 'welcome' ? "« Message d'accueil »" : '« Message de départ »'}{' '}
+                  pour voir l'aperçu en live.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">À propos</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Version</span>
+                <span className="font-mono text-foreground">v{moduleVersion}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Statut</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-foreground">{isModuleEnabled ? 'Actif' : 'Inactif'}</span>
+                  <span
+                    aria-hidden="true"
+                    className={`relative inline-flex h-5.5 w-10 shrink-0 items-center rounded-full opacity-50 ${
+                      isModuleEnabled ? 'bg-success' : 'bg-[#4e5058]'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.75 left-0.75 h-4 w-4 rounded-full bg-white shadow ${
+                        isModuleEnabled ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </span>
+                </div>
+              </div>
+              <p className="pt-1 text-xs text-muted-foreground">
+                Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes
+                neufs.
+              </p>
+            </CardContent>
+          </Card>
+
+          <ExpandablePanel
+            title="Auto-rôle"
+            description="Attribuer automatiquement un ou plusieurs rôles à l'arrivée."
+            enabled={config.autorole.enabled}
+            onEnabledChange={(enabled) =>
+              setConfig({ ...config, autorole: { ...config.autorole, enabled } })
+            }
+          >
+            <AutoroleSection
+              value={config.autorole}
+              onChange={(autorole) => setConfig({ ...config, autorole })}
+              roles={roles}
+            />
+          </ExpandablePanel>
+
+          <ExpandablePanel
+            title="Filtre comptes neufs"
+            description="Anti-raid basique : kick ou quarantaine pour les comptes Discord trop récents."
+            enabled={config.accountAgeFilter.enabled}
+            onEnabledChange={(enabled) =>
+              setConfig({
+                ...config,
+                accountAgeFilter: { ...config.accountAgeFilter, enabled },
+              })
+            }
+          >
+            <AccountAgeFilterSection
+              value={config.accountAgeFilter}
+              onChange={(accountAgeFilter) => setConfig({ ...config, accountAgeFilter })}
+              roles={roles}
+            />
+          </ExpandablePanel>
+        </div>
+      </aside>
     </div>
   );
 }

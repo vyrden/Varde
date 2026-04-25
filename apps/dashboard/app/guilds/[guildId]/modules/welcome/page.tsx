@@ -1,8 +1,10 @@
-import { Badge, PageHeader, UnboundPermissionsBanner } from '@varde/ui';
+import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
+import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { WelcomeConfigEditor } from '../../../../../components/welcome/WelcomeConfigEditor';
 import {
   ApiError,
@@ -198,21 +200,42 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
 
   return (
     <>
-      <PageHeader
-        breadcrumbs={[
-          { label: 'Modules', href: `/guilds/${guildId}` },
-          { label: welcomeModule.name },
-        ]}
-        title={welcomeModule.name}
-        description="Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs."
-        actions={
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <nav aria-label="Fil d'Ariane" className="mb-3 text-xs text-muted-foreground">
+          <Link
+            href={`/guilds/${guildId}`}
+            className="font-medium uppercase tracking-wider hover:text-foreground"
+          >
+            Modules
+          </Link>
+          <span aria-hidden="true" className="mx-2">
+            →
+          </span>
+          <span className="font-medium uppercase tracking-wider text-foreground">
+            {welcomeModule.name}
+          </span>
+        </nav>
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+              isEnabled ? 'bg-primary/15 text-primary' : 'bg-surface-active text-muted-foreground'
+            }`}
+          >
+            {moduleIcon('welcome', 20)}
+          </div>
+          <h1 className="text-[22px] font-bold leading-tight text-foreground">
+            {welcomeModule.name}
+          </h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
-        }
-      />
-
-      <div className="mx-auto w-full max-w-4xl space-y-5 px-6 py-6">
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-6 py-6">
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
           configureHref={`/guilds/${guildId}/settings/permissions?focus=welcome`}
@@ -235,6 +258,8 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
             channels={channels}
             roles={roles}
             availableFonts={fonts.length > 0 ? fonts : ['sans-serif', 'serif', 'monospace']}
+            moduleVersion={welcomeModule.version}
+            isModuleEnabled={isEnabled}
           />
         )}
       </div>
