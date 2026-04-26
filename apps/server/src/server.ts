@@ -31,12 +31,14 @@ import type {
   ActionId,
   DiscordService,
   EventBus,
+  GuildId,
   Logger,
   ModuleId,
   PermissionId,
   RoleId,
   UserId,
 } from '@varde/contracts';
+import { readBotSettings } from '@varde/contracts';
 import {
   CORE_ACTIONS,
   type CoreAuditService,
@@ -272,6 +274,27 @@ export async function createServer<D extends DbDriver>(
     executor: onboardingExecutor,
   });
 
+  // Cache des locales effectives par guild. Source de vérité :
+  // `core.bot-settings.language` (édité depuis `/guilds/<id>/settings/bot`).
+  // Le cache est rafraîchi à chaque `config.changed` ; la première
+  // résolution d'une guild inconnue déclenche un fetch async — `null`
+  // jusqu'à ce que le cache soit peuplé, ce qui fait retomber
+  // `ctx.i18n.t` sur `defaultLocale` le temps que ça arrive.
+  const guildLocales = new Map<GuildId, string>();
+  const loadGuildLocale = async (guildId: GuildId): Promise<void> => {
+    try {
+      const snapshot = await config.get(guildId);
+      const settings = readBotSettings(snapshot);
+      guildLocales.set(guildId, settings.language);
+    } catch {
+      // NotFoundError ou autre échec → on laisse le cache vide ; le
+      // prochain accès déclenchera un nouvel essai.
+    }
+  };
+  eventBus.on('config.changed', async (event) => {
+    await loadGuildLocale(event.guildId);
+  });
+
   const ctxBundle = createCtxFactory({
     client,
     loggerRoot: logger,
@@ -286,6 +309,12 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
     ...(options.locales !== undefined ? { locales: options.locales } : {}),
     ...(options.defaultLocale !== undefined ? { defaultLocale: options.defaultLocale } : {}),
+    getGuildLocale: (guildId) => {
+      const cached = guildLocales.get(guildId);
+      if (cached !== undefined) return cached;
+      void loadGuildLocale(guildId);
+      return null;
+    },
   });
 
   const loader = createPluginLoader({
