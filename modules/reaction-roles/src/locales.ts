@@ -1,7 +1,9 @@
 import type { I18nMessages } from '@varde/core';
 
 /**
- * Locales V1 du module reaction-roles. FR uniquement. Jalon 5 ajoutera en.
+ * Locales du module reaction-roles. FR + EN. Les deux dictionnaires
+ * partagent le même set de clés ; le fallback du core retombe sur EN
+ * si une clé manque dans la locale active.
  */
 
 const fr = {
@@ -12,4 +14,12 @@ const fr = {
   'audit.role.created': 'Rôle {roleName} créé automatiquement par reaction-roles',
 } satisfies Readonly<Record<string, string>>;
 
-export const locales = { fr } as const satisfies I18nMessages;
+const en: typeof fr = {
+  'audit.role.assigned': '{userId} received role {roleId} via reaction-roles',
+  'audit.role.unassigned': '{userId} lost role {roleId} via reaction-roles',
+  'audit.message.published': 'Reaction-role published in <#{channelId}>',
+  'audit.message.deleted': 'Reaction-role removed from config (Discord message remains)',
+  'audit.role.created': 'Role {roleName} created automatically by reaction-roles',
+};
+
+export const locales = { fr, en } as const satisfies I18nMessages;
