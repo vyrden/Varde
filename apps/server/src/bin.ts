@@ -37,6 +37,7 @@ import {
   createDiscordService,
   createOnboardingDiscordBridge,
   type OnboardingDiscordBridge,
+  registerSlashCommandsForGuild,
 } from '@varde/bot';
 import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
@@ -255,10 +256,23 @@ async function seedFromEnv(
  * runtime de `VARDE_SEED_GUILD_IDS` : dès que le bot est invité sur
  * un serveur, il y est opérationnel sans intervention manuelle.
  */
-function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void {
+function subscribeAutoOnboard(
+  handle: ServerHandle,
+  logger: Logger,
+  getDiscordClient: () => Client | null,
+): () => void {
   return handle.eventBus.on('guild.join', async (event) => {
     await upsertGuild(handle, event.guildId, event.guildId, logger);
     await enableDefaultModulesOn(handle, event.guildId, logger);
+    const client = getDiscordClient();
+    if (client !== null) {
+      await registerSlashCommandsForGuild(
+        client,
+        event.guildId,
+        collectRegisteredCommands(handle),
+        logger,
+      );
+    }
     logger.info('guild rejointe, modules par défaut activés', { guildId: event.guildId });
   });
 }
@@ -383,6 +397,15 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   };
 }
 
+/**
+ * Liste les commandes à enregistrer auprès de Discord. Source de
+ * vérité : le `CommandRegistry` du bot, alimenté juste après
+ * `loader.loadAll()` par parcours du `loadOrder`. Lecture stable
+ * (tri par nom) pour que la registration REST soit déterministe.
+ */
+const collectRegisteredCommands = (handle: ServerHandle) =>
+  handle.commandRegistry.list().map((entry) => entry.command);
+
 function attachDiscordToHandle(
   attachment: DiscordAttachment,
   handle: ServerHandle,
@@ -391,9 +414,14 @@ function attachDiscordToHandle(
   attachment.client.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
+    const commands = collectRegisteredCommands(handle);
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
       await enableDefaultModulesOn(handle, guild.id, logger);
+      // Enregistre les slash commands auprès de Discord pour cette
+      // guild. Idempotent : remplace l'intégralité des commandes
+      // existantes côté Discord à chaque boot.
+      await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
   const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
@@ -469,11 +497,28 @@ async function main(): Promise<void> {
   handle.loader.register(welcome);
   await handle.loader.loadAll();
 
-  const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);
+  // Hydrate le `commandRegistry` du bot depuis les modules chargés.
+  // Le loader ne fait pas ce câblage automatiquement (le registry
+  // appartient à @varde/bot, pas au core) — c'est `bin.ts` qui
+  // assemble. Sans ça, aucune slash command n'est routable et la
+  // registration REST par-guild n'enverrait rien à Discord.
+  for (const id of handle.loader.loadOrder()) {
+    const def = handle.loader.get(id);
+    if (def?.commands && Object.keys(def.commands).length > 0) {
+      handle.commandRegistry.register(
+        { id: def.manifest.id, version: def.manifest.version },
+        def.commands,
+      );
+    }
+  }
+
+  let discord: DiscordBinding | null = null;
+  const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
+    discord !== null && discordAttachment !== null ? discordAttachment.client : null,
+  );
 
   await seedFromEnv(handle, seedIds, logger);
 
-  let discord: DiscordBinding | null = null;
   if (discordAttachment !== null && discordToken !== null) {
     discord = attachDiscordToHandle(discordAttachment, handle, logger);
     await discordAttachment.client.login(discordToken);

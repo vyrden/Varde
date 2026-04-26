@@ -39,3 +39,10 @@ export {
   type ShutdownCoordinator,
   type ShutdownStep,
 } from './shutdown.js';
+export {
+  type DiscordCommandPayload,
+  registerSlashCommandsForGuild,
+  type SlashRegistrationClient,
+  toCommandPayload,
+  toOptionPayload,
+} from './slash-registration.js';

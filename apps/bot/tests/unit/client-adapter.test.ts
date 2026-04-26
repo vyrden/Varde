@@ -287,21 +287,25 @@ describe('attachDiscordClient — interactionCreate (resolved)', () => {
    * Construit une fausse `ChatInputCommandInteraction`. Discord.js v14
    * expose `options.resolved` sous forme de `Collection<Snowflake, T>` ;
    * on simule via un `Map` qui implémente `forEach` + iteration, ce
-   * dont `extractResolved` a besoin.
+   * dont `extractResolved` a besoin. `data` mime
+   * `interaction.options.data` pour `extractCommandOptions`.
    */
-  const makeFakeInteraction = (resolved: {
-    users?: Map<string, unknown>;
-    members?: Map<string, unknown>;
-    roles?: Map<string, unknown>;
-    channels?: Map<string, unknown>;
-  }) => ({
+  const makeFakeInteraction = (
+    resolved: {
+      users?: Map<string, unknown>;
+      members?: Map<string, unknown>;
+      roles?: Map<string, unknown>;
+      channels?: Map<string, unknown>;
+    },
+    data: ReadonlyArray<{ name: string; value?: string | number | boolean }> = [],
+  ) => ({
     isChatInputCommand: () => true,
     inGuild: () => true,
     guildId: '111',
     channelId: '222',
     user: { id: '42' },
     commandName: 'warn',
-    options: { resolved },
+    options: { resolved, data },
     replied: false,
     reply: vi.fn().mockResolvedValue(undefined),
     deferred: false,
@@ -444,7 +448,7 @@ describe('attachDiscordClient — interactionCreate (resolved)', () => {
       channelId: '222',
       user: { id: '42' },
       commandName: 'ping',
-      options: {}, // pas de resolved
+      options: { data: [] }, // pas de resolved
       replied: false,
       reply: vi.fn().mockResolvedValue(undefined),
     };
@@ -460,6 +464,91 @@ describe('attachDiscordClient — interactionCreate (resolved)', () => {
       };
     };
     expect(input.resolved).toEqual({ users: {}, roles: {}, channels: {} });
+  });
+});
+
+describe('attachDiscordClient — interactionCreate (options)', () => {
+  it('aplatit options.data en Record<name, value> primitives + snowflakes', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = {
+      isChatInputCommand: () => true,
+      inGuild: () => true,
+      guildId: '111',
+      channelId: '222',
+      user: { id: '42' },
+      commandName: 'warn',
+      options: {
+        resolved: undefined,
+        data: [
+          { name: 'member', type: 6, value: '999' },
+          { name: 'reason', type: 3, value: 'spam' },
+          { name: 'count', type: 4, value: 5 },
+          { name: 'silent', type: 5, value: true },
+        ],
+      },
+      replied: false,
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      options: Record<string, string | number | boolean>;
+    };
+    expect(input.options).toEqual({
+      member: '999',
+      reason: 'spam',
+      count: 5,
+      silent: true,
+    });
+  });
+
+  it('ignore les entrées sans value (sub-commands, attachments)', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = {
+      isChatInputCommand: () => true,
+      inGuild: () => true,
+      guildId: '111',
+      channelId: '222',
+      user: { id: '42' },
+      commandName: 'subcmd',
+      options: {
+        resolved: undefined,
+        data: [
+          { name: 'mygroup', type: 1 },
+          { name: 'real', type: 3, value: 'kept' },
+        ],
+      },
+      replied: false,
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      options: Record<string, unknown>;
+    };
+    expect(input.options).toEqual({ real: 'kept' });
   });
 });
 

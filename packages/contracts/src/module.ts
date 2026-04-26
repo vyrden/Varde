@@ -108,17 +108,74 @@ export type ModuleCommandHandler = (
 ) => Promise<UIMessage> | UIMessage;
 
 /**
+ * Type d'une option de slash command. Mappe 1:1 sur Discord
+ * `ApplicationCommandOptionType` (3=string, 4=integer, 5=boolean,
+ * 6=user, 7=channel, 8=role, 10=number). Les types sub-command (1,
+ * 2), mentionable (9) et attachment (11) ne sont pas exposés en V1
+ * — ajout possible plus tard sans casser la rétrocompat.
+ */
+export type ModuleCommandOptionType =
+  | 'string'
+  | 'integer'
+  | 'boolean'
+  | 'number'
+  | 'user'
+  | 'role'
+  | 'channel';
+
+/**
+ * Choix prédéfini d'une option de type `string`. Le user voit `name`
+ * dans le client Discord et le handler reçoit `value` dans
+ * `input.options[option.name]`.
+ */
+export interface ModuleCommandOptionChoice {
+  readonly name: string;
+  readonly value: string;
+}
+
+/**
+ * Déclaration d'une option d'une slash command. Sert deux usages :
+ * 1. Décrire à Discord la forme de la commande (REST registration).
+ * 2. Documenter aux handlers ce qu'attend `input.options`.
+ *
+ * Les bornes (`minLength`, `maxLength`, `minValue`, `maxValue`) sont
+ * appliquées par Discord côté client — pas besoin de re-vérifier
+ * dans le handler. Discord refuse l'interaction si elles sont
+ * dépassées.
+ */
+export interface ModuleCommandOption {
+  readonly name: string;
+  readonly description: string;
+  readonly type: ModuleCommandOptionType;
+  readonly required?: boolean;
+  /** Bornes de longueur pour `type: 'string'`. */
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  /** Bornes pour `type: 'integer' | 'number'`. */
+  readonly minValue?: number;
+  readonly maxValue?: number;
+  /** Choix prédéfinis pour `type: 'string'`. Mutuellement exclusif avec min/maxLength. */
+  readonly choices?: readonly ModuleCommandOptionChoice[];
+}
+
+/**
  * Déclaration d'une slash command par un module.
  *
  * `defaultPermission` est la permission applicative requise pour
  * exécuter la commande ; si elle est déclarée, le bot vérifie
  * `can(actor, permission, ...)` avant d'invoquer le handler. `null`
  * explicite = ouverte à tous les utilisateurs.
+ *
+ * `options` décrit les arguments attendus. Le bot s'en sert pour
+ * enregistrer la commande auprès de Discord (REST) au boot — les
+ * commandes sans `options` sont enregistrées sans paramètres.
+ * L'ordre des options est préservé tel quel à Discord.
  */
 export interface ModuleCommand {
   readonly name: string;
   readonly description: string;
   readonly defaultPermission?: PermissionId | null;
+  readonly options?: readonly ModuleCommandOption[];
   readonly handler: ModuleCommandHandler;
 }
 

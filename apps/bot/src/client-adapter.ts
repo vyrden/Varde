@@ -307,7 +307,7 @@ export function attachDiscordClient(
         guildId: guildId as GuildId,
         channelId: interaction.channelId as ChannelId,
         userId: interaction.user.id as UserId,
-        options: {},
+        options: extractCommandOptions(interaction),
         resolved: extractResolved(interaction),
       });
       // Rendu texte plat V1 basé sur le kind.
@@ -360,6 +360,35 @@ const renderUIMessage = (message: UIMessageLike): string => {
     default:
       return '';
   }
+};
+
+/**
+ * Aplatit `interaction.options.data` en `Record<name, value>` pour
+ * `CommandInteractionInput.options`. Le champ `value` discord.js
+ * porte la valeur primitive ou le snowflake selon le type d'option
+ * (3=string, 4=integer, 5=boolean, 6=user, 7=channel, 8=role,
+ * 10=number) — discord.js le pose toujours pour ces 7 types. Les
+ * sous-commandes (1, 2) ne sont pas exposées en V1, on les ignore.
+ *
+ * Pour les types user/role/channel, `value` contient le snowflake en
+ * string ; les détails enrichis (tag, name, position) sont dans
+ * `extractResolved`.
+ */
+const extractCommandOptions = (
+  interaction: ChatInputCommandInteraction,
+): Record<string, string | number | boolean> => {
+  const out: Record<string, string | number | boolean> = {};
+  for (const opt of interaction.options.data) {
+    if (opt.value === undefined || opt.value === null) continue;
+    if (
+      typeof opt.value === 'string' ||
+      typeof opt.value === 'number' ||
+      typeof opt.value === 'boolean'
+    ) {
+      out[opt.name] = opt.value;
+    }
+  }
+  return out;
 };
 
 /**
