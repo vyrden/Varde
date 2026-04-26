@@ -1,18 +1,10 @@
-import {
-  Badge,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  ReadonlySwitch,
-  Separator,
-} from '@varde/ui';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, Separator } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import { ConfigForm } from '../../../../../components/ConfigForm';
+import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
@@ -123,14 +115,16 @@ export default async function ModuleConfigPage({
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Statut</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-foreground">{isEnabled ? 'Actif' : 'Inactif'}</span>
-                    <ReadonlySwitch enabled={isEnabled} />
-                  </div>
+                  <ModuleEnabledToggle
+                    guildId={guildId}
+                    moduleId={module.id}
+                    moduleName={module.name}
+                    initialEnabled={isEnabled}
+                  />
                 </div>
                 <p className="pt-1 text-xs text-muted-foreground">
-                  L'activation d'un module se pilote depuis la config du core. Cette page édite
-                  uniquement ses paramètres.
+                  Désactiver un module coupe immédiatement ses handlers events et commandes pour ce
+                  serveur. La config est conservée — réactiver restaure tout.
                 </p>
               </CardContent>
             </Card>

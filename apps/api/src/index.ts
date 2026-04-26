@@ -63,6 +63,7 @@ export {
 } from './routes/module-permissions.js';
 export {
   type RegisterModulesRoutesOptions,
+  readModuleEnabledOverride,
   registerModulesRoutes,
 } from './routes/modules.js';
 export {

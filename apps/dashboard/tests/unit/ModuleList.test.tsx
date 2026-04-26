@@ -37,10 +37,19 @@ describe('ModuleList', () => {
     expect(welcomeLink.getAttribute('href')).toBe('/guilds/g1/modules/welcome');
   });
 
-  it('affiche un badge actif / inactif selon enabled', () => {
+  it("expose un toggle d'activation par module via aria-label dynamique", () => {
     render(<ModuleList guildId="g1" modules={[mod('a', 'A', true), mod('b', 'B', false)]} />);
-    expect(screen.getByText('Actif')).toBeDefined();
-    expect(screen.getByText('Inactif')).toBeDefined();
+    // Toggle Discord-style : <button role="switch"> avec aria-label
+    // « Désactiver A » (déjà actif) et « Activer B » (désactivé).
+    expect(screen.getByRole('switch', { name: /Désactiver A/i })).toBeDefined();
+    expect(screen.getByRole('switch', { name: /Activer B/i })).toBeDefined();
+  });
+
+  it('rend un badge "Système" pour hello-world (sans toggle)', () => {
+    render(<ModuleList guildId="g1" modules={[mod('hello-world', 'Hello World', true)]} />);
+    expect(screen.getByText('Système')).toBeDefined();
+    // Pas de toggle pour le module système
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 
   it('retombe sur un texte par défaut si description vide', () => {

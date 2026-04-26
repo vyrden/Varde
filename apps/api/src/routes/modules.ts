@@ -75,6 +75,34 @@ const extractModuleConfig = (
   return (typeof own === 'object' && own !== null ? own : {}) as Record<string, unknown>;
 };
 
+/**
+ * Lit le flag « override admin » d'activation d'un module pour une
+ * guild dans `guild_config` sous `core.modules.<moduleId>.enabled`.
+ *
+ * - `true`  → admin a explicitement activé (force on)
+ * - `false` → admin a explicitement désactivé (force off)
+ * - `null`  → aucun override, le default core (DEFAULT_ENABLED_MODULES
+ *   côté bin.ts) s'applique
+ *
+ * Helper exporté pour que `apps/server/bin.ts` réplique l'override
+ * au boot, sinon le module repart toujours en default au restart.
+ */
+export const readModuleEnabledOverride = (snapshot: unknown, moduleId: string): boolean | null => {
+  if (typeof snapshot !== 'object' || snapshot === null) return null;
+  const core = (snapshot as { core?: unknown }).core;
+  if (typeof core !== 'object' || core === null) return null;
+  const modules = (core as { modules?: unknown }).modules;
+  if (typeof modules !== 'object' || modules === null) return null;
+  const slot = (modules as Record<string, unknown>)[moduleId];
+  if (typeof slot !== 'object' || slot === null) return null;
+  const enabled = (slot as { enabled?: unknown }).enabled;
+  return typeof enabled === 'boolean' ? enabled : null;
+};
+
+const setEnabledBodySchema = z.object({
+  enabled: z.boolean(),
+});
+
 const httpError = (
   statusCode: number,
   code: string,
@@ -146,6 +174,58 @@ export function registerModulesRoutes(
       };
     },
   );
+
+  // PUT /guilds/:guildId/modules/:moduleId/enabled — toggle d'activation
+  // côté admin. Persiste l'override dans guild_config et applique
+  // immédiatement via le PluginLoader (enable/disable runtime).
+  app.put<{
+    Params: { guildId: string; moduleId: string };
+    Body: unknown;
+  }>('/guilds/:guildId/modules/:moduleId/enabled', async (request, reply) => {
+    const { guildId, moduleId } = request.params;
+    const session = await requireGuildAdmin(app, request, guildId, options.discord);
+
+    const def = options.loader.get(moduleId as ModuleId);
+    if (!def) {
+      throw httpError(404, 'module_not_found', `Module "${moduleId}" inconnu.`);
+    }
+
+    const parsed = setEnabledBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw httpError(
+        400,
+        'invalid_body',
+        'Body invalide — attendu `{ enabled: boolean }`.',
+        parsed.error.issues,
+      );
+    }
+    const { enabled } = parsed.data;
+
+    // Persist override dans guild_config (lecture au boot par bin.ts).
+    await options.config.setWith(
+      guildId as GuildId,
+      { core: { modules: { [moduleId]: { enabled } } } },
+      { scope: `core.modules.${moduleId}`, updatedBy: session.userId as UserId },
+    );
+
+    // Application immédiate runtime via le loader.
+    try {
+      if (enabled) {
+        await options.loader.enable(guildId as GuildId, moduleId as ModuleId);
+      } else {
+        await options.loader.disable(guildId as GuildId, moduleId as ModuleId);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw httpError(
+        500,
+        'loader_failed',
+        `loader.${enabled ? 'enable' : 'disable'} a échoué : ${message}`,
+      );
+    }
+
+    void reply.status(204).send();
+  });
 
   app.put<{
     Params: { guildId: string; moduleId: string };

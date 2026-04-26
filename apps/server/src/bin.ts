@@ -29,6 +29,7 @@ import {
   createWelcomeUploadsService,
   type GuildRoleDto,
   type GuildTextChannelDto,
+  readModuleEnabledOverride,
 } from '@varde/api';
 import {
   attachDiscordClient,
@@ -200,11 +201,31 @@ async function enableDefaultModulesOn(
   guildId: string,
   logger: Logger,
 ): Promise<void> {
-  for (const moduleId of DEFAULT_ENABLED_MODULES) {
+  // Lit l'état persisté pour cette guild (overrides admins via UI).
+  // Si vide ou erreur → fallback sur DEFAULT_ENABLED_MODULES.
+  let snapshot: unknown = {};
+  try {
+    snapshot = await handle.config.get(guildId as GuildId);
+  } catch {
+    snapshot = {};
+  }
+
+  // Set des modules à appliquer en runtime, suivant les règles :
+  //   override = true   → enable
+  //   override = false  → ne PAS enable (admin a désactivé)
+  //   override = null   → enable si dans DEFAULT_ENABLED_MODULES
+  const candidates = new Set<ModuleId>(DEFAULT_ENABLED_MODULES);
+  for (const moduleId of handle.loader.loadOrder()) {
+    const override = readModuleEnabledOverride(snapshot, moduleId);
+    if (override === true) candidates.add(moduleId);
+    if (override === false) candidates.delete(moduleId);
+  }
+
+  for (const moduleId of candidates) {
     try {
       await handle.loader.enable(guildId as GuildId, moduleId);
     } catch (error) {
-      logger.warn('enable module par défaut échoué', {
+      logger.warn('enable module au boot échoué', {
         err: error instanceof Error ? error.message : String(error),
         guildId,
         moduleId,
