@@ -1,3 +1,4 @@
+export * from './bot-settings.js';
 export * from './context.js';
 export * from './db-records.js';
 export * from './errors.js';

@@ -1,8 +1,19 @@
 'use client';
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@varde/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Drawer,
+  Input,
+  Select,
+} from '@varde/ui';
 import {
   type FormEvent,
+  type KeyboardEvent,
   type ReactElement,
   useCallback,
   useEffect,
@@ -312,9 +323,10 @@ function SkeletonRow({ index }: { readonly index: number }): ReactElement {
 interface AuditRowProps {
   readonly item: AuditLogItemDto;
   readonly index: number;
+  readonly onSelect: (item: AuditLogItemDto) => void;
 }
 
-function AuditRow({ item, index }: AuditRowProps): ReactElement {
+function AuditRow({ item, index, onSelect }: AuditRowProps): ReactElement {
   const date = formatRelativeDate(item.createdAt);
   const action = splitAction(item.action);
   const sevMeta = SEVERITY_BADGE[item.severity];
@@ -322,12 +334,25 @@ function AuditRow({ item, index }: AuditRowProps): ReactElement {
   const meta = metadataPreview(item.metadata);
   const tooltip = metadataTooltip(item.metadata);
 
+  const onKeyDown = (e: KeyboardEvent<HTMLTableRowElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect(item);
+    }
+  };
+
   return (
+    // biome-ignore lint/a11y/useSemanticElements: HTML interdit `<button>` comme enfant direct de `<tbody>` ; on conserve `<tr>` avec role="button" + tabIndex + handlers clavier (motif standard pour table-row clickable).
     <tr
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(item)}
+      onKeyDown={onKeyDown}
+      aria-label={`Détails de l'entrée audit ${item.action} du ${item.createdAt}`}
       className={
         index % 2 === 0
-          ? 'border-b border-border align-top transition-colors hover:bg-surface-hover'
-          : 'border-b border-border bg-surface-active/15 align-top transition-colors hover:bg-surface-hover'
+          ? 'cursor-pointer border-b border-border align-top transition-colors hover:bg-surface-hover focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-primary'
+          : 'cursor-pointer border-b border-border bg-surface-active/15 align-top transition-colors hover:bg-surface-hover focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-primary'
       }
     >
       <td className="px-3 py-3 text-xs text-muted-foreground" title={item.createdAt}>
@@ -371,6 +396,128 @@ function AuditRow({ item, index }: AuditRowProps): ReactElement {
   );
 }
 
+function AuditDetailDrawer({
+  item,
+  onClose,
+}: {
+  readonly item: AuditLogItemDto | null;
+  readonly onClose: () => void;
+}): ReactElement {
+  const action = item !== null ? splitAction(item.action) : { namespace: '', suffix: '' };
+  const sevMeta = item !== null ? SEVERITY_BADGE[item.severity] : null;
+  const actorMeta = item !== null ? ACTOR_BADGE[item.actorType] : null;
+  const metaEntries = item !== null ? Object.entries(item.metadata) : [];
+  const formatted =
+    item !== null && metaEntries.length > 0 ? JSON.stringify(item.metadata, null, 2) : '';
+
+  return (
+    <Drawer
+      open={item !== null}
+      onClose={onClose}
+      title={item !== null ? item.action : ''}
+      size="xl"
+      {...(item !== null
+        ? { subtitle: `${formatRelativeDate(item.createdAt).primary} · ${item.id}` }
+        : {})}
+    >
+      {item !== null && sevMeta !== null && actorMeta !== null ? (
+        <div className="space-y-5 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={sevMeta.variant} className="gap-1">
+              <span aria-hidden="true">{sevMeta.symbol}</span>
+              {item.severity}
+            </Badge>
+            <Badge variant={actorMeta.variant} className="font-normal">
+              <span className="mr-1" aria-hidden="true">
+                {actorMeta.icon}
+              </span>
+              {actorMeta.label(item.actorId)}
+            </Badge>
+          </div>
+
+          <DetailSection title="Action">
+            <p className="font-mono text-xs">
+              {action.namespace ? (
+                <>
+                  <span className="text-muted-foreground">{action.namespace}</span>
+                  <span className="text-foreground">{action.suffix}</span>
+                </>
+              ) : (
+                <span className="text-foreground">{action.suffix}</span>
+              )}
+            </p>
+          </DetailSection>
+
+          <DetailSection title="Acteur">
+            <DetailKv label="Type" value={item.actorType} />
+            <DetailKv label="Identifiant" value={item.actorId ?? '—'} mono />
+          </DetailSection>
+
+          <DetailSection title="Horodatage">
+            <DetailKv
+              label="Date"
+              value={`${item.createdAt.slice(0, 19).replace('T', ' ')} UTC`}
+              mono
+            />
+            <DetailKv label="Relatif" value={formatRelativeDate(item.createdAt).primary} />
+            <DetailKv label="ID entrée" value={item.id} mono />
+          </DetailSection>
+
+          <DetailSection title="Métadonnées">
+            {metaEntries.length === 0 ? (
+              <p className="text-xs italic text-muted-foreground">
+                Cette entrée ne porte aucune métadonnée.
+              </p>
+            ) : (
+              <pre className="max-h-96 overflow-auto rounded-md bg-rail p-3 font-mono text-[11px] leading-relaxed text-foreground">
+                {formatted}
+              </pre>
+            )}
+          </DetailSection>
+        </div>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  readonly title: string;
+  readonly children: ReactElement | ReactElement[];
+}): ReactElement {
+  return (
+    <section>
+      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h3>
+      <div className="space-y-1">{children}</div>
+    </section>
+  );
+}
+
+function DetailKv({
+  label,
+  value,
+  mono,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly mono?: boolean;
+}): ReactElement {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span
+        className={`min-w-0 truncate text-right text-foreground ${mono ? 'font-mono text-xs' : 'text-sm'}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 // --- Main AuditView ---
 
 /**
@@ -394,6 +541,7 @@ export function AuditView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actions, setActions] = useState<readonly string[]>(knownActions);
+  const [selected, setSelected] = useState<AuditLogItemDto | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   // Token incrémenté à chaque (re)filtrage — un fetch en cours qui
@@ -561,7 +709,7 @@ export function AuditView({
               </thead>
               <tbody>
                 {items.map((item, idx) => (
-                  <AuditRow key={item.id} item={item} index={idx} />
+                  <AuditRow key={item.id} item={item} index={idx} onSelect={setSelected} />
                 ))}
                 {loading && cursor !== undefined ? (
                   <>
@@ -675,6 +823,8 @@ export function AuditView({
           </Card>
         </div>
       </aside>
+
+      <AuditDetailDrawer item={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

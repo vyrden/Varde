@@ -4,6 +4,7 @@ import {
   assertUserId,
   type DiscordService,
   type GuildId,
+  readBotSettings,
 } from '@varde/contracts';
 import type { CoreConfigService } from '@varde/core';
 import {
@@ -294,6 +295,10 @@ export function registerWelcomeRoutes(
       const typedGuildId = assertGuildId(guildId);
       const typedUserId = assertUserId(session.userId);
 
+      // Fallback couleur d'embed = couleur globale du bot (core.bot-settings).
+      const snapshot = await options.config.get(typedGuildId).catch(() => ({}));
+      const botSettings = readBotSettings(snapshot);
+
       const userInfo = await options.discordService.getUserDisplayInfo(typedUserId);
       const guildName = options.discordService.getGuildName(typedGuildId) ?? guildId;
       const memberCount = options.discordService.getMemberCount(typedGuildId) ?? 0;
@@ -339,7 +344,7 @@ export function registerWelcomeRoutes(
         embeds = [
           {
             description: `[TEST] ${content}`,
-            color: Number.isFinite(colorInt) ? colorInt : 0x5865f2,
+            color: Number.isFinite(colorInt) ? colorInt : botSettings.embedColorInt,
             ...(files.length > 0 ? { image: { url: 'attachment://welcome-card.png' } } : {}),
           },
         ];

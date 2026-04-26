@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { ModuleList } from '../../components/ModuleList';
@@ -55,5 +55,43 @@ describe('ModuleList', () => {
   it('retombe sur un texte par défaut si description vide', () => {
     render(<ModuleList guildId="g1" modules={[mod('a', 'A', true, '')]} />);
     expect(screen.getByText(/Aucune description fournie/)).toBeDefined();
+  });
+
+  it('filtre par texte (nom, id, description) via la barre de recherche', () => {
+    render(
+      <ModuleList
+        guildId="g1"
+        modules={[
+          mod('welcome', 'Welcome', true, 'Accueil des nouveaux membres'),
+          mod('logs', 'Logs', true, 'Journal des évènements'),
+          mod('reaction-roles', 'Roles via réactions', false, 'Self-assign de rôles'),
+        ]}
+      />,
+    );
+    const search = screen.getByLabelText('Rechercher un module');
+    fireEvent.change(search, { target: { value: 'accueil' } });
+    expect(screen.queryByRole('link', { name: /^Logs/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /Welcome/i })).toBeDefined();
+  });
+
+  it('segment Inactifs filtre les modules désactivés', () => {
+    render(
+      <ModuleList
+        guildId="g1"
+        modules={[mod('a', 'A', true), mod('b', 'B', false), mod('c', 'C', false)]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /^Inactifs/i }));
+    expect(screen.queryByRole('link', { name: /^A/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /^B/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /^C/i })).toBeDefined();
+  });
+
+  it('affiche un empty state quand le filtre ne matche rien', () => {
+    render(<ModuleList guildId="g1" modules={[mod('a', 'A', true)]} />);
+    fireEvent.change(screen.getByLabelText('Rechercher un module'), {
+      target: { value: 'inexistant' },
+    });
+    expect(screen.getByRole('heading', { name: /Aucun module ne correspond/i })).toBeDefined();
   });
 });

@@ -1,13 +1,21 @@
 'use client';
 
-import type { PresetDefinition } from '@varde/presets';
+import type {
+  PresetCategory,
+  PresetChannel,
+  PresetDefinition,
+  PresetModuleConfig,
+  PresetRole,
+} from '@varde/presets';
 import {
+  Badge,
   Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  Drawer,
   Textarea,
 } from '@varde/ui';
 import Link from 'next/link';
@@ -52,6 +60,7 @@ export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [aiDescription, setAiDescription] = useState('');
   const [showAi, setShowAi] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   if (showAi) {
     return (
@@ -79,6 +88,10 @@ export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps
     setShowAi(true);
   };
 
+  const previewPreset =
+    previewId !== null ? (presets.find((p) => p.id === previewId) ?? null) : null;
+  const previewBusy = pending && selectedId === previewId;
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="flex flex-col gap-4 lg:col-span-2">
@@ -100,7 +113,12 @@ export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps
             const busy = pending && selectedId === preset.id;
             return (
               <li key={preset.id}>
-                <PresetCard preset={preset} busy={busy} onChoose={onChoose} />
+                <PresetCard
+                  preset={preset}
+                  busy={busy}
+                  onChoose={onChoose}
+                  onPreview={() => setPreviewId(preset.id)}
+                />
               </li>
             );
           })}
@@ -116,6 +134,32 @@ export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps
           <AboutCard />
         </div>
       </aside>
+
+      <Drawer
+        open={previewPreset !== null}
+        onClose={() => setPreviewId(null)}
+        title={previewPreset?.name ?? ''}
+        {...(previewPreset !== null ? { subtitle: previewPreset.description } : {})}
+        size="xl"
+        footer={
+          previewPreset !== null ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Vous pourrez tout éditer avant l'application.
+              </p>
+              <Button
+                type="button"
+                disabled={previewBusy}
+                onClick={() => onChoose(previewPreset.id)}
+              >
+                {previewBusy ? 'Démarrage…' : 'Démarrer avec ce preset →'}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {previewPreset !== null ? <PresetPreview preset={previewPreset} /> : null}
+      </Drawer>
     </div>
   );
 }
@@ -238,9 +282,10 @@ interface PresetCardProps {
   readonly preset: PresetDefinition;
   readonly busy: boolean;
   readonly onChoose: (presetId: string) => void;
+  readonly onPreview: () => void;
 }
 
-function PresetCard({ preset, busy, onChoose }: PresetCardProps): ReactElement {
+function PresetCard({ preset, busy, onChoose, onPreview }: PresetCardProps): ReactElement {
   const meta = presetMeta(preset);
   return (
     <Card className="group flex h-full flex-col transition-colors duration-150 ease-out hover:border-primary/60">
@@ -269,15 +314,26 @@ function PresetCard({ preset, busy, onChoose }: PresetCardProps): ReactElement {
           <PresetStat value={preset.channels.length} label="salons" />
           <PresetStat value={preset.modules.length} label="modules" />
         </div>
-        <Button
-          type="button"
-          className="w-full"
-          disabled={busy}
-          onClick={() => onChoose(preset.id)}
-          aria-label={`Démarrer avec le preset ${preset.name}`}
-        >
-          {busy ? 'Démarrage…' : 'Démarrer →'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={onPreview}
+            aria-label={`Aperçu du preset ${preset.name}`}
+          >
+            Aperçu
+          </Button>
+          <Button
+            type="button"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => onChoose(preset.id)}
+            aria-label={`Démarrer avec le preset ${preset.name}`}
+          >
+            {busy ? 'Démarrage…' : 'Démarrer →'}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -295,6 +351,199 @@ function PresetStat({
       <span className="text-lg font-bold leading-tight text-foreground">{value}</span>
       <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
     </div>
+  );
+}
+
+// --- Preview drawer body ---
+
+const PERMISSION_LABEL: Record<PresetRole['permissionPreset'], string> = {
+  'moderator-full': 'Modérateur (complet)',
+  'moderator-minimal': 'Modérateur (minimal)',
+  'member-default': 'Membre',
+  'member-restricted': 'Membre (restreint)',
+};
+
+const CHANNEL_GLYPH: Record<PresetChannel['type'], string> = {
+  text: '#',
+  voice: '🔊',
+  forum: '💬',
+};
+
+function PresetPreview({ preset }: { readonly preset: PresetDefinition }): ReactElement {
+  const channelsByCategory = new Map<string | null, PresetChannel[]>();
+  for (const ch of preset.channels) {
+    const key = ch.categoryLocalId;
+    const list = channelsByCategory.get(key);
+    if (list !== undefined) list.push(ch);
+    else channelsByCategory.set(key, [ch]);
+  }
+  const orphanChannels = channelsByCategory.get(null) ?? [];
+
+  return (
+    <div className="space-y-6 text-sm">
+      {preset.tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {preset.tags.map((tag) => (
+            <PresetTag key={tag} tag={tag} />
+          ))}
+        </div>
+      ) : null}
+
+      <PreviewSection title="Rôles" count={preset.roles.length}>
+        {preset.roles.length === 0 ? (
+          <PreviewEmpty>Aucun rôle créé par ce preset.</PreviewEmpty>
+        ) : (
+          <ul className="space-y-1.5">
+            {preset.roles.map((role) => (
+              <PreviewRoleRow key={role.localId} role={role} />
+            ))}
+          </ul>
+        )}
+      </PreviewSection>
+
+      <PreviewSection
+        title="Catégories & salons"
+        count={preset.categories.length + preset.channels.length}
+      >
+        {preset.categories.length === 0 && preset.channels.length === 0 ? (
+          <PreviewEmpty>Aucune catégorie ni aucun salon créé.</PreviewEmpty>
+        ) : (
+          <div className="space-y-3">
+            {preset.categories.map((cat) => (
+              <PreviewCategoryGroup
+                key={cat.localId}
+                category={cat}
+                channels={channelsByCategory.get(cat.localId) ?? []}
+              />
+            ))}
+            {orphanChannels.length > 0 ? (
+              <PreviewCategoryGroup category={null} channels={orphanChannels} />
+            ) : null}
+          </div>
+        )}
+      </PreviewSection>
+
+      <PreviewSection title="Modules activés" count={preset.modules.length}>
+        {preset.modules.length === 0 ? (
+          <PreviewEmpty>Aucun module activé par ce preset.</PreviewEmpty>
+        ) : (
+          <ul className="space-y-1.5">
+            {preset.modules.map((mod) => (
+              <PreviewModuleRow key={mod.moduleId} mod={mod} />
+            ))}
+          </ul>
+        )}
+      </PreviewSection>
+    </div>
+  );
+}
+
+function PreviewSection({
+  title,
+  count,
+  children,
+}: {
+  readonly title: string;
+  readonly count: number;
+  readonly children: ReactElement | ReactElement[];
+}): ReactElement {
+  return (
+    <section>
+      <header className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
+        <Badge variant="secondary">{count}</Badge>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function PreviewEmpty({ children }: { readonly children: string }): ReactElement {
+  return <p className="text-xs italic text-muted-foreground">{children}</p>;
+}
+
+function PreviewRoleRow({ role }: { readonly role: PresetRole }): ReactElement {
+  const colorHex = `#${role.color.toString(16).padStart(6, '0')}`;
+  return (
+    <li className="flex items-center gap-2 rounded-md bg-sidebar px-2.5 py-1.5">
+      <span
+        aria-hidden="true"
+        className="h-3 w-3 shrink-0 rounded-full border border-border/40"
+        style={{ backgroundColor: role.color === 0 ? 'transparent' : colorHex }}
+      />
+      <span className="flex-1 truncate font-medium text-foreground">{role.name}</span>
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        {PERMISSION_LABEL[role.permissionPreset]}
+      </span>
+      {role.hoist ? <Badge variant="outline">épinglé</Badge> : null}
+    </li>
+  );
+}
+
+function PreviewCategoryGroup({
+  category,
+  channels,
+}: {
+  readonly category: PresetCategory | null;
+  readonly channels: readonly PresetChannel[];
+}): ReactElement {
+  return (
+    <div className="rounded-md bg-sidebar px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {category?.name ?? 'Sans catégorie'}
+      </div>
+      {channels.length > 0 ? (
+        <ul className="mt-1 space-y-0.5">
+          {channels.map((ch) => (
+            <PreviewChannelRow key={ch.localId} channel={ch} />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-xs italic text-muted-foreground">Catégorie vide.</p>
+      )}
+    </div>
+  );
+}
+
+function PreviewChannelRow({ channel }: { readonly channel: PresetChannel }): ReactElement {
+  const restricted = channel.readableBy.length > 0 || channel.writableBy.length > 0;
+  return (
+    <li className="flex items-center gap-2 px-1 py-0.5">
+      <span aria-hidden="true" className="w-4 text-center text-muted-foreground">
+        {CHANNEL_GLYPH[channel.type]}
+      </span>
+      <span className="flex-1 truncate text-foreground">{channel.name}</span>
+      {channel.slowmodeSeconds > 0 ? (
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          slow {channel.slowmodeSeconds}s
+        </span>
+      ) : null}
+      {restricted ? (
+        <span
+          className="shrink-0 text-[11px] text-warning"
+          title="Accès restreint à certains rôles"
+        >
+          🔒
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+function PreviewModuleRow({ mod }: { readonly mod: PresetModuleConfig }): ReactElement {
+  return (
+    <li className="flex items-center gap-2 rounded-md bg-sidebar px-2.5 py-1.5">
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 shrink-0 rounded-full ${mod.enabled ? 'bg-success' : 'bg-muted'}`}
+      />
+      <span className="flex-1 font-mono text-xs text-foreground">{mod.moduleId}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {mod.enabled ? 'activé' : 'désactivé'}
+      </span>
+    </li>
   );
 }
 

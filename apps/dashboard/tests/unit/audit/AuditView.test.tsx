@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loadAuditPage = vi.fn();
@@ -235,6 +235,43 @@ describe('AuditView', () => {
     await waitFor(() => expect(loadAuditPage).toHaveBeenCalledTimes(1));
     expect(loadAuditPage).toHaveBeenCalledWith('g1', {});
     expect((screen.getByLabelText('Action') as HTMLInputElement).value).toBe('');
+  });
+
+  it('ouvre un drawer de détail au clic sur une ligne, affiche les métadonnées', async () => {
+    render(
+      <AuditView
+        guildId="g1"
+        initialItems={[
+          buildItem({
+            id: '01A',
+            action: 'core.config.updated',
+            metadata: { scope: 'modules.welcome', key: 'embedColor' },
+          }),
+        ]}
+        initialNextCursor={undefined}
+        initialFilters={{}}
+        knownActions={[]}
+      />,
+    );
+
+    // Avant clic : pas de dialog ouvert.
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Trouver la ligne via son aria-label dynamique (role="button").
+    const row = screen.getByRole('button', { name: /Détails de l'entrée audit/i });
+    fireEvent.click(row);
+
+    // Drawer ouvert : title = action complète, sections + JSON visible.
+    const dialog = await screen.findByRole('dialog');
+    const inDialog = within(dialog);
+    // Le bloc <pre> de métadonnées rendu via JSON.stringify expose les
+    // valeurs telles quelles (avec guillemets).
+    expect(inDialog.getByText(/modules\.welcome/)).toBeDefined();
+    expect(inDialog.getByText(/embedColor/)).toBeDefined();
+
+    // Bouton Fermer revient à l'état initial.
+    fireEvent.click(screen.getByRole('button', { name: /Fermer/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   it('affiche les compteurs sidebar (entrées chargées + acteurs distincts)', () => {

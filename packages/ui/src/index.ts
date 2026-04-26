@@ -12,6 +12,7 @@ export {
   CardHeader,
   CardTitle,
 } from './components/Card.js';
+export { Drawer, type DrawerProps } from './components/Drawer.js';
 export { EmptyState, type EmptyStateProps } from './components/EmptyState.js';
 export {
   ExpandablePanel,

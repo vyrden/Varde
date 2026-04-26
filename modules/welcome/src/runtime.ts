@@ -1,14 +1,16 @@
 import { resolve as resolvePath } from 'node:path';
 
-import type {
-  ActionId,
-  ChannelId,
-  GuildId,
-  GuildMemberJoinEvent,
-  GuildMemberLeaveEvent,
-  ModuleContext,
-  RoleId,
-  UserId,
+import {
+  type ActionId,
+  type BotSettings,
+  type ChannelId,
+  type GuildId,
+  type GuildMemberJoinEvent,
+  type GuildMemberLeaveEvent,
+  type ModuleContext,
+  type RoleId,
+  readBotSettings,
+  type UserId,
 } from '@varde/contracts';
 
 import { renderWelcomeCard } from './card.js';
@@ -40,13 +42,19 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const computeAccountAgeDays = (createdAtMs: number, now: number): number =>
   Math.max(0, Math.floor((now - createdAtMs) / MS_PER_DAY));
 
+/**
+ * Charge en un seul appel le snapshot `guild_config` puis en dérive la
+ * config welcome ET les paramètres globaux `core.bot-settings`. Évite
+ * un double aller-retour DB et garantit que les deux vues sont cohérentes
+ * (même version du snapshot).
+ */
 const safeLoadConfig = async (
   ctx: ModuleContext,
   guildId: GuildId,
-): Promise<WelcomeConfig | null> => {
+): Promise<{ cfg: WelcomeConfig; botSettings: BotSettings } | null> => {
   try {
     const raw = await ctx.config.get(guildId);
-    return resolveConfig(raw);
+    return { cfg: resolveConfig(raw), botSettings: readBotSettings(raw) };
   } catch (error) {
     ctx.logger.warn('welcome : impossible de résoudre la config', {
       guildId,
@@ -88,18 +96,25 @@ const buildCardAttachment = async (
  * Construit le payload `embeds` Discord à partir du bloc message.
  * Reste minimal : titre + couleur + image attachée (référencée via
  * `attachment://welcome-card.png`).
+ *
+ * `fallbackColorInt` est la couleur globale `core.bot-settings.embedColor`
+ * de la guild — utilisée si le parse de `block.embed.color` rate, ce
+ * qui ne devrait pas arriver en pratique (validé Zod côté config) mais
+ * garantit que le fallback respecte les choix de l'admin plutôt que
+ * de retomber sur un blurple hardcodé.
  */
 const buildEmbeds = (
   block: WelcomeMessageBlock,
   description: string,
   hasCard: boolean,
+  fallbackColorInt: number,
 ): unknown[] | undefined => {
   if (!block.embed.enabled) return undefined;
   const colorInt = Number.parseInt(block.embed.color.slice(1), 16);
   return [
     {
       description,
-      color: Number.isFinite(colorInt) ? colorInt : 0x5865f2,
+      color: Number.isFinite(colorInt) ? colorInt : fallbackColorInt,
       ...(hasCard ? { image: { url: 'attachment://welcome-card.png' } } : {}),
     },
   ];
@@ -259,8 +274,9 @@ export async function handleMemberJoin(
     userId: event.userId,
   });
 
-  const cfg = await safeLoadConfig(ctx, event.guildId);
-  if (cfg === null) return;
+  const loaded = await safeLoadConfig(ctx, event.guildId);
+  if (loaded === null) return;
+  const { cfg, botSettings } = loaded;
 
   const typedGuildId = event.guildId as GuildId;
   const typedUserId = event.userId as UserId;
@@ -312,7 +328,7 @@ export async function handleMemberJoin(
     resolveBackgroundAbsolute,
   );
   const files = card !== null ? [card] : [];
-  const embeds = buildEmbeds(cfg.welcome, content, card !== null);
+  const embeds = buildEmbeds(cfg.welcome, content, card !== null, botSettings.embedColorInt);
 
   await sendWelcomeMessage(
     ctx,
@@ -342,8 +358,10 @@ export async function handleMemberLeave(
     userId: event.userId,
   });
 
-  const cfg = await safeLoadConfig(ctx, event.guildId);
-  if (cfg === null || !cfg.goodbye.enabled || cfg.goodbye.channelId === null) return;
+  const loaded = await safeLoadConfig(ctx, event.guildId);
+  if (loaded === null) return;
+  const { cfg, botSettings } = loaded;
+  if (!cfg.goodbye.enabled || cfg.goodbye.channelId === null) return;
 
   const typedGuildId = event.guildId as GuildId;
   const typedUserId = event.userId as UserId;
@@ -371,7 +389,7 @@ export async function handleMemberLeave(
     resolveBackgroundAbsolute,
   );
   const files = card !== null ? [card] : [];
-  const embeds = buildEmbeds(cfg.goodbye, content, card !== null);
+  const embeds = buildEmbeds(cfg.goodbye, content, card !== null, botSettings.embedColorInt);
   const fileOpts =
     files.length > 0 || embeds !== undefined
       ? {
