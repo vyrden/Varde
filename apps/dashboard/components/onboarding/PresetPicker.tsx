@@ -10,6 +10,7 @@ import {
   CardTitle,
   Textarea,
 } from '@varde/ui';
+import Link from 'next/link';
 import { type ReactElement, useState, useTransition } from 'react';
 
 import { startOnboardingWithPreset } from '../../lib/onboarding-actions';
@@ -18,6 +19,18 @@ import { AIGenerator } from './AIGenerator';
 export interface PresetPickerProps {
   readonly guildId: string;
   readonly presets: readonly PresetDefinition[];
+  /**
+   * Snapshot du provider IA actuel pour la sidebar. Optionnel — si
+   * absent (fetch a échoué), on n'affiche pas la card.
+   */
+  readonly aiProvider?: AiProviderSnapshot | null;
+}
+
+export interface AiProviderSnapshot {
+  readonly providerId: 'none' | 'ollama' | 'openai-compat';
+  readonly model: string | null;
+  readonly endpoint: string | null;
+  readonly hasApiKey: boolean;
 }
 
 /**
@@ -33,7 +46,7 @@ export interface PresetPickerProps {
  * `startOnboardingWithPreset` ; la page onboarding est ensuite
  * revalidée côté serveur et affiche l'étape suivante (BuilderCanvas).
  */
-export function PresetPicker({ guildId, presets }: PresetPickerProps): ReactElement {
+export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps): ReactElement {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -97,10 +110,70 @@ export function PresetPicker({ guildId, presets }: PresetPickerProps): ReactElem
       <aside className="lg:col-span-1">
         <div className="sticky top-6 flex flex-col gap-4">
           <RollbackWarningCard />
+          {aiProvider !== undefined && aiProvider !== null ? (
+            <AiProviderCard guildId={guildId} provider={aiProvider} />
+          ) : null}
           <AboutCard />
         </div>
       </aside>
     </div>
+  );
+}
+
+// --- AI provider card ---
+
+interface AiProviderCardProps {
+  readonly guildId: string;
+  readonly provider: AiProviderSnapshot;
+}
+
+const PROVIDER_LABEL: Record<AiProviderSnapshot['providerId'], string> = {
+  none: 'Aucun (stub local)',
+  ollama: 'Ollama',
+  'openai-compat': 'OpenAI-compatible',
+};
+
+function AiProviderCard({ guildId, provider }: AiProviderCardProps): ReactElement {
+  const isConfigured = provider.providerId === 'none' || provider.model !== null;
+  const dotClass = isConfigured ? 'bg-success' : 'bg-warning';
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Fournisseur IA</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+          <span className="text-foreground">{PROVIDER_LABEL[provider.providerId]}</span>
+        </div>
+        {provider.model !== null ? (
+          <div className="space-y-0.5 text-muted-foreground">
+            <div className="flex justify-between gap-2">
+              <span>Modèle</span>
+              <span className="truncate font-mono text-foreground">{provider.model}</span>
+            </div>
+            {provider.endpoint !== null ? (
+              <div className="flex justify-between gap-2">
+                <span>Endpoint</span>
+                <span className="truncate font-mono text-foreground">{provider.endpoint}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : provider.providerId === 'none' ? (
+          <p className="text-muted-foreground">
+            Le générateur de preset utilisera la heuristique locale (rule-based).
+          </p>
+        ) : (
+          <p className="text-warning">Configuration incomplète — modèle manquant.</p>
+        )}
+        <Link
+          href={`/guilds/${guildId}/settings/ai`}
+          className="block pt-1 font-medium text-primary hover:underline"
+        >
+          Modifier →
+        </Link>
+      </CardContent>
+    </Card>
   );
 }
 

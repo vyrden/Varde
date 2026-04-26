@@ -114,7 +114,13 @@ export function BackgroundImageInput({
         <img
           src={thumbnail}
           alt="Fond actuel"
-          className="h-20 w-56 rounded-md border border-border object-cover"
+          className={`h-20 w-56 rounded-md border border-border object-cover transition-opacity duration-150 ${pending ? 'opacity-50' : ''}`}
+        />
+      ) : pending ? (
+        <span
+          role="status"
+          aria-label="Upload en cours"
+          className="block h-20 w-56 animate-pulse rounded-md bg-surface-active"
         />
       ) : (
         <div className="h-20 w-56 rounded-md border border-dashed border-border bg-muted/40" />

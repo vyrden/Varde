@@ -46,7 +46,12 @@ export default async function AiSettingsPage({
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
-        <PageBreadcrumb items={[{ label: 'Paramètres' }, { label: 'Fournisseur IA' }]} />
+        <PageBreadcrumb
+          items={[
+            { label: 'Paramètres', href: `/guilds/${guildId}/settings` },
+            { label: 'Fournisseur IA' },
+          ]}
+        />
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">

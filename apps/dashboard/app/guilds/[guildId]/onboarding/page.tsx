@@ -7,9 +7,13 @@ import { auth } from '../../../../auth';
 import { AppliedStep } from '../../../../components/onboarding/AppliedStep';
 import { BuilderCanvas } from '../../../../components/onboarding/BuilderCanvas';
 import { FinishedStep } from '../../../../components/onboarding/FinishedStep';
-import { PresetPicker } from '../../../../components/onboarding/PresetPicker';
+import {
+  type AiProviderSnapshot,
+  PresetPicker,
+} from '../../../../components/onboarding/PresetPicker';
 import { PreviewStep } from '../../../../components/onboarding/PreviewStep';
 import { PageBreadcrumb } from '../../../../components/shell/PageBreadcrumb';
+import { fetchAiSettings } from '../../../../lib/ai-settings-client';
 import { ApiError, fetchAdminGuilds } from '../../../../lib/api-client';
 import {
   fetchCurrentOnboardingSession,
@@ -60,6 +64,21 @@ export default async function OnboardingPage({
   const guild = guilds.find((g) => g.id === guildId);
   if (!guild) notFound();
 
+  // Fetch best-effort du provider IA pour la sidebar de PresetPicker.
+  // Si l'appel échoue, on omet la card — la page reste fonctionnelle.
+  let aiProvider: AiProviderSnapshot | null = null;
+  try {
+    const ai = await fetchAiSettings(guildId);
+    aiProvider = {
+      providerId: ai.providerId,
+      model: ai.model,
+      endpoint: ai.endpoint,
+      hasApiKey: ai.hasApiKey,
+    };
+  } catch {
+    aiProvider = null;
+  }
+
   return (
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
@@ -87,7 +106,7 @@ export default async function OnboardingPage({
       </header>
       <Separator />
       <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <StepRouter guildId={guildId} session={onboarding} />
+        <StepRouter guildId={guildId} session={onboarding} aiProvider={aiProvider} />
       </div>
     </>
   );
@@ -96,12 +115,14 @@ export default async function OnboardingPage({
 function StepRouter({
   guildId,
   session,
+  aiProvider,
 }: {
   readonly guildId: string;
   readonly session: OnboardingSessionDto | null;
+  readonly aiProvider: AiProviderSnapshot | null;
 }): ReactElement {
   if (session === null) {
-    return <PresetPicker guildId={guildId} presets={PRESET_CATALOG} />;
+    return <PresetPicker guildId={guildId} presets={PRESET_CATALOG} aiProvider={aiProvider} />;
   }
   if (session.status === 'draft' || session.status === 'applying') {
     return <BuilderCanvas session={session} />;

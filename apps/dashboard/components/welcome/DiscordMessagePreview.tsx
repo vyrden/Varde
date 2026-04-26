@@ -193,7 +193,11 @@ export function DiscordMessagePreview({ guildId, block, variant }: DiscordMessag
                   height={250}
                 />
               ) : (
-                <p className="mt-1 text-xs text-[#949ba4] italic">Génération de la carte…</p>
+                <span
+                  role="status"
+                  aria-label="Génération de la carte en cours"
+                  className="mt-1 block h-62.5 max-w-md animate-pulse rounded-md bg-[#404249]"
+                />
               )
             ) : null}
           </div>
