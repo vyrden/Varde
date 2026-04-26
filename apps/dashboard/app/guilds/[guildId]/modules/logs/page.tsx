@@ -4,7 +4,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  ReadonlySwitch,
   Separator,
   UnboundPermissionsBanner,
 } from '@varde/ui';
@@ -14,6 +13,7 @@ import type { ReactElement } from 'react';
 import { auth } from '../../../../../auth';
 import { LogsConfigEditor } from '../../../../../components/logs/LogsConfigEditor';
 import type { LogsConfigClient } from '../../../../../components/logs/LogsConfigEditor';
+import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
@@ -128,6 +128,14 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
+          <div className="ml-auto">
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={logsModule.id}
+              moduleName={logsModule.name}
+              initialEnabled={isEnabled}
+            />
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Publie dans un salon Discord les événements importants de ton serveur — arrivées,
@@ -147,16 +155,12 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
             {!isEnabled ? (
               <div
                 role="status"
-                className="rounded-lg border border-blue-300 bg-blue-50 p-6 text-blue-900 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-100"
+                className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
               >
                 <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-                <p className="mt-2 text-sm">
-                  Tant que le module n'est pas activé, aucun événement ne sera capturé ni envoyé
-                  vers un salon. L'activation se fait automatiquement lorsque le bot rejoint une
-                  nouvelle guild (voir <code>DEFAULT_ENABLED_MODULES</code> dans{' '}
-                  <code>apps/server/src/bin.ts</code>). Si tu as invité le bot avant que ce module
-                  existe, redémarre le serveur après avoir ajouté l'ID de ta guild dans{' '}
-                  <code>VARDE_SEED_GUILD_IDS</code>.
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Tant qu'il reste désactivé, aucun événement ne sera capturé ni envoyé vers un
+                  salon. Activez-le via le toggle en haut de la page pour reprendre la capture.
                 </p>
               </div>
             ) : (
@@ -182,10 +186,11 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Statut</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-foreground">{isEnabled ? 'Actif' : 'Inactif'}</span>
-                    <ReadonlySwitch enabled={isEnabled} />
-                  </div>
+                  <span
+                    className={isEnabled ? 'text-success font-medium' : 'text-muted-foreground'}
+                  >
+                    {isEnabled ? 'Actif' : 'Inactif'}
+                  </span>
                 </div>
                 <p className="pt-1 text-xs text-muted-foreground">
                   Les logs sont envoyés en temps réel dans le salon sélectionné.

@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
+import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
 import type { ReactionRoleMessageClient } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
 import { ReactionRolesConfigEditor } from '../../../../../components/reaction-roles/ReactionRolesConfigEditor';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
@@ -158,6 +159,14 @@ export default async function ReactionRolesPage({
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
+          <div className="ml-auto">
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={rrModule.id}
+              moduleName={rrModule.name}
+              initialEnabled={isEnabled}
+            />
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour
@@ -174,15 +183,12 @@ export default async function ReactionRolesPage({
         {!isEnabled ? (
           <div
             role="status"
-            className="rounded-lg border border-blue-300 bg-blue-50 p-6 text-blue-900 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-100"
+            className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
           >
             <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-            <p className="mt-2 text-sm">
-              Tant que le module n'est pas activé, aucune réaction ne sera traitée. L'activation se
-              fait automatiquement lorsque le bot rejoint une nouvelle guild (voir{' '}
-              <code>DEFAULT_ENABLED_MODULES</code> dans <code>apps/server/src/bin.ts</code>). Si tu
-              as invité le bot avant que ce module existe, redémarre le serveur après avoir ajouté
-              l'ID de ta guild dans <code>VARDE_SEED_GUILD_IDS</code>.
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tant qu'il reste désactivé, aucune réaction ne sera traitée. Activez-le via le toggle
+              en haut de la page pour reprendre l'attribution des rôles.
             </p>
           </div>
         ) : (

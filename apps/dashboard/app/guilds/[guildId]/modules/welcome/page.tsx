@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
+import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import { WelcomeConfigEditor } from '../../../../../components/welcome/WelcomeConfigEditor';
@@ -218,6 +219,14 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
+          <div className="ml-auto">
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={welcomeModule.id}
+              moduleName={welcomeModule.name}
+              initialEnabled={isEnabled}
+            />
+          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs.
@@ -237,7 +246,8 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
           >
             <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Tant que le module n'est pas activé, aucun message d'accueil ne sera posté.
+              Tant qu'il reste désactivé, aucun message d'accueil ne sera posté. Activez-le via le
+              toggle en haut de la page pour reprendre les envois.
             </p>
           </div>
         ) : (
