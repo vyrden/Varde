@@ -8,8 +8,8 @@ describe('manifest moderation', () => {
     expect(manifest.version).toBe('1.0.0');
   });
 
-  it('déclare 7 permissions granulaires (6 actions + cases.read)', () => {
-    expect(manifest.permissions).toHaveLength(7);
+  it('déclare 8 permissions granulaires (6 actions + cases.read + automod.manage)', () => {
+    expect(manifest.permissions).toHaveLength(8);
     const ids = manifest.permissions.map((p) => p.id);
     expect(ids).toEqual([
       'moderation.actions.warn',
@@ -19,6 +19,7 @@ describe('manifest moderation', () => {
       'moderation.actions.purge',
       'moderation.actions.slowmode',
       'moderation.cases.read',
+      'moderation.automod.manage',
     ]);
   });
 
@@ -28,15 +29,16 @@ describe('manifest moderation', () => {
     }
   });
 
-  it("range cases.read sous category='audit', les actions sous 'moderation'", () => {
+  it("range cases.read sous category='audit', les actions sous 'moderation', automod.manage sous 'config'", () => {
     const byId = new Map(manifest.permissions.map((p) => [p.id, p]));
     expect(byId.get('moderation.cases.read')?.category).toBe('audit');
     expect(byId.get('moderation.actions.warn')?.category).toBe('moderation');
     expect(byId.get('moderation.actions.ban')?.category).toBe('moderation');
+    expect(byId.get('moderation.automod.manage')?.category).toBe('config');
   });
 
-  it("n'écoute aucun event et n'en émet aucun en V1", () => {
-    expect(manifest.events.listen).toEqual([]);
+  it("écoute guild.messageCreate (automod) et n'émet aucun event", () => {
+    expect(manifest.events.listen).toEqual(['guild.messageCreate']);
     expect(manifest.events.emit).toEqual([]);
   });
 });

@@ -32,20 +32,79 @@ interface ModerationPageProps {
 
 /**
  * Lit la config moderation depuis le snapshot retourné par l'API.
- * Format `{ mutedRoleId: string|null, dmOnSanction: boolean }`. Tout
- * champ absent ou mal typé tombe sur le défaut.
+ * Format `{ mutedRoleId, dmOnSanction, automod: { rules, bypassRoleIds }}`.
+ * Tout champ absent ou mal typé tombe sur le défaut.
  */
-const normalizeConfig = (raw: unknown): { mutedRoleId: string | null; dmOnSanction: boolean } => {
-  if (typeof raw !== 'object' || raw === null) {
-    return { mutedRoleId: null, dmOnSanction: true };
-  }
+const normalizeConfig = (
+  raw: unknown,
+): {
+  mutedRoleId: string | null;
+  dmOnSanction: boolean;
+  automod: {
+    rules: ReadonlyArray<{
+      id: string;
+      label: string;
+      kind: 'blacklist' | 'regex';
+      pattern: string;
+      action: 'delete' | 'warn' | 'mute';
+      durationMs: number | null;
+      enabled: boolean;
+    }>;
+    bypassRoleIds: readonly string[];
+  };
+} => {
+  const fallback = {
+    mutedRoleId: null,
+    dmOnSanction: true,
+    automod: { rules: [], bypassRoleIds: [] },
+  } as const;
+  if (typeof raw !== 'object' || raw === null) return fallback;
   const obj = raw as Record<string, unknown>;
   const mutedRoleId =
     typeof obj['mutedRoleId'] === 'string' && obj['mutedRoleId'].length > 0
       ? (obj['mutedRoleId'] as string)
       : null;
   const dmOnSanction = typeof obj['dmOnSanction'] === 'boolean' ? obj['dmOnSanction'] : true;
-  return { mutedRoleId, dmOnSanction };
+
+  const automodRaw = obj['automod'];
+  const automod =
+    typeof automodRaw === 'object' && automodRaw !== null
+      ? (automodRaw as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const rulesRaw = Array.isArray(automod['rules']) ? (automod['rules'] as unknown[]) : [];
+  const rules = rulesRaw.flatMap((r) => {
+    if (typeof r !== 'object' || r === null) return [];
+    const rule = r as Record<string, unknown>;
+    if (
+      typeof rule['id'] !== 'string' ||
+      typeof rule['label'] !== 'string' ||
+      (rule['kind'] !== 'blacklist' && rule['kind'] !== 'regex') ||
+      typeof rule['pattern'] !== 'string' ||
+      (rule['action'] !== 'delete' && rule['action'] !== 'warn' && rule['action'] !== 'mute')
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: rule['id'],
+        label: rule['label'],
+        kind: rule['kind'] as 'blacklist' | 'regex',
+        pattern: rule['pattern'],
+        action: rule['action'] as 'delete' | 'warn' | 'mute',
+        durationMs: typeof rule['durationMs'] === 'number' ? (rule['durationMs'] as number) : null,
+        enabled: typeof rule['enabled'] === 'boolean' ? rule['enabled'] : true,
+      },
+    ];
+  });
+  const bypassRoleIds = Array.isArray(automod['bypassRoleIds'])
+    ? (automod['bypassRoleIds'] as unknown[]).filter((s): s is string => typeof s === 'string')
+    : [];
+
+  return {
+    mutedRoleId,
+    dmOnSanction,
+    automod: { rules, bypassRoleIds },
+  };
 };
 
 /**

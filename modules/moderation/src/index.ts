@@ -1,20 +1,27 @@
 import { defineModule } from '@varde/contracts';
 
+import { createAutomodHandler } from './automod.js';
 import { commands } from './commands/index.js';
 import { configSchema, configUi } from './config.js';
 import { manifest } from './manifest.js';
 
 /**
- * Module officiel `moderation`. Livre 10 commandes manuelles :
- * `/warn /kick /ban /tempban /unban /mute /tempmute /unmute /clear
- * /slowmode`. Toutes les sanctions sont auditées via
- * `ctx.audit.log` avec actions namespacées `moderation.case.*` —
- * l'historique est interrogeable via la page audit du dashboard.
+ * Module officiel `moderation`. Livre :
  *
- * Pas de handler events V1 (les commandes sont les seuls points
- * d'entrée). L'automod (filtres lexicaux, rate-limit) viendra en
- * PR 4.M.4 et accrochera `guild.messageCreate`.
+ * - 10 commandes manuelles de sanction : `/warn /kick /ban /tempban
+ *   /unban /mute /tempmute /unmute /clear /slowmode`.
+ * - 2 commandes de lecture : `/infractions @user`, `/case <ulid>`.
+ * - Automod : règles configurables (blacklist + regex) avec actions
+ *   `delete | warn | mute`, déclenchées sur `guild.messageCreate`.
+ *
+ * Toutes les actions sont auditées via `ctx.audit.log` avec actions
+ * namespacées `moderation.case.*` (sanctions) et
+ * `moderation.automod.triggered` (automod) — historique
+ * interrogeable via la page audit du dashboard et via les commandes
+ * de lookup.
  */
+const subscriptions = new Set<() => void>();
+
 export const moderation = defineModule({
   manifest,
   configSchema,
@@ -25,9 +32,13 @@ export const moderation = defineModule({
     ctx.logger.info('moderation : onLoad', {
       commandCount: Object.keys(commands).length,
     });
+    const unsub = ctx.events.on('guild.messageCreate', createAutomodHandler(ctx));
+    subscriptions.add(unsub);
   },
 
   onUnload: (ctx) => {
+    for (const unsub of subscriptions) unsub();
+    subscriptions.clear();
     ctx.logger.info('moderation : onUnload');
   },
 });

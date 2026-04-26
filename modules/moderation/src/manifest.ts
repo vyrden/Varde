@@ -73,9 +73,15 @@ export const manifest: ManifestStatic = {
       defaultLevel: 'admin',
       description: "Consulter l'historique des sanctions (`/infractions`, `/case`).",
     },
+    {
+      id: 'moderation.automod.manage' as PermissionId,
+      category: 'config',
+      defaultLevel: 'admin',
+      description: "Configurer l'automod (règles, bypass, actions).",
+    },
   ],
   events: {
-    listen: [],
+    listen: ['guild.messageCreate'],
     emit: [],
   },
 };

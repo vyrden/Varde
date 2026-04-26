@@ -17,6 +17,50 @@ import { z } from 'zod';
  */
 const SNOWFLAKE = /^\d{17,20}$/;
 
+/**
+ * Une règle d'automod. Évaluée à chaque `guild.messageCreate` non-bot
+ * et non-bypass. La première règle qui matche pose son action et
+ * stoppe l'évaluation pour ce message.
+ *
+ * - `kind: 'blacklist'` : `pattern` est traité comme une chaîne
+ *   recherchée case-insensitive (substring match). Adapté au listage
+ *   de mots interdits courants.
+ * - `kind: 'regex'` : `pattern` est compilé en RegExp avec flag `i`.
+ *   Plus puissant mais nécessite que l'admin connaisse la syntaxe.
+ *
+ * Actions :
+ * - `delete` : supprime le message.
+ * - `warn` : laisse le message, écrit une entrée audit `automod.triggered`.
+ * - `mute` : supprime le message + assigne le rôle muet (si configuré
+ *   via `mutedRoleId`). `durationMs` optionnel programme une levée
+ *   automatique via le scheduler (mêmes job keys que `/tempmute`).
+ */
+export const automodRuleSchema = z.object({
+  /** ID stable côté config (snowflake-like ULID-like). */
+  id: z.string().min(1).max(64),
+  /** Description humaine, affichée dans le dashboard. */
+  label: z.string().min(1).max(120),
+  kind: z.enum(['blacklist', 'regex']),
+  pattern: z.string().min(1).max(512),
+  action: z.enum(['delete', 'warn', 'mute']),
+  /** Pour `action: 'mute'` uniquement — durée du mute en ms. `null` = mute indéfini (admin doit unmute manuellement). */
+  durationMs: z.number().int().min(1_000).nullable().default(null),
+  enabled: z.boolean().default(true),
+});
+
+export type AutomodRule = z.infer<typeof automodRuleSchema>;
+
+export const automodConfigSchema = z.object({
+  /** Liste ordonnée — première règle qui matche gagne. */
+  rules: z.array(automodRuleSchema).default([]),
+  /** Snowflakes des rôles dont les membres ne sont pas évalués. */
+  bypassRoleIds: z
+    .array(z.string().regex(SNOWFLAKE, 'doit être un snowflake Discord (17 à 20 chiffres)'))
+    .default([]),
+});
+
+export type AutomodConfig = z.infer<typeof automodConfigSchema>;
+
 export const moderationConfigSchema = z.object({
   version: z.literal(1).default(1),
   mutedRoleId: z
@@ -25,6 +69,7 @@ export const moderationConfigSchema = z.object({
     .nullable()
     .default(null),
   dmOnSanction: z.boolean().default(true),
+  automod: automodConfigSchema.default({ rules: [], bypassRoleIds: [] }),
 });
 
 export type ModerationConfig = z.infer<typeof moderationConfigSchema>;

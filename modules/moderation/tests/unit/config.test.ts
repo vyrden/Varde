@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { moderationConfigSchema, resolveConfig } from '../../src/config.js';
 
 describe('moderation config', () => {
-  it('defaults : mutedRoleId=null, dmOnSanction=true, version=1', () => {
+  it('defaults : mutedRoleId=null, dmOnSanction=true, automod vide, version=1', () => {
     const parsed = moderationConfigSchema.parse({});
     expect(parsed).toEqual({
       version: 1,
       mutedRoleId: null,
       dmOnSanction: true,
+      automod: { rules: [], bypassRoleIds: [] },
     });
   });
 
@@ -34,7 +35,12 @@ describe('moderation config', () => {
 
 describe('resolveConfig', () => {
   it('retourne les defaults sur snapshot vide', () => {
-    expect(resolveConfig({})).toEqual({ version: 1, mutedRoleId: null, dmOnSanction: true });
+    expect(resolveConfig({})).toEqual({
+      version: 1,
+      mutedRoleId: null,
+      dmOnSanction: true,
+      automod: { rules: [], bypassRoleIds: [] },
+    });
   });
 
   it('retourne les defaults si la branche modules.moderation est absente', () => {
@@ -42,6 +48,7 @@ describe('resolveConfig', () => {
       version: 1,
       mutedRoleId: null,
       dmOnSanction: true,
+      automod: { rules: [], bypassRoleIds: [] },
     });
   });
 
@@ -55,6 +62,7 @@ describe('resolveConfig', () => {
       version: 1,
       mutedRoleId: '987654321098765432',
       dmOnSanction: false,
+      automod: { rules: [], bypassRoleIds: [] },
     });
   });
 
