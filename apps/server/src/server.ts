@@ -31,7 +31,6 @@ import type {
   ActionId,
   DiscordService,
   EventBus,
-  GuildId,
   Logger,
   ModuleId,
   PermissionId,
@@ -194,14 +193,6 @@ export interface CreateServerOptions<D extends DbDriver> {
    * (lève une erreur explicite si un module tente de l'appeler).
    */
   readonly discordService?: DiscordService;
-  /**
-   * Callback déclenché après chaque toggle d'activation d'un module
-   * via la route `PUT /guilds/:id/modules/:id/enabled`. Permet à
-   * `bin.ts` de re-publier les slash commands à Discord pour cette
-   * guild en filtrant par modules désormais activés. Best-effort —
-   * un échec ne bloque pas la réponse au client.
-   */
-  readonly onModuleToggled?: (guildId: GuildId, moduleId: ModuleId) => Promise<void>;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -533,12 +524,7 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
     ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
   });
-  registerModulesRoutes(api, {
-    loader,
-    config,
-    discord,
-    ...(options.onModuleToggled !== undefined ? { onModuleToggled: options.onModuleToggled } : {}),
-  });
+  registerModulesRoutes(api, { loader, config, discord });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
   registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });

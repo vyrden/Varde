@@ -118,7 +118,7 @@ describe('hello-world — e2e avec TestHarness', () => {
     const reply = await harness.runCommand(pingInteraction);
     expect(reply).toEqual({
       kind: 'success',
-      payload: { message: 'Pong !' },
+      payload: { message: 'pong' },
     });
   });
 
@@ -144,7 +144,7 @@ describe('hello-world — e2e avec TestHarness', () => {
     });
 
     const reply = await harness.runCommand(pingInteraction);
-    expect(reply).toMatchObject({ kind: 'success', payload: { message: 'Pong !' } });
+    expect(reply).toMatchObject({ kind: 'success', payload: { message: 'pong' } });
   });
 
   it("rollback propre : unloadAll() laisse la DB cohérente et les handlers n'émettent plus", async () => {

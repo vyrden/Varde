@@ -33,7 +33,6 @@ import {
 } from '@varde/api';
 import {
   attachDiscordClient,
-  collectEnabledCommandsForGuild,
   createDiscordJsChannelSender,
   createDiscordService,
   createOnboardingDiscordBridge,
@@ -265,7 +264,7 @@ function subscribeAutoOnboard(
       await registerSlashCommandsForGuild(
         client,
         event.guildId,
-        collectCommandsForGuild(handle, event.guildId as GuildId),
+        collectAllCommands(handle),
         logger,
       );
     }
@@ -394,14 +393,15 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
 }
 
 /**
- * Filtre les commandes à publier à Discord pour une guild donnée
- * selon les modules activés runtime. Un module désactivé pour cette
- * guild ne contribue pas ses commandes — l'admin les voit
- * apparaître/disparaître dans le client Discord en synchrone avec
- * le toggle.
+ * Liste **toutes** les commandes du registry, indépendamment de
+ * l'état d'activation per-guild. On les publie en bloc à Discord
+ * au boot — l'admin voit les commandes des modules désactivés
+ * (pattern MEE6), mais le routeur les refuse en defense-in-depth
+ * tant que le module n'est pas activé. Trade-off : zéro latence
+ * de toggle vs petite confusion possible sur les commandes vues.
  */
-const collectCommandsForGuild = (handle: ServerHandle, guildId: GuildId) =>
-  collectEnabledCommandsForGuild(handle.commandRegistry, handle.loader, guildId);
+const collectAllCommands = (handle: ServerHandle) =>
+  handle.commandRegistry.list().map((entry) => entry.command);
 
 function attachDiscordToHandle(
   attachment: DiscordAttachment,
@@ -411,13 +411,14 @@ function attachDiscordToHandle(
   attachment.client.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
+    const commands = collectAllCommands(handle);
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
       await enableDefaultModulesOn(handle, guild.id, logger);
-      // Enregistre les slash commands auprès de Discord pour cette
-      // guild, filtrées par modules activés. Idempotent : remplace
-      // l'intégralité des commandes côté Discord à chaque boot.
-      const commands = collectCommandsForGuild(handle, guild.id as GuildId);
+      // Enregistre toutes les slash commands à Discord pour cette
+      // guild. Idempotent : remplace l'intégralité des commandes
+      // côté Discord à chaque boot. Pas de re-register au toggle —
+      // les modules désactivés sont rejetés par le router au runtime.
       await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
@@ -456,14 +457,6 @@ async function main(): Promise<void> {
   // recevoir les events gateway.
   const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
 
-  // Holder de la callback `onModuleToggled` : assignée après que
-  // `handle` (et donc `commandRegistry`/`loader`) est disponible. Le
-  // closure passé à `createServer` lit `slashSyncRef.fn` à chaque
-  // toggle — pattern late-binding via référence mutable.
-  const slashSyncRef: {
-    fn: ((guildId: GuildId, moduleId: ModuleId) => Promise<void>) | null;
-  } = { fn: null };
-
   const driver = pickDriver(databaseUrl);
   const handle =
     driver === 'pg'
@@ -480,9 +473,6 @@ async function main(): Promise<void> {
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
           welcomeUploads,
-          onModuleToggled: async (g, m) => {
-            await slashSyncRef.fn?.(g, m);
-          },
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -497,9 +487,6 @@ async function main(): Promise<void> {
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
           welcomeUploads,
-          onModuleToggled: async (g, m) => {
-            await slashSyncRef.fn?.(g, m);
-          },
         });
 
   handle.loader.register(helloWorld);
@@ -528,15 +515,6 @@ async function main(): Promise<void> {
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
     discord !== null && discordAttachment !== null ? discordAttachment.client : null,
   );
-
-  // Late-binding : la callback de re-publication des slash commands
-  // est désormais opérationnelle (registry hydraté + handle dispo).
-  // Le toggle d'un module appelera ceci pour synchroniser Discord.
-  slashSyncRef.fn = async (guildId: GuildId) => {
-    if (discordAttachment === null) return;
-    const commands = collectCommandsForGuild(handle, guildId);
-    await registerSlashCommandsForGuild(discordAttachment.client, guildId, commands, logger);
-  };
 
   await seedFromEnv(handle, seedIds, logger);
 

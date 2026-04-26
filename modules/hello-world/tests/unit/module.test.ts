@@ -82,8 +82,8 @@ describe('helloWorld — locales', () => {
   });
 
   it('ping.pong existe dans les deux locales', () => {
-    expect(locales.fr['ping.pong']).toBe('Pong !');
-    expect(locales.en['ping.pong']).toBe('Pong!');
+    expect(locales.fr['ping.pong']).toBe('pong');
+    expect(locales.en['ping.pong']).toBe('pong');
   });
 
   it('welcome.greeting contient le placeholder {userId}', () => {

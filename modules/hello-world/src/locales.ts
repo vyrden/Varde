@@ -5,11 +5,11 @@
  */
 export const locales = {
   fr: {
-    'ping.pong': 'Pong !',
+    'ping.pong': 'pong',
     'welcome.greeting': 'Bienvenue, <@{userId}> !',
   },
   en: {
-    'ping.pong': 'Pong!',
+    'ping.pong': 'pong',
     'welcome.greeting': 'Welcome, <@{userId}>!',
   },
 } as const;

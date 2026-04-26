@@ -62,14 +62,6 @@ export interface RegisterModulesRoutesOptions {
   readonly loader: PluginLoader;
   readonly config: CoreConfigService;
   readonly discord: DiscordClient;
-  /**
-   * Callback optionnel appelé après chaque toggle d'activation pour
-   * que l'hôte (apps/server) re-publie les slash commands à Discord
-   * en filtrant par modules activés sur cette guild. Sans callback,
-   * le toggle change seulement l'état runtime côté loader — les
-   * commandes restantes côté Discord ne sont pas synchronisées.
-   */
-  readonly onModuleToggled?: (guildId: GuildId, moduleId: ModuleId) => Promise<void>;
 }
 
 const extractModuleConfig = (
@@ -230,20 +222,6 @@ export function registerModulesRoutes(
         'loader_failed',
         `loader.${enabled ? 'enable' : 'disable'} a échoué : ${message}`,
       );
-    }
-
-    // Synchronise les slash commands côté Discord pour cette guild :
-    // ajoute celles du module si on vient de l'activer, retire-les
-    // sinon. Best-effort : un échec ne bloque pas la réponse au client.
-    if (options.onModuleToggled) {
-      try {
-        await options.onModuleToggled(guildId as GuildId, moduleId as ModuleId);
-      } catch (error) {
-        request.log.warn(
-          { err: error instanceof Error ? error.message : String(error) },
-          'onModuleToggled callback a échoué',
-        );
-      }
     }
 
     void reply.status(204).send();
