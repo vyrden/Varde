@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import {
   type Authenticator,
+  buildAiProviderForGuild,
   createApiServer,
   createDiscordClient,
   createJwtAuthenticator,
@@ -29,6 +30,7 @@ import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@v
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
 import type {
   ActionId,
+  AIService,
   DiscordService,
   EventBus,
   GuildId,
@@ -99,6 +101,46 @@ const ensurePseudoModuleRegistered = async <D extends DbDriver>(
     .values({ id: moduleId, version: '1.0.0', manifest: {}, schemaVersion: 0 })
     .onConflictDoNothing({ target: sqliteSchema.modulesRegistry.id })
     .run();
+};
+
+/**
+ * Construit l'`AIService` exposé à `ctx.ai` pour une guild donnée.
+ * Le `AIProvider` sous-jacent est résolu via `buildAiProviderForGuild`
+ * de manière paresseuse (1ʳᵉ utilisation seulement) puis mémoïsé dans
+ * la closure ; les rappels suivants delegate sans aller-retour DB.
+ *
+ * Seules les méthodes nécessaires au runtime moderation (`classify`)
+ * sont implémentées concrètement. `complete` et `summarize` jettent
+ * un `Error` non-implémenté — elles ne sont pas câblées par ailleurs
+ * et un consommateur tiers est invité à passer par l'API
+ * `apps/api/onboarding-ai-routes` pour `complete`/`generatePreset`.
+ */
+const createGuildAiService = (
+  guildId: GuildId,
+  config: CoreConfigService,
+  keystore: ReturnType<typeof createKeystoreService>,
+): AIService => {
+  let providerPromise: Promise<{
+    readonly classify: (text: string, labels: readonly string[]) => Promise<string>;
+  }> | null = null;
+  const getProvider = () => {
+    if (providerPromise === null) {
+      providerPromise = buildAiProviderForGuild({ config, keystore, guildId });
+    }
+    return providerPromise;
+  };
+  return {
+    async classify(text, labels) {
+      const provider = await getProvider();
+      return provider.classify(text, labels);
+    },
+    async complete() {
+      throw new Error('AIService.complete : non implémenté côté runtime moderation');
+    },
+    async summarize() {
+      throw new Error('AIService.summarize : non implémenté côté runtime moderation');
+    },
+  };
 };
 
 /**
@@ -274,6 +316,43 @@ export async function createServer<D extends DbDriver>(
     executor: onboardingExecutor,
   });
 
+  // Keystore IA + factory AIService par-guild. Le keystore lit/écrit
+  // les clés API chiffrées (`core.ai.providerApiKey`). La factory
+  // résout pour chaque guild un `AIService` minimaliste qui delegate
+  // à un `AIProvider` lazy-construit via `buildAiProviderForGuild` ;
+  // le provider lui-même est mémoïsé par `AIService` pour ne pas
+  // refaire d'aller-retour DB à chaque message classifié.
+  //
+  // Les `AIService` sont cachés par `guildId` et invalidés à chaque
+  // `config.changed` scope `modules.core.ai` ou `modules.ai`
+  // (l'admin a édité son provider depuis `/settings/ai`).
+  const aiModuleId = 'core.ai' as ModuleId;
+  await ensurePseudoModuleRegistered(client, aiModuleId);
+  const aiKeystore = createKeystoreService({
+    client,
+    moduleId: aiModuleId,
+    masterKey: options.keystore?.masterKey ?? randomBytes(32),
+    ...(options.keystore?.previousMasterKey
+      ? { previousMasterKey: options.keystore.previousMasterKey }
+      : {}),
+  });
+
+  const aiServiceCache = new Map<GuildId, ReturnType<typeof createGuildAiService>>();
+  const aiFactory = (guildId: GuildId) => {
+    let svc = aiServiceCache.get(guildId);
+    if (!svc) {
+      svc = createGuildAiService(guildId, config, aiKeystore);
+      aiServiceCache.set(guildId, svc);
+    }
+    return svc;
+  };
+  // Invalidation cache IA à chaque changement de config IA d'une guild.
+  // On évite de purger toutes les guilds — le cache est par-guild,
+  // seul l'event `core.ai` (scope `modules.ai`) compte.
+  eventBus.on('config.changed', (event) => {
+    aiServiceCache.delete(event.guildId);
+  });
+
   // Cache des locales effectives par guild. Source de vérité :
   // `core.bot-settings.language` (édité depuis `/guilds/<id>/settings/bot`).
   // Le cache est rafraîchi à chaque `config.changed` ; la première
@@ -309,6 +388,7 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
     ...(options.locales !== undefined ? { locales: options.locales } : {}),
     ...(options.defaultLocale !== undefined ? { defaultLocale: options.defaultLocale } : {}),
+    aiFactory,
     getGuildLocale: (guildId) => {
       const cached = guildLocales.get(guildId);
       if (cached !== undefined) return cached;
@@ -504,22 +584,6 @@ export async function createServer<D extends DbDriver>(
       },
     };
   };
-
-  // Paramètres IA (jalon 3) : keystore scopé `core.ai` pour les
-  // credentials, config non-sensible dans `guild_config`. Le
-  // keystore référence modules_registry via FK, on y insère donc
-  // un pseudo-module idempotent — il n'apparaît pas dans /modules
-  // (ce dernier lit `loader.loadOrder()`, pas la table).
-  const aiModuleId = 'core.ai' as ModuleId;
-  await ensurePseudoModuleRegistered(client, aiModuleId);
-  const aiKeystore = createKeystoreService({
-    client,
-    moduleId: aiModuleId,
-    masterKey: options.keystore?.masterKey ?? randomBytes(32),
-    ...(options.keystore?.previousMasterKey
-      ? { previousMasterKey: options.keystore.previousMasterKey }
-      : {}),
-  });
 
   // Scheduler scopé au pseudo-module `core.onboarding` pour tenir les
   // jobs d'auto-expiration des sessions appliquées (PR 3.12b). Chaque

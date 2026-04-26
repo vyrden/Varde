@@ -1,3 +1,4 @@
+export { buildAiProviderForGuild } from './ai-provider-builder.js';
 export {
   type CreateDiscordClientOptions,
   createDiscordClient,

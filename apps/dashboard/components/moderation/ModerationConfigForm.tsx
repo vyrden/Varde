@@ -412,64 +412,61 @@ interface RuleEditorProps {
 function RuleEditor({ rule, pending, onChange, onRemove }: RuleEditorProps): ReactElement {
   return (
     <>
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="flex min-w-40 flex-1 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${KIND_BADGE_CLASS[rule.kind]}`}
-            >
-              {KIND_LABEL[rule.kind]}
-            </span>
-            <span className="text-[11px] text-muted-foreground">{KIND_HINT[rule.kind]}</span>
-          </div>
-          <Input
-            aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
-            value={rule.label}
-            onChange={(e) => onChange({ ...rule, label: e.target.value })}
-            placeholder="Libellé court (ex. mots-grossiers)"
-            disabled={pending}
-          />
-        </div>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${KIND_BADGE_CLASS[rule.kind]}`}
+        >
+          {KIND_LABEL[rule.kind]}
+        </span>
+        <span className="flex-1 truncate text-[11px] text-muted-foreground">
+          {KIND_HINT[rule.kind]}
+        </span>
+        <Toggle
+          checked={rule.enabled}
+          onCheckedChange={(next) => onChange({ ...rule, enabled: next })}
+          disabled={pending}
+          label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          disabled={pending}
+          aria-label={`Supprimer ${rule.label || 'la règle'}`}
+          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        >
+          ✕
+        </Button>
+      </div>
 
-        <div className="flex items-center gap-2 self-stretch">
-          <div className="relative">
-            <span
-              aria-hidden="true"
-              className={`pointer-events-none absolute top-1/2 left-2.5 size-2 -translate-y-1/2 rounded-full ${ACTION_DOT[rule.action]}`}
-            />
-            <Select
-              aria-label="Action"
-              value={rule.action}
-              onChange={(e) =>
-                onChange({ ...rule, action: e.target.value as 'delete' | 'warn' | 'mute' })
-              }
-              wrapperClassName="w-32"
-              disabled={pending}
-              className="pl-7"
-            >
-              <option value="delete">Delete</option>
-              <option value="warn">Warn</option>
-              <option value="mute">Mute</option>
-            </Select>
-          </div>
-          <Toggle
-            checked={rule.enabled}
-            onCheckedChange={(next) => onChange({ ...rule, enabled: next })}
-            disabled={pending}
-            label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onRemove}
-            disabled={pending}
-            aria-label={`Supprimer ${rule.label || 'la règle'}`}
-            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            ✕
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
+          value={rule.label}
+          onChange={(e) => onChange({ ...rule, label: e.target.value })}
+          placeholder="Libellé court (ex. mots-grossiers)"
+          className="min-w-40 flex-1"
+          disabled={pending}
+        />
+        <span
+          aria-hidden="true"
+          className={`size-2 shrink-0 rounded-full ${ACTION_DOT[rule.action]}`}
+          title={`Action : ${rule.action}`}
+        />
+        <Select
+          aria-label="Action"
+          value={rule.action}
+          onChange={(e) =>
+            onChange({ ...rule, action: e.target.value as 'delete' | 'warn' | 'mute' })
+          }
+          wrapperClassName="w-32 shrink-0"
+          disabled={pending}
+        >
+          <option value="delete">Delete</option>
+          <option value="warn">Warn</option>
+          <option value="mute">Mute</option>
+        </Select>
       </div>
 
       {rule.kind === 'blacklist' || rule.kind === 'regex' ? (

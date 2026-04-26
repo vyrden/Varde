@@ -88,6 +88,16 @@ export interface AIProvider {
   readonly generatePreset: (input: GeneratePresetInput) => Promise<PresetProposal>;
   readonly suggestCompletion: (input: SuggestCompletionInput) => Promise<readonly Suggestion[]>;
   readonly testConnection: () => Promise<ProviderInfo>;
+  /**
+   * Classifie un texte parmi un ensemble de labels. Retourne le label
+   * que le modèle estime le plus probable. Si le modèle hallucine
+   * hors du pool fourni, l'appelant traite ça comme un fail-open
+   * (cf. `automod` côté `moderation`).
+   *
+   * Utilisé en runtime par les règles `automod` `kind: 'ai-classify'`.
+   * Le call est bornable côté caller (longueur de texte, timeout).
+   */
+  readonly classify: (text: string, labels: readonly string[]) => Promise<string>;
 }
 
 // ─── Erreurs typées ───────────────────────────────────────────────

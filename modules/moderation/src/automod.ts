@@ -4,6 +4,7 @@ import type {
   GuildMessageCreateEvent,
   ModuleContext,
   RoleId,
+  UserId,
 } from '@varde/contracts';
 
 import {
@@ -16,6 +17,7 @@ import {
   type AutomodRule,
   resolveConfig,
 } from './config.js';
+import { sendSanctionDm } from './dm.js';
 
 /**
  * Runtime automod : écoute `guild.messageCreate`, évalue les règles
@@ -139,8 +141,22 @@ const applyAction = async (
   event: GuildMessageCreateEvent,
   rule: AutomodRule,
   mutedRoleId: string | null,
+  dmOnSanction: boolean,
 ): Promise<{ readonly applied: 'delete' | 'warn' | 'mute' | 'mute-no-role' }> => {
+  const guildName = ctx.discord.getGuildName(event.guildId) ?? 'le serveur';
+
   if (rule.action === 'warn') {
+    // Le warn ne supprime rien et ne sanctionne rien côté Discord —
+    // sans feedback DM, le membre n'a aucun signal qu'une règle a
+    // déclenché. On envoie donc systématiquement un DM si
+    // `dmOnSanction` est actif (échec silencieux si DMs fermés).
+    if (dmOnSanction) {
+      void sendSanctionDm(ctx, event.authorId as UserId, {
+        action: 'warn',
+        guildName,
+        reason: `Règle automod : ${rule.label}`,
+      });
+    }
     return { applied: 'warn' };
   }
 
@@ -156,6 +172,13 @@ const applyAction = async (
   }
 
   if (rule.action === 'delete') {
+    if (dmOnSanction) {
+      void sendSanctionDm(ctx, event.authorId as UserId, {
+        action: 'warn',
+        guildName,
+        reason: `Message supprimé par automod : ${rule.label}`,
+      });
+    }
     return { applied: 'delete' };
   }
 
@@ -175,6 +198,17 @@ const applyAction = async (
       error: error instanceof Error ? error.message : String(error),
     });
     return { applied: 'mute-no-role' };
+  }
+
+  if (dmOnSanction) {
+    void sendSanctionDm(ctx, event.authorId as UserId, {
+      action: rule.durationMs !== null ? 'tempmute' : 'mute',
+      guildName,
+      reason: `Règle automod : ${rule.label}`,
+      ...(rule.durationMs !== null
+        ? { durationFormatted: `${Math.round(rule.durationMs / 1000)} s` }
+        : {}),
+    });
   }
 
   if (rule.durationMs !== null) {
@@ -241,11 +275,13 @@ export function createAutomodHandler(
   return async (event: GuildMessageCreateEvent) => {
     let cfg: AutomodConfig;
     let mutedRoleId: string | null;
+    let dmOnSanction: boolean;
     try {
       const raw = await ctx.config.get(event.guildId);
       const moderationCfg = resolveConfig(raw);
       cfg = moderationCfg.automod;
       mutedRoleId = moderationCfg.mutedRoleId;
+      dmOnSanction = moderationCfg.dmOnSanction;
     } catch (error) {
       ctx.logger.debug('automod : config indisponible, skip', {
         guildId: event.guildId,
@@ -287,7 +323,7 @@ export function createAutomodHandler(
       ...(matched.kind === 'ai-classify' ? { aiCategory: matched.category } : {}),
     });
 
-    const result = await applyAction(ctx, event, matched.rule, mutedRoleId);
+    const result = await applyAction(ctx, event, matched.rule, mutedRoleId, dmOnSanction);
 
     void ctx.audit.log({
       guildId: event.guildId,

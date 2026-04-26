@@ -333,6 +333,32 @@ export function createOpenAICompatibleProvider(
       return data;
     },
 
+    async classify(text, labels) {
+      // Prompt simple en text mode (pas JSON) pour minimiser la
+      // latence — on attend juste un label brut. Hors-pool ⇒ caller
+      // fail-open vers `safe`.
+      const labelList = labels.join(', ');
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: `You are a Discord content classifier. You receive a message and a list of categories. Reply with EXACTLY ONE of the listed labels, no quotes, no explanation. Allowed categories: ${labelList}.`,
+        },
+        { role: 'user', content: text.slice(0, 2000) },
+      ];
+      try {
+        const { content } = await chat(messages);
+        const trimmed = content.trim().toLowerCase();
+        for (const label of labels) {
+          if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+            return label;
+          }
+        }
+        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
+      } catch {
+        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
+      }
+    },
+
     async testConnection(): Promise<ProviderInfo> {
       const startedAt = Date.now();
       const controller = new AbortController();

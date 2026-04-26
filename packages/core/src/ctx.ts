@@ -54,8 +54,23 @@ export interface CreateCtxFactoryOptions<D extends DbDriver> {
   readonly discord?: DiscordService;
   /** Service inter-modules. Stub si omis. */
   readonly modules?: ModulesService;
-  /** Service IA. `null` en V1 si aucun provider configuré. */
+  /**
+   * Service IA. `null` si aucun provider configuré globalement.
+   * Pour un service IA résolu par-guild (cas usuel quand chaque guild
+   * a son propre provider configuré via `/settings/ai`), utiliser
+   * plutôt `aiFactory` ; le ctx factory privilégie `aiFactory` quand
+   * `guildId` est passé.
+   */
   readonly ai?: AIService | null;
+  /**
+   * Factory d'AIService par-guild. Si fournie ET que `factory(ref, guildId)`
+   * est appelé avec un `guildId`, l'AIService retourné est utilisé
+   * en place du `ai` global. Permet à chaque guild d'avoir sa propre
+   * config IA (provider, clé) sans partager d'instance entre guilds.
+   * Retourne `null` pour signifier « pas d'IA configurée pour cette
+   * guild » (équivalent à `ctx.ai === null`).
+   */
+  readonly aiFactory?: (guildId: GuildId) => AIService | null;
   /**
    * Point d'extension onboarding pour les modules (PR 3.13). Permet
    * de `registerAction` (ajoute une action custom au registre de
@@ -227,6 +242,7 @@ export function createCtxFactory<D extends DbDriver>(
     discord = discordStub,
     modules = modulesStub,
     ai = null,
+    aiFactory,
     onboarding = onboardingStub,
     defaultLocale = 'en',
     locales = {},
@@ -332,7 +348,7 @@ export function createCtxFactory<D extends DbDriver>(
       i18n: i18nFor(moduleId, guildId),
       modules,
       keystore: keystoreFor(moduleId),
-      ai,
+      ai: guildId !== undefined && aiFactory ? aiFactory(guildId) : ai,
       ui,
       onboarding,
       interactions: interactions.serviceFor(moduleId),

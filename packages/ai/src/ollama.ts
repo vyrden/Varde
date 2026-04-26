@@ -267,6 +267,35 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
       return data;
     },
 
+    async classify(text, labels) {
+      // Prompt simple : on demande un seul label parmi le pool. La
+      // réponse hors-pool est traitée comme « safe » côté caller
+      // (cf. `classifyAgainst` dans `automod`).
+      const labelList = labels.join(', ');
+      const messages: OllamaMessage[] = [
+        {
+          role: 'system',
+          content: `Tu es un classifier de contenu Discord. On te donne un message et une liste de catégories. Réponds avec UN SEUL des labels listés, exactement, sans guillemets, sans explication. Catégories possibles : ${labelList}.`,
+        },
+        { role: 'user', content: text.slice(0, 2000) },
+      ];
+      try {
+        const { content } = await chat(messages);
+        const trimmed = content.trim().toLowerCase();
+        // Le JSON-mode d'Ollama peut envelopper la réponse — on essaye
+        // de tirer le label le plus simple qui matche.
+        for (const label of labels) {
+          if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+            return label;
+          }
+        }
+        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
+      } catch {
+        // Erreur réseau / timeout : fail-open vers `safe`.
+        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
+      }
+    },
+
     async testConnection(): Promise<ProviderInfo> {
       const startedAt = Date.now();
       const controller = new AbortController();

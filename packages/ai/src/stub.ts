@@ -271,6 +271,10 @@ export function createStubProvider(): AIProvider {
         details: 'provider stub local, aucune dépendance externe',
       };
     },
+
+    async classify(text, labels) {
+      return stubClassify(text, labels);
+    },
   };
 }
 
@@ -278,3 +282,32 @@ export function createStubProvider(): AIProvider {
 export const STUB_KEYWORD_RULES = KEYWORD_RULES;
 /** Expose le nombre de presets indexés — utile en test. */
 export const STUB_PRESET_COUNT = PRESET_CATALOG.length;
+
+/**
+ * Mots-clés rule-based par catégorie de risque, pour le classify
+ * stub. Très volontairement minimaliste — l'admin qui a besoin d'un
+ * vrai classifier branche un provider Ollama / OpenAI-compat. Le
+ * stub sert seulement à démontrer le câblage et à donner un repli
+ * déterministe en CI / pendant les démos.
+ *
+ * Match : substring case-insensitive. Pas de fuzzing, pas de
+ * morphologie — c'est un stub.
+ */
+const STUB_TOXICITY_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
+  toxicity: ['idiot', 'crétin', 'imbécile', 'nul', 'stupid', 'moron'],
+  harassment: ['ferme-la', 'ta gueule', 'shut up', 'shutup', 'shut the fuck up', 'stfu'],
+  hate: ['raciste', 'racist', 'homophobe', 'antisémite', 'antisemite'],
+  sexual: ['nsfw', 'porn', 'sex', 'sexe', 'pute'],
+  'self-harm': ['suicide', 'kill yourself', 'kys', 'auto-mutilation'],
+  spam: ['discord.gg/', 'free nitro', 'nitro gratis', 'click here'],
+};
+
+const stubClassify = async (text: string, labels: readonly string[]): Promise<string> => {
+  const lower = text.toLowerCase();
+  for (const label of labels) {
+    if (label === 'safe') continue;
+    const keywords = STUB_TOXICITY_KEYWORDS[label] ?? [];
+    if (keywords.some((k) => lower.includes(k))) return label;
+  }
+  return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
+};

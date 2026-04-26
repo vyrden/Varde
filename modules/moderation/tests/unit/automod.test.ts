@@ -312,6 +312,8 @@ describe('createAutomodHandler', () => {
         addMemberRole: vi.fn().mockResolvedValue(undefined),
         removeMemberRole: vi.fn().mockResolvedValue(undefined),
         memberHasRole: vi.fn().mockResolvedValue(false),
+        sendDirectMessage: vi.fn().mockResolvedValue(true),
+        getGuildName: vi.fn().mockReturnValue('Test Guild'),
       },
       scheduler: { in: vi.fn().mockResolvedValue(undefined) },
     };
