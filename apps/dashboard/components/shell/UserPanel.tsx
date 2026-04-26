@@ -44,20 +44,20 @@ export function UserPanel({
 }: UserPanelProps): ReactElement {
   const initial = name.charAt(0).toUpperCase() || '?';
   return (
-    <div className="flex items-center gap-2 border-t border-black/30 bg-rail px-2 py-2">
-      <div className="relative h-8 w-8 shrink-0">
+    <div className="flex items-center gap-2.5 border-t border-black/30 bg-rail px-3 py-2.5">
+      <div className="relative h-10 w-10 shrink-0">
         {avatarUrl ? (
           <Image
             src={avatarUrl}
             alt=""
-            width={32}
-            height={32}
-            className="h-8 w-8 select-none rounded-full"
+            width={40}
+            height={40}
+            className="h-10 w-10 select-none rounded-full"
           />
         ) : (
           <div
             aria-hidden="true"
-            className="flex h-8 w-8 select-none items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+            className="flex h-10 w-10 select-none items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground"
           >
             {initial}
           </div>
@@ -66,20 +66,23 @@ export function UserPanel({
           <Image
             src={avatarDecorationUrl}
             alt=""
-            width={45}
-            height={45}
+            width={56}
+            height={56}
             aria-hidden="true"
-            className="pointer-events-none absolute -inset-1.5 h-11 w-11 max-w-none select-none"
+            className="pointer-events-none absolute -inset-2 h-14 w-14 max-w-none select-none"
           />
         ) : null}
         <span
           aria-hidden="true"
-          className="absolute -right-0.5 -bottom-0.5 z-10 h-2.5 w-2.5 rounded-full border-2 border-rail bg-success"
+          className="absolute right-0 bottom-0 z-10 h-3 w-3 rounded-full border-[3px] border-rail bg-success"
         />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-semibold leading-tight text-foreground" title={name}>
+        <span
+          className="truncate text-[15px] font-semibold leading-tight text-foreground"
+          title={name}
+        >
           {name}
         </span>
         <span className="flex items-center gap-1">
@@ -101,11 +104,11 @@ export function UserPanel({
           <button
             type="submit"
             aria-label="Se déconnecter"
-            className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors duration-150 ease-out hover:bg-destructive/15 hover:text-destructive focus-visible:bg-destructive/15 focus-visible:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground transition-colors duration-150 ease-out hover:bg-destructive/15 hover:text-destructive focus-visible:bg-destructive/15 focus-visible:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <svg
-              width="18"
-              height="18"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
