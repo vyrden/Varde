@@ -44,6 +44,7 @@ import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld } from '@varde/module-hello-world';
 import { logs } from '@varde/module-logs';
+import { moderation } from '@varde/module-moderation';
 import { reactionRoles } from '@varde/module-reaction-roles';
 import { welcome } from '@varde/module-welcome';
 import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
@@ -54,19 +55,21 @@ type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
 const LOGS_ID = 'logs' as ModuleId;
+const MODERATION_ID = 'moderation' as ModuleId;
 const REACTION_ROLES_ID = 'reaction-roles' as ModuleId;
 const WELCOME_ID = 'welcome' as ModuleId;
 
 /**
  * Modules activés par défaut sur toute guild connue. `hello-world`
  * reste dans la liste tant qu'il sert de témoin ; `logs`,
- * `reaction-roles` et `welcome` sont les modules officiels V1 (jalon 4).
- * Les deux autres (`moderation`, `onboarding-presets`) s'y ajouteront à
- * mesure de leur livraison.
+ * `moderation`, `reaction-roles` et `welcome` sont les modules
+ * officiels V1 (jalon 4). `onboarding-presets` s'y ajoutera quand
+ * il sera livré.
  */
 const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [
   HELLO_WORLD_ID,
   LOGS_ID,
+  MODERATION_ID,
   REACTION_ROLES_ID,
   WELCOME_ID,
 ];
@@ -493,6 +496,7 @@ async function main(): Promise<void> {
 
   handle.loader.register(helloWorld);
   handle.loader.register(logs);
+  handle.loader.register(moderation);
   handle.loader.register(reactionRoles);
   handle.loader.register(welcome);
   await handle.loader.loadAll();

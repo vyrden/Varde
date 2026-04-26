@@ -69,6 +69,13 @@ export interface AuditService {
   readonly log: (entry: AuditEntry) => Promise<void>;
 }
 
+/**
+ * Raison d'un refus de `DiscordService.canModerate`. Stable enum —
+ * les modules s'en servent pour brancher des messages d'erreur
+ * localisés.
+ */
+export type ModerationCheckReason = 'self' | 'bot' | 'owner' | 'rank' | 'unknown';
+
 /** Service de permissions applicatives. */
 export interface PermissionService {
   readonly can: (
@@ -315,6 +322,32 @@ export interface DiscordService {
    * `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
    */
   readonly setChannelSlowmode: (channelId: ChannelId, seconds: number) => Promise<void>;
+
+  /**
+   * Vérifie qu'un modérateur peut sanctionner une cible. Encapsule
+   * les règles de hiérarchie Discord côté serveur :
+   *
+   * - `self` : le mod cible lui-même → refus.
+   * - `bot` : la cible est le bot Discord → refus.
+   * - `owner` : la cible est le propriétaire de la guild → refus.
+   * - `rank` : le rôle le plus haut du mod (ou du bot) ne dépasse
+   *   pas celui de la cible → refus.
+   * - `unknown` : guild non en cache → refus défensif.
+   *
+   * Si la cible n'est pas membre (ban préventif sur snowflake
+   * externe), aucune contrainte de hiérarchie ne s'applique → `ok`.
+   *
+   * Pas d'effet de bord : pas de log audit, pas de DM, pas de
+   * mutation Discord. C'est au handler d'appeler ce check avant la
+   * mutation et de produire un `ctx.ui.error` adapté en cas de refus.
+   */
+  readonly canModerate: (
+    guildId: GuildId,
+    modUserId: UserId,
+    targetUserId: UserId,
+  ) => Promise<
+    { readonly ok: true } | { readonly ok: false; readonly reason: ModerationCheckReason }
+  >;
 
   /**
    * Retourne le nombre de membres d'une guild si elle est en cache,

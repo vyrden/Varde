@@ -157,6 +157,8 @@ interface GuildMemberLike {
     readonly cache: { has: (roleId: string) => boolean };
     readonly add: (roleId: string) => Promise<unknown>;
     readonly remove: (roleId: string) => Promise<unknown>;
+    /** Rôle le plus haut du membre — exposé par discord.js v14 sur `roles.highest`. */
+    readonly highest?: { readonly position: number };
   };
   readonly kick?: (reason?: string) => Promise<unknown>;
 }
@@ -165,8 +167,15 @@ interface GuildMemberLike {
 interface GuildLike {
   readonly name: string;
   readonly memberCount?: number;
+  /** Snowflake du propriétaire de la guild. */
+  readonly ownerId?: string;
+  /**
+   * Membre représentant le bot lui-même. `null` si pas (encore) en
+   * cache — on retombe sur `members.fetchMe()` côté impl V2 si besoin.
+   */
   readonly members: {
     readonly fetch: (userId: string) => Promise<GuildMemberLike>;
+    readonly me?: GuildMemberLike | null;
     /**
      * `members.ban(userId, { deleteMessageSeconds, reason })` — discord.js
      * v14 : `deleteMessageDays` est déprécié au profit de `deleteMessageSeconds`.
@@ -731,6 +740,56 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           `DiscordService.setChannelSlowmode : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    },
+
+    async canModerate(guildId, modUserId, targetUserId) {
+      // Auto-cible : refus immédiat sans toucher Discord.
+      if (modUserId === targetUserId) return { ok: false, reason: 'self' };
+
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) return { ok: false, reason: 'unknown' };
+
+      // Bot lui-même : on lit l'id depuis client.user.
+      const botUserId = client?.user?.id;
+      if (botUserId !== undefined && targetUserId === botUserId) {
+        return { ok: false, reason: 'bot' };
+      }
+
+      // Propriétaire de la guild : intouchable.
+      if (guild.ownerId !== undefined && targetUserId === guild.ownerId) {
+        return { ok: false, reason: 'owner' };
+      }
+
+      // Récupère la cible. Si introuvable (= pas membre), pas de
+      // contrainte de hiérarchie — utile pour /unban et /ban
+      // préventif sur snowflake externe.
+      let targetMember: GuildMemberLike | null = null;
+      try {
+        targetMember = await guild.members.fetch(targetUserId);
+      } catch {
+        return { ok: true };
+      }
+      const targetPos = targetMember.roles.highest?.position ?? 0;
+
+      // Mod : doit dépasser la cible.
+      let modMember: GuildMemberLike;
+      try {
+        modMember = await guild.members.fetch(modUserId);
+      } catch {
+        // Mod introuvable (cas pathologique) — refus défensif.
+        return { ok: false, reason: 'unknown' };
+      }
+      const modPos = modMember.roles.highest?.position ?? 0;
+      if (modPos <= targetPos) return { ok: false, reason: 'rank' };
+
+      // Bot : doit dépasser la cible (sinon Discord refusera l'action).
+      const botMember = guild.members.me ?? null;
+      const botPos = botMember?.roles.highest?.position;
+      if (botPos === undefined || botPos <= targetPos) {
+        return { ok: false, reason: 'rank' };
+      }
+
+      return { ok: true };
     },
 
     getMemberCount(guildId) {

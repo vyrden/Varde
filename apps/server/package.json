@@ -23,6 +23,7 @@
     "@varde/db": "workspace:*",
     "@varde/module-hello-world": "workspace:*",
     "@varde/module-logs": "workspace:*",
+    "@varde/module-moderation": "workspace:*",
     "@varde/module-reaction-roles": "workspace:*",
     "@varde/module-welcome": "workspace:*",
     "@varde/presets": "workspace:*",

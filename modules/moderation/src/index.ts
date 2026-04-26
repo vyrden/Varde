@@ -1,29 +1,30 @@
 import { defineModule } from '@varde/contracts';
 
+import { commands } from './commands/index.js';
 import { configSchema, configUi } from './config.js';
 import { manifest } from './manifest.js';
 
 /**
- * Module officiel `moderation`. PR 4.M.1 = squelette uniquement :
- * manifeste avec 7 permissions déclarées + config minimale +
- * lifecycle hooks vides.
+ * Module officiel `moderation`. Livre 10 commandes manuelles :
+ * `/warn /kick /ban /tempban /unban /mute /tempmute /unmute /clear
+ * /slowmode`. Toutes les sanctions sont auditées via
+ * `ctx.audit.log` avec actions namespacées `moderation.case.*` —
+ * l'historique est interrogeable via la page audit du dashboard.
  *
- * Pas de `commands` déclaré pour l'instant — c'est volontaire. Si on
- * en déclarait sans handler, le `CommandRegistry` les enregistrerait
- * et le bot tenterait de router des commandes inconnues vers ce
- * module au moindre appel. Les handlers arrivent avec leurs
- * permissions câblées en PR 4.M.2.
- *
- * Le module n'est pas encore enregistré dans `apps/server/src/bin.ts`
- * — on l'y branchera quand il aura une utilité runtime.
+ * Pas de handler events V1 (les commandes sont les seuls points
+ * d'entrée). L'automod (filtres lexicaux, rate-limit) viendra en
+ * PR 4.M.4 et accrochera `guild.messageCreate`.
  */
 export const moderation = defineModule({
   manifest,
   configSchema,
   configUi,
+  commands,
 
   onLoad: (ctx) => {
-    ctx.logger.info('moderation : onLoad — squelette PR 4.M.1');
+    ctx.logger.info('moderation : onLoad', {
+      commandCount: Object.keys(commands).length,
+    });
   },
 
   onUnload: (ctx) => {

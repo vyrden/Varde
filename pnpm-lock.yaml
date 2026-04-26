@@ -206,6 +206,9 @@ importers:
       '@varde/module-logs':
         specifier: workspace:*
         version: link:../../modules/logs
+      '@varde/module-moderation':
+        specifier: workspace:*
+        version: link:../../modules/moderation
       '@varde/module-reaction-roles':
         specifier: workspace:*
         version: link:../../modules/reaction-roles

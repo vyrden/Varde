@@ -7,10 +7,21 @@ describe('moderation defineModule', () => {
     expect(moderation.manifest.id).toBe('moderation');
   });
 
-  it('ne déclare AUCUNE slash command en PR 4.M.1', () => {
-    // Garde-fou : déclarer `commands` sans handler enregistrerait des
-    // entrées dans le CommandRegistry qui resteraient sans réponse.
-    expect(moderation.commands).toBeUndefined();
+  it('déclare 10 slash commands en PR 4.M.2b', () => {
+    expect(moderation.commands).toBeDefined();
+    const names = Object.keys(moderation.commands ?? {}).sort();
+    expect(names).toEqual([
+      'ban',
+      'clear',
+      'kick',
+      'mute',
+      'slowmode',
+      'tempban',
+      'tempmute',
+      'unban',
+      'unmute',
+      'warn',
+    ]);
   });
 
   it('expose lifecycle onLoad et onUnload', () => {

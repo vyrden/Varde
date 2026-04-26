@@ -167,6 +167,7 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.setChannelSlowmode` nécessite un host (apps/bot).',
     );
   },
+  canModerate: async () => ({ ok: false as const, reason: 'unknown' as const }),
   getMemberCount: () => null,
   getUserDisplayInfo: async () => null,
   getGuildName: () => null,

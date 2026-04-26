@@ -182,6 +182,155 @@ describe('DiscordService.bulkDeleteMessages', () => {
   });
 });
 
+describe('DiscordService.canModerate', () => {
+  const makeMember = (highestPosition: number) => ({
+    roles: {
+      cache: { has: vi.fn() },
+      add: vi.fn(),
+      remove: vi.fn(),
+      highest: { position: highestPosition },
+    },
+  });
+
+  const makeFullClient = (opts: {
+    botUserId?: string;
+    ownerId?: string;
+    members?: Map<string, ReturnType<typeof makeMember>>;
+    botMember?: ReturnType<typeof makeMember> | null;
+  }) => ({
+    user: opts.botUserId ? { id: opts.botUserId } : null,
+    guilds: {
+      cache: new Map([
+        [
+          GUILD,
+          {
+            name: 'g',
+            ownerId: opts.ownerId,
+            members: {
+              fetch: vi.fn(async (id: string) => {
+                const m = opts.members?.get(id);
+                if (!m) throw Object.assign(new Error('Unknown Member'), { code: 10007 });
+                return m;
+              }),
+              me: opts.botMember,
+              ban: vi.fn(),
+            },
+            bans: { remove: vi.fn() },
+            roles: { cache: { get: vi.fn() }, create: vi.fn() },
+          },
+        ],
+      ]),
+    },
+    channels: { cache: new Map() },
+  });
+
+  it('refuse self : mod = target', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      // biome-ignore lint/suspicious/noExplicitAny: fake client
+      client: makeFullClient({}) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, USER);
+    expect(result).toEqual({ ok: false, reason: 'self' });
+  });
+
+  it('refuse bot : target = bot user id', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      // biome-ignore lint/suspicious/noExplicitAny: fake client
+      client: makeFullClient({ botUserId: '999' }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '999' as UserId);
+    expect(result).toEqual({ ok: false, reason: 'bot' });
+  });
+
+  it('refuse owner : target = ownerId de la guild', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      // biome-ignore lint/suspicious/noExplicitAny: fake client
+      client: makeFullClient({ ownerId: '777' }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '777' as UserId);
+    expect(result).toEqual({ ok: false, reason: 'owner' });
+  });
+
+  it('accepte si la cible n est pas dans la guild (ban préventif)', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      // biome-ignore lint/suspicious/noExplicitAny: fake client
+      client: makeFullClient({ members: new Map() }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '888' as UserId);
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuse rank : mod ne dépasse pas la cible', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      client: makeFullClient({
+        members: new Map([
+          [USER, makeMember(5)] as const,
+          ['888' as UserId, makeMember(10)] as const,
+        ]),
+        botMember: makeMember(20),
+        // biome-ignore lint/suspicious/noExplicitAny: fake client
+      }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '888' as UserId);
+    expect(result).toEqual({ ok: false, reason: 'rank' });
+  });
+
+  it('refuse rank : bot ne dépasse pas la cible', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      client: makeFullClient({
+        members: new Map([
+          [USER, makeMember(50)] as const,
+          ['888' as UserId, makeMember(10)] as const,
+        ]),
+        botMember: makeMember(5),
+        // biome-ignore lint/suspicious/noExplicitAny: fake client
+      }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '888' as UserId);
+    expect(result).toEqual({ ok: false, reason: 'rank' });
+  });
+
+  it('accepte quand mod et bot dépassent la cible', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      client: makeFullClient({
+        members: new Map([
+          [USER, makeMember(50)] as const,
+          ['888' as UserId, makeMember(10)] as const,
+        ]),
+        botMember: makeMember(80),
+        // biome-ignore lint/suspicious/noExplicitAny: fake client
+      }) as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '888' as UserId);
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuse unknown si la guild n est pas en cache', async () => {
+    const svc = createDiscordService({
+      sender: noopSender,
+      logger: noopLogger(),
+      // biome-ignore lint/suspicious/noExplicitAny: fake client
+      client: { user: null, guilds: { cache: new Map() }, channels: { cache: new Map() } } as any,
+    });
+    const result = await svc.canModerate(GUILD, USER, '888' as UserId);
+    expect(result).toEqual({ ok: false, reason: 'unknown' });
+  });
+});
+
 describe('DiscordService.setChannelSlowmode', () => {
   it('appelle channel.setRateLimitPerUser avec le nombre de secondes', async () => {
     const setRate = vi.fn().mockResolvedValue(undefined);
