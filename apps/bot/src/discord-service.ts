@@ -141,6 +141,14 @@ interface TextChannelLike {
   };
   /** `send` est disponible sur les salons textuels ; retourne un Message. */
   readonly send?: (payload: SendPayload) => Promise<{ readonly id: string }>;
+  /**
+   * `bulkDelete(count)` accepte un nombre [1,100] et retourne la
+   * `Collection` des messages réellement supprimés (Discord exclut
+   * silencieusement les messages > 14 jours).
+   */
+  readonly bulkDelete?: (count: number) => Promise<{ readonly size: number }>;
+  /** `setRateLimitPerUser(seconds)` configure le slowmode du salon. */
+  readonly setRateLimitPerUser?: (seconds: number, reason?: string) => Promise<unknown>;
 }
 
 /** Forme minimale d'un GuildMember discord.js dont on a besoin. */
@@ -159,6 +167,18 @@ interface GuildLike {
   readonly memberCount?: number;
   readonly members: {
     readonly fetch: (userId: string) => Promise<GuildMemberLike>;
+    /**
+     * `members.ban(userId, { deleteMessageSeconds, reason })` — discord.js
+     * v14 : `deleteMessageDays` est déprécié au profit de `deleteMessageSeconds`.
+     */
+    readonly ban: (
+      userId: string,
+      options?: { readonly deleteMessageSeconds?: number; readonly reason?: string },
+    ) => Promise<unknown>;
+  };
+  readonly bans: {
+    /** `bans.remove(userId, reason?)` lève le bannissement. */
+    readonly remove: (userId: string, reason?: string) => Promise<unknown>;
   };
   readonly roles: {
     readonly cache: { get: (roleId: string) => { name: string } | undefined };
@@ -619,6 +639,96 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         throw new DiscordSendError(
           reasonClassified,
           `DiscordService.kickMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async banMember(guildId, userId, reason, deleteMessageDays) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.banMember : guild introuvable');
+      }
+      const banOptions: { deleteMessageSeconds?: number; reason?: string } = {};
+      if (deleteMessageDays !== undefined) {
+        banOptions.deleteMessageSeconds = deleteMessageDays * 86400;
+      }
+      if (reason !== undefined) banOptions.reason = reason;
+      try {
+        await guild.members.ban(userId, banOptions);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.banMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async unbanMember(guildId, userId, reason) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.unbanMember : guild introuvable');
+      }
+      try {
+        await guild.bans.remove(userId, reason);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.unbanMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async bulkDeleteMessages(channelId, count) {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.bulkDeleteMessages : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.bulkDelete) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.bulkDeleteMessages : le salon ne supporte pas bulkDelete()',
+        );
+      }
+      try {
+        const result = await textChannel.bulkDelete(count);
+        return { deleted: result.size };
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.bulkDeleteMessages : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async setChannelSlowmode(channelId, seconds) {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.setChannelSlowmode : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.setRateLimitPerUser) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.setChannelSlowmode : le salon ne supporte pas setRateLimitPerUser()',
+        );
+      }
+      try {
+        await textChannel.setRateLimitPerUser(seconds);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.setChannelSlowmode : ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },

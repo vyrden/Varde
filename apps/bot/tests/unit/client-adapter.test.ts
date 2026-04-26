@@ -282,5 +282,186 @@ describe('attachDiscordClient — reactions', () => {
   });
 });
 
+describe('attachDiscordClient — interactionCreate (resolved)', () => {
+  /**
+   * Construit une fausse `ChatInputCommandInteraction`. Discord.js v14
+   * expose `options.resolved` sous forme de `Collection<Snowflake, T>` ;
+   * on simule via un `Map` qui implémente `forEach` + iteration, ce
+   * dont `extractResolved` a besoin.
+   */
+  const makeFakeInteraction = (resolved: {
+    users?: Map<string, unknown>;
+    members?: Map<string, unknown>;
+    roles?: Map<string, unknown>;
+    channels?: Map<string, unknown>;
+  }) => ({
+    isChatInputCommand: () => true,
+    inGuild: () => true,
+    guildId: '111',
+    channelId: '222',
+    user: { id: '42' },
+    commandName: 'warn',
+    options: { resolved },
+    replied: false,
+    reply: vi.fn().mockResolvedValue(undefined),
+    deferred: false,
+    followUp: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it('peuple resolved.users avec tag + displayName + isBot', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = makeFakeInteraction({
+      users: new Map([
+        [
+          '42',
+          {
+            tag: 'foo#0',
+            username: 'foo',
+            globalName: 'Foo Bar',
+            bot: false,
+          },
+        ],
+      ]),
+      members: new Map([['42', { displayName: 'Fooschmoo' }]]),
+    });
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(dispatchCommand).toHaveBeenCalledTimes(1);
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      resolved: { users: Record<string, { tag: string; displayName: string; isBot: boolean }> };
+    };
+    expect(input.resolved.users['42']).toEqual({
+      id: '42',
+      tag: 'foo#0',
+      displayName: 'Fooschmoo',
+      isBot: false,
+    });
+  });
+
+  it('displayName cascade : member.displayName > user.globalName > user.username', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    // Pas de member → fallback sur globalName.
+    const interaction = makeFakeInteraction({
+      users: new Map([
+        ['42', { tag: 'bar#0', username: 'bar', globalName: 'Bar Baz', bot: false }],
+      ]),
+    });
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      resolved: { users: Record<string, { displayName: string }> };
+    };
+    expect(input.resolved.users['42']?.displayName).toBe('Bar Baz');
+  });
+
+  it('peuple resolved.roles avec name + position', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = makeFakeInteraction({
+      roles: new Map([['r1', { name: 'Modo', position: 12 }]]),
+    });
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      resolved: { roles: Record<string, { id: string; name: string; position: number }> };
+    };
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature
+    expect(input.resolved.roles['r1']).toEqual({ id: 'r1', name: 'Modo', position: 12 });
+  });
+
+  it('peuple resolved.channels avec name + type', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = makeFakeInteraction({
+      channels: new Map([['c1', { name: 'général', type: 0 }]]),
+    });
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      resolved: { channels: Record<string, { id: string; name: string; type: number }> };
+    };
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature
+    expect(input.resolved.channels['c1']).toEqual({ id: 'c1', name: 'général', type: 0 });
+  });
+
+  it('resolved est un objet vide quand options.resolved est absent', async () => {
+    const fake = makeFakeClient();
+    const dispatchCommand = vi
+      .fn()
+      .mockResolvedValue({ kind: 'success', payload: { message: '' } });
+    const dispatcher = {
+      dispatchEvent: vi.fn(),
+      dispatchCommand,
+    } as unknown as BotDispatcher;
+    attachDiscordClient(fake.client, dispatcher, makeSilentLogger());
+
+    const interaction = {
+      isChatInputCommand: () => true,
+      inGuild: () => true,
+      guildId: '111',
+      channelId: '222',
+      user: { id: '42' },
+      commandName: 'ping',
+      options: {}, // pas de resolved
+      replied: false,
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+    fake.trigger('interactionCreate', interaction);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const input = dispatchCommand.mock.calls[0]?.[0] as {
+      resolved: {
+        users: Record<string, unknown>;
+        roles: Record<string, unknown>;
+        channels: Record<string, unknown>;
+      };
+    };
+    expect(input.resolved).toEqual({ users: {}, roles: {}, channels: {} });
+  });
+});
+
 // Empêche le linter de se plaindre de vi non utilisé si aucun mock inline.
 void vi;

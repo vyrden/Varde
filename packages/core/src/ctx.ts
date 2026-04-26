@@ -147,6 +147,26 @@ const discordStub: DiscordService = Object.freeze({
       'DiscordService non câblé : `ctx.discord.kickMember` nécessite un host (apps/bot).',
     );
   },
+  banMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.banMember` nécessite un host (apps/bot).',
+    );
+  },
+  unbanMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.unbanMember` nécessite un host (apps/bot).',
+    );
+  },
+  bulkDeleteMessages: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.bulkDeleteMessages` nécessite un host (apps/bot).',
+    );
+  },
+  setChannelSlowmode: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.setChannelSlowmode` nécessite un host (apps/bot).',
+    );
+  },
   getMemberCount: () => null,
   getUserDisplayInfo: async () => null,
   getGuildName: () => null,

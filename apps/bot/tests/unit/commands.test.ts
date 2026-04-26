@@ -40,6 +40,7 @@ const baseInput = (commandName: string): CommandInteractionInput => ({
   channelId: CHANNEL,
   userId: USER,
   options: {},
+  resolved: { users: {}, roles: {}, channels: {} },
 });
 
 describe('createCommandRegistry', () => {

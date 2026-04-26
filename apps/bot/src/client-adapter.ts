@@ -1,6 +1,17 @@
-import type { ChannelId, GuildId, Logger, UserId } from '@varde/contracts';
+import type {
+  ChannelId,
+  GuildId,
+  Logger,
+  ResolvedChannel,
+  ResolvedCommandInput,
+  ResolvedRole,
+  ResolvedUser,
+  RoleId,
+  UserId,
+} from '@varde/contracts';
 import type {
   Channel,
+  ChatInputCommandInteraction,
   Client,
   Guild,
   GuildMember,
@@ -297,6 +308,7 @@ export function attachDiscordClient(
         channelId: interaction.channelId as ChannelId,
         userId: interaction.user.id as UserId,
         options: {},
+        resolved: extractResolved(interaction),
       });
       // Rendu texte plat V1 basé sur le kind.
       const content = renderUIMessage(result as UIMessageLike);
@@ -348,4 +360,64 @@ const renderUIMessage = (message: UIMessageLike): string => {
     default:
       return '';
   }
+};
+
+/**
+ * Construit un `ResolvedCommandInput` depuis `interaction.options.resolved`
+ * (discord.js v14). Les Collections sont traduites en Records indexés par
+ * snowflake. `displayName` cascade `member.displayName` → `user.globalName`
+ * → `user.username` → `user.tag` pour ne jamais être vide. Les rôles
+ * `@everyone` peuvent ne pas avoir de position dans la collection — on
+ * tombe sur 0 dans ce cas.
+ */
+const extractResolved = (interaction: ChatInputCommandInteraction): ResolvedCommandInput => {
+  const resolved = interaction.options.resolved;
+  const users: Record<UserId, ResolvedUser> = {};
+  const roles: Record<RoleId, ResolvedRole> = {};
+  const channels: Record<ChannelId, ResolvedChannel> = {};
+
+  if (resolved?.users) {
+    for (const [snowflake, user] of resolved.users) {
+      if (!user) continue;
+      const member = resolved.members?.get(snowflake);
+      const memberDisplay =
+        member && 'displayName' in member && typeof member.displayName === 'string'
+          ? member.displayName
+          : null;
+      const displayName =
+        memberDisplay && memberDisplay.length > 0
+          ? memberDisplay
+          : (user.globalName ?? user.username ?? user.tag);
+      users[snowflake as UserId] = {
+        id: snowflake as UserId,
+        tag: user.tag,
+        displayName,
+        isBot: user.bot,
+      };
+    }
+  }
+
+  if (resolved?.roles) {
+    for (const [snowflake, role] of resolved.roles) {
+      if (!role) continue;
+      roles[snowflake as RoleId] = {
+        id: snowflake as RoleId,
+        name: role.name,
+        position: typeof role.position === 'number' ? role.position : 0,
+      };
+    }
+  }
+
+  if (resolved?.channels) {
+    for (const [snowflake, channel] of resolved.channels) {
+      if (!channel) continue;
+      channels[snowflake as ChannelId] = {
+        id: snowflake as ChannelId,
+        name: 'name' in channel && typeof channel.name === 'string' ? channel.name : '',
+        type: typeof channel.type === 'number' ? channel.type : -1,
+      };
+    }
+  }
+
+  return { users, roles, channels };
 };

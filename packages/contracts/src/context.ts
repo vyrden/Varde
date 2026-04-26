@@ -275,6 +275,48 @@ export interface DiscordService {
   readonly kickMember: (guildId: GuildId, userId: UserId, reason?: string) => Promise<void>;
 
   /**
+   * Bannit un membre d'une guild. `deleteMessageDays` est converti en
+   * `deleteMessageSeconds` côté implémentation discord.js v14 (le champ
+   * `days` est déprécié). Plage `[0, 7]` côté Discord ; pas de clamp
+   * dans le contrat — laissé aux handlers V1.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly banMember: (
+    guildId: GuildId,
+    userId: UserId,
+    reason?: string,
+    deleteMessageDays?: number,
+  ) => Promise<void>;
+
+  /**
+   * Lève le bannissement d'un utilisateur. Utilisé par `/unban` et
+   * l'expiration d'un tempban.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly unbanMember: (guildId: GuildId, userId: UserId, reason?: string) => Promise<void>;
+
+  /**
+   * Supprime en masse `count` messages dans un salon textuel. Plage
+   * Discord `[1, 100]` ; les messages > 14 jours sont silencieusement
+   * exclus (limite Discord). Le retour `deleted` permet à l'appelant
+   * d'informer l'admin du delta éventuel.
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly bulkDeleteMessages: (
+    channelId: ChannelId,
+    count: number,
+  ) => Promise<{ readonly deleted: number }>;
+
+  /**
+   * Configure le slowmode d'un salon textuel. `seconds` ∈ `[0, 21600]`
+   * (6h, limite Discord). 0 = désactivé. Pas de clamp dans le contrat.
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly setChannelSlowmode: (channelId: ChannelId, seconds: number) => Promise<void>;
+
+  /**
    * Retourne le nombre de membres d'une guild si elle est en cache,
    * `null` sinon. Pas d'appel réseau.
    */
