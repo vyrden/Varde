@@ -1,5 +1,11 @@
 import { defineModule } from '@varde/contracts';
 
+import {
+  buildButtonCustomId,
+  handleButtonClick,
+  parseButtonCustomId,
+  RR_BUTTON_CUSTOM_ID_PREFIX,
+} from './buttons.js';
 import { configSchema, configUi, type ReactionRolesConfig, resolveConfig } from './config.js';
 import { locales } from './locales.js';
 import { manifest } from './manifest.js';
@@ -33,6 +39,14 @@ export const reactionRoles = defineModule({
         handleReactionRemove(ctx, e, tracker),
       ),
     );
+    // Mode V2 : routage des clics sur boutons publiés. Idempotent —
+    // ré-enregistrer le même préfixe par le même module remplace le
+    // handler précédent (cf. `CoreInteractionsRegistry`).
+    subscriptions.add(
+      ctx.interactions.onButton(RR_BUTTON_CUSTOM_ID_PREFIX, async (input) =>
+        handleButtonClick(ctx, input),
+      ),
+    );
   },
 
   onUnload: async (ctx) => {
@@ -46,5 +60,14 @@ export const reactionRoles = defineModule({
 export const __trackerForTests = tracker;
 
 export type { ReactionRolesConfig };
-export { configSchema, configUi, locales, manifest, resolveConfig };
+export {
+  buildButtonCustomId,
+  configSchema,
+  configUi,
+  locales,
+  manifest,
+  parseButtonCustomId,
+  RR_BUTTON_CUSTOM_ID_PREFIX,
+  resolveConfig,
+};
 export default reactionRoles;

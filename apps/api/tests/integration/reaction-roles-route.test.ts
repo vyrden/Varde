@@ -259,9 +259,14 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
         expect.objectContaining({ name: 'Artiste', mentionable: true }),
       );
 
-      // postMessage appelé une fois
+      // postMessage appelé une fois — en kind 'reactions' (default), aucun
+      // composant n'est passé donc le 3e argument est `undefined`.
       expect(discordService.postMessage).toHaveBeenCalledOnce();
-      expect(discordService.postMessage).toHaveBeenCalledWith(CHANNEL, validPublishBody.message);
+      expect(discordService.postMessage).toHaveBeenCalledWith(
+        CHANNEL,
+        validPublishBody.message,
+        undefined,
+      );
 
       // addReaction appelé deux fois (une par paire)
       expect(discordService.addReaction).toHaveBeenCalledTimes(2);
@@ -275,6 +280,73 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
       ];
       const patch = setWithArgs[1] as { modules: { 'reaction-roles': { messages: unknown[] } } };
       expect(patch.modules['reaction-roles'].messages).toHaveLength(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("kind: 'buttons' poste avec components et n'appelle pas addReaction", async () => {
+    const discordService = makeDiscordService();
+    const config = makeConfig();
+    const { app } = await build(adminFetch, discordService, config);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          label: 'Boutons',
+          channelId: CHANNEL,
+          message: 'Choisis ton rôle',
+          mode: 'normal',
+          kind: 'buttons',
+          feedback: 'ephemeral',
+          pairs: [
+            {
+              emoji: { type: 'unicode', value: '🎮' },
+              roleId: ROLE_ID,
+              label: 'Joueur',
+              style: 'primary',
+            },
+          ],
+        }),
+      });
+      expect(res.statusCode).toBe(201);
+      expect(discordService.postMessage).toHaveBeenCalledOnce();
+      const callArgs = (discordService.postMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        string,
+        string,
+        { components?: unknown[] },
+      ];
+      expect(callArgs[2]?.components).toBeDefined();
+      expect(callArgs[2]?.components).toHaveLength(1);
+      expect(discordService.addReaction).not.toHaveBeenCalled();
+
+      const setWithArgs = (config.setWith as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        unknown,
+        unknown,
+        unknown,
+      ];
+      const patch = setWithArgs[1] as {
+        modules: { 'reaction-roles': { messages: { kind: string; feedback: string }[] } };
+      };
+      expect(patch.modules['reaction-roles'].messages[0]?.kind).toBe('buttons');
+      expect(patch.modules['reaction-roles'].messages[0]?.feedback).toBe('ephemeral');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("400 si feedback: 'ephemeral' avec kind: 'reactions' (default)", async () => {
+    const { app } = await build(adminFetch, makeDiscordService());
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({ ...validPublishBody, feedback: 'ephemeral' }),
+      });
+      expect(res.statusCode).toBe(400);
     } finally {
       await app.close();
     }

@@ -51,8 +51,50 @@ describe('reactionRoleMessageSchema', () => {
     expect(reactionRoleMessageSchema.parse(validMessage)).toEqual({
       ...validMessage,
       message: '',
+      kind: 'reactions',
       feedback: 'dm',
-      pairs: [{ emoji: { type: 'unicode', value: '🇪🇺' }, roleId: SNOWFLAKE_C }],
+      pairs: [
+        {
+          emoji: { type: 'unicode', value: '🇪🇺' },
+          roleId: SNOWFLAKE_C,
+          label: '',
+          style: 'secondary',
+        },
+      ],
+    });
+  });
+
+  it("autorise le feedback 'ephemeral' uniquement avec kind: 'buttons'", () => {
+    const buttonOk = reactionRoleMessageSchema.safeParse({
+      ...validMessage,
+      kind: 'buttons',
+      feedback: 'ephemeral',
+    });
+    expect(buttonOk.success).toBe(true);
+
+    const reactionsKo = reactionRoleMessageSchema.safeParse({
+      ...validMessage,
+      feedback: 'ephemeral',
+    });
+    expect(reactionsKo.success).toBe(false);
+  });
+
+  it("accepte le kind 'buttons' avec un label et un style sur les paires", () => {
+    const buttons = {
+      ...validMessage,
+      kind: 'buttons' as const,
+      pairs: [
+        {
+          emoji: { type: 'unicode' as const, value: '🇪🇺' },
+          roleId: SNOWFLAKE_C,
+          label: 'Europe',
+          style: 'primary' as const,
+        },
+      ],
+    };
+    expect(reactionRoleMessageSchema.parse(buttons).pairs[0]).toMatchObject({
+      label: 'Europe',
+      style: 'primary',
     });
   });
 
@@ -140,9 +182,13 @@ describe('reactionRoleModeSchema', () => {
 });
 
 describe('reactionRolePairSchema', () => {
-  it('accepte une paire valide', () => {
+  it('accepte une paire valide (label/style par défaut)', () => {
     const pair = { emoji: { type: 'unicode' as const, value: '🎉' }, roleId: SNOWFLAKE_A };
-    expect(reactionRolePairSchema.parse(pair)).toEqual(pair);
+    expect(reactionRolePairSchema.parse(pair)).toEqual({
+      ...pair,
+      label: '',
+      style: 'secondary',
+    });
   });
 
   it('refuse un roleId non-snowflake', () => {

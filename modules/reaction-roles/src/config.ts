@@ -26,9 +26,29 @@ export const reactionRoleEmojiSchema = z.discriminatedUnion('type', [
 ]);
 export type ReactionRoleEmoji = z.infer<typeof reactionRoleEmojiSchema>;
 
+/**
+ * Style visuel d'un bouton Discord en mode `kind: 'buttons'`. Mappe
+ * 1-pour-1 sur l'enum `ButtonStyle` de discord.js (les valeurs
+ * numériques restent un détail d'implémentation côté API).
+ */
+export const reactionRoleButtonStyleSchema = z.enum(['primary', 'secondary', 'success', 'danger']);
+export type ReactionRoleButtonStyle = z.infer<typeof reactionRoleButtonStyleSchema>;
+
 export const reactionRolePairSchema = z.object({
   emoji: reactionRoleEmojiSchema,
   roleId: z.string().regex(SNOWFLAKE, 'roleId doit être un snowflake Discord'),
+  /**
+   * Texte affiché sur le bouton en mode `kind: 'buttons'`. Limité à 80
+   * caractères par Discord. Vide → on retombe sur le nom du rôle au
+   * moment du rendu (résolu côté bot). Ignoré en mode `reactions`.
+   */
+  label: z.string().max(80).default(''),
+  /**
+   * Couleur du bouton en mode `kind: 'buttons'`. Ignoré en mode
+   * `reactions`. Défaut `secondary` (gris) — ressort moins que les
+   * boutons d'action (primary blue / success green).
+   */
+  style: reactionRoleButtonStyleSchema.default('secondary'),
 });
 export type ReactionRolePair = z.infer<typeof reactionRolePairSchema>;
 
@@ -37,34 +57,59 @@ export type ReactionRoleMode = z.infer<typeof reactionRoleModeSchema>;
 
 /**
  * Type de retour visuel envoyé à l'utilisateur après attribution / retrait.
- * - `dm` : message privé du bot (vrai message « visible que par lui »).
+ * - `dm` : message privé du bot. Utilisable pour les deux kinds.
+ * - `ephemeral` : réponse éphémère « Seul toi peux voir » — réservée
+ *   au kind `buttons` (l'API ephemeral exige un contexte d'interaction
+ *   et n'est pas disponible pour des réactions emoji).
  * - `none` : aucun feedback (silencieux).
- *
- * Note : Discord ne permet pas les messages éphémères en réponse à une
- * réaction (l'API ephemeral exige un contexte d'interaction). Si on
- * voulait du « Seul toi peux voir » il faudrait passer ce module sur des
- * boutons Discord à la place des réactions.
  */
-export const reactionRoleFeedbackSchema = z.enum(['dm', 'none']);
+export const reactionRoleFeedbackSchema = z.enum(['dm', 'ephemeral', 'none']);
 export type ReactionRoleFeedback = z.infer<typeof reactionRoleFeedbackSchema>;
 
-export const reactionRoleMessageSchema = z.object({
-  id: z.string().uuid(),
-  label: z.string().min(1).max(64),
-  channelId: z.string().regex(SNOWFLAKE),
-  messageId: z.string().regex(SNOWFLAKE),
-  /**
-   * Contenu textuel du message Discord, miroir de l'état de Discord
-   * pour permettre l'édition depuis le dashboard sans aller-retour.
-   * Vide par défaut pour les entrées créées avant l'introduction du
-   * champ : l'admin saisit le nouveau texte au moment de l'édition.
-   */
-  message: z.string().max(2000).default(''),
-  mode: reactionRoleModeSchema,
-  /** Type de feedback envoyé à l'utilisateur après une réaction. */
-  feedback: reactionRoleFeedbackSchema.default('dm'),
-  pairs: z.array(reactionRolePairSchema).min(1).max(20),
-});
+/**
+ * Type de support du reaction-role :
+ * - `reactions` (défaut, V1) : réactions emoji sur le message.
+ * - `buttons` (V2) : composants bouton Discord, débloque les réponses
+ *   éphémères via les interactions.
+ *
+ * V1 n'avait pas ce champ — les entrées existantes en DB matchent le
+ * default `reactions` au parse, sans migration nécessaire.
+ */
+export const reactionRoleKindSchema = z.enum(['reactions', 'buttons']).default('reactions');
+export type ReactionRoleKind = z.infer<typeof reactionRoleKindSchema>;
+
+export const reactionRoleMessageSchema = z
+  .object({
+    id: z.string().uuid(),
+    label: z.string().min(1).max(64),
+    channelId: z.string().regex(SNOWFLAKE),
+    messageId: z.string().regex(SNOWFLAKE),
+    /**
+     * Contenu textuel du message Discord, miroir de l'état de Discord
+     * pour permettre l'édition depuis le dashboard sans aller-retour.
+     * Vide par défaut pour les entrées créées avant l'introduction du
+     * champ : l'admin saisit le nouveau texte au moment de l'édition.
+     */
+    message: z.string().max(2000).default(''),
+    /** Support : réactions emoji (V1) ou boutons Discord (V2). */
+    kind: reactionRoleKindSchema,
+    mode: reactionRoleModeSchema,
+    /**
+     * Type de feedback. `ephemeral` n'est valide qu'en `kind: 'buttons'`
+     * (cf. superRefine).
+     */
+    feedback: reactionRoleFeedbackSchema.default('dm'),
+    pairs: z.array(reactionRolePairSchema).min(1).max(20),
+  })
+  .superRefine((msg, ctx) => {
+    if (msg.feedback === 'ephemeral' && msg.kind !== 'buttons') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['feedback'],
+        message: "Le feedback 'ephemeral' n'est disponible qu'avec kind: 'buttons'",
+      });
+    }
+  });
 export type ReactionRoleMessage = z.infer<typeof reactionRoleMessageSchema>;
 
 export const reactionRolesConfigSchema = z
