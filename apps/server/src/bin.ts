@@ -336,6 +336,15 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
+      // Nécessaire pour `messageCreate` / `messageUpdate` / `messageDelete`
+      // — sans cet intent, l'automod et le module logs ne reçoivent
+      // jamais d'événement message.
+      GatewayIntentBits.GuildMessages,
+      // Privileged intent à activer dans le portail Discord. Sans lui
+      // les events `messageCreate` arrivent avec `content: ""`, ce qui
+      // rend les règles automod textuelles (blacklist / regex / IA)
+      // inutiles. Les règles `rate-limit` continuent de fonctionner.
+      GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessageReactions,
     ],
     // Sans ces partials, discord.js ignore silencieusement les réactions

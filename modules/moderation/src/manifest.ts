@@ -26,7 +26,7 @@ export const manifest: ManifestStatic = {
   version: '1.1.0',
   coreVersion: '^1.0.0',
   description:
-    'Commandes manuelles de modération (warn, kick, ban, mute, purge, slowmode) avec historique des sanctions.',
+    'Commandes manuelles de sanction (warn, kick, ban, tempban, mute, tempmute, clear, slowmode) avec historique consultable, et automod configurable : règles blacklist / regex / rate-limit / classification IA, actions delete | warn | mute, rôles bypass.',
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

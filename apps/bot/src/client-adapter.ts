@@ -85,6 +85,11 @@ const memberUpdateInput = (oldMember: GuildMember, newMember: GuildMember): Disc
 
 const messageCreateInput = (message: Message): DiscordEventInput | null => {
   if (!message.guildId) return null;
+  // Filtre les messages des bots et webhooks. Les modules officiels
+  // (automod, logs) ne sont jamais censés agir sur leurs propres
+  // posts — ce filtre tue toute boucle accidentelle (auto-modération
+  // d'un message d'audit) et économise le coût de dispatcher.
+  if (message.author.bot) return null;
   return {
     kind: 'messageCreate',
     guildId: message.guildId,

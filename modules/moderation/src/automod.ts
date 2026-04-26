@@ -239,8 +239,6 @@ export function createAutomodHandler(
   const rateLimit = createRateLimitTracker();
 
   return async (event: GuildMessageCreateEvent) => {
-    if (event.content.length === 0) return;
-
     let cfg: AutomodConfig;
     let mutedRoleId: string | null;
     try {
@@ -248,11 +246,24 @@ export function createAutomodHandler(
       const moderationCfg = resolveConfig(raw);
       cfg = moderationCfg.automod;
       mutedRoleId = moderationCfg.mutedRoleId;
-    } catch {
+    } catch (error) {
+      ctx.logger.debug('automod : config indisponible, skip', {
+        guildId: event.guildId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return;
     }
 
     if (cfg.rules.length === 0) return;
+
+    // Les règles textuelles (blacklist / regex / IA) ne peuvent rien
+    // matcher sur un message vide. Les règles `rate-limit`, elles,
+    // comptent même les messages embed-only — on garde l'évaluation
+    // active dans ce cas.
+    const hasOnlyTextualRules = cfg.rules.every(
+      (r) => r.kind === 'blacklist' || r.kind === 'regex' || r.kind === 'ai-classify',
+    );
+    if (event.content.length === 0 && hasOnlyTextualRules) return;
 
     if (await isBypassedAuthor(ctx, event.guildId, event.authorId, cfg.bypassRoleIds)) {
       return;
@@ -266,6 +277,15 @@ export function createAutomodHandler(
       ai: ctx.ai,
     });
     if (matched === null) return;
+
+    ctx.logger.info('automod : règle déclenchée', {
+      guildId: event.guildId,
+      authorId: event.authorId,
+      ruleId: matched.rule.id,
+      ruleKind: matched.rule.kind,
+      action: matched.rule.action,
+      ...(matched.kind === 'ai-classify' ? { aiCategory: matched.category } : {}),
+    });
 
     const result = await applyAction(ctx, event, matched.rule, mutedRoleId);
 

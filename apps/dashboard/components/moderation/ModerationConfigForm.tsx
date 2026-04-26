@@ -104,10 +104,25 @@ const KIND_LABEL: Record<AutomodRuleClient['kind'], string> = {
 };
 
 const KIND_BADGE_CLASS: Record<AutomodRuleClient['kind'], string> = {
-  blacklist: 'bg-muted text-muted-foreground',
-  regex: 'bg-muted text-muted-foreground',
-  'rate-limit': 'bg-warning/15 text-warning-foreground',
-  'ai-classify': 'bg-primary/15 text-primary',
+  blacklist: 'bg-muted text-foreground',
+  regex: 'bg-muted text-foreground',
+  'rate-limit': 'bg-warning/20 text-foreground',
+  'ai-classify': 'bg-primary/20 text-primary',
+};
+
+/** Sous-titre court affiché à côté du badge kind dans l'éditeur de règle. */
+const KIND_HINT: Record<AutomodRuleClient['kind'], string> = {
+  blacklist: 'Substring case-insensitive — mot ou phrase à bloquer',
+  regex: 'Expression régulière (flag i) — pattern textuel avancé',
+  'rate-limit': 'Sliding window — déclenche au-delà de N messages',
+  'ai-classify': 'Classification IA — catégories surveillées par le modèle',
+};
+
+/** Code couleur de l'action, repris des tokens Discord (palette automod). */
+const ACTION_DOT: Record<'delete' | 'warn' | 'mute', string> = {
+  delete: 'bg-destructive',
+  warn: 'bg-warning',
+  mute: 'bg-info',
 };
 
 const AI_CATEGORY_LABEL: Record<AiCategoryClient, string> = {
@@ -269,13 +284,18 @@ export function ModerationConfigForm({
           </div>
 
           {rules.length === 0 ? (
-            <p className="text-xs italic text-muted-foreground">Aucune règle.</p>
+            <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+              <p className="text-xs text-muted-foreground">
+                Aucune règle. Ajoute une blacklist (mots interdits), une regex (pattern avancé), un
+                rate-limit (anti-flood) ou une règle IA (classification).
+              </p>
+            </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {rules.map((rule) => (
                 <li
                   key={rule.id}
-                  className="rounded-md border border-border bg-sidebar px-3 py-2.5"
+                  className="rounded-lg border border-border bg-card/60 px-3.5 py-3 shadow-sm"
                 >
                   <RuleEditor
                     rule={rule}
@@ -392,49 +412,64 @@ interface RuleEditorProps {
 function RuleEditor({ rule, pending, onChange, onRemove }: RuleEditorProps): ReactElement {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${KIND_BADGE_CLASS[rule.kind]}`}
-        >
-          {KIND_LABEL[rule.kind]}
-        </span>
-        <Input
-          aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
-          value={rule.label}
-          onChange={(e) => onChange({ ...rule, label: e.target.value })}
-          placeholder="Libellé court (ex. mots-grossiers)"
-          className="min-w-40 flex-1"
-          disabled={pending}
-        />
-        <Select
-          aria-label="Action"
-          value={rule.action}
-          onChange={(e) =>
-            onChange({ ...rule, action: e.target.value as 'delete' | 'warn' | 'mute' })
-          }
-          wrapperClassName="w-28"
-          disabled={pending}
-        >
-          <option value="delete">Delete</option>
-          <option value="warn">Warn</option>
-          <option value="mute">Mute</option>
-        </Select>
-        <Toggle
-          checked={rule.enabled}
-          onCheckedChange={(next) => onChange({ ...rule, enabled: next })}
-          disabled={pending}
-          label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRemove}
-          disabled={pending}
-          aria-label={`Supprimer ${rule.label}`}
-        >
-          ✕
-        </Button>
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="flex min-w-40 flex-1 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${KIND_BADGE_CLASS[rule.kind]}`}
+            >
+              {KIND_LABEL[rule.kind]}
+            </span>
+            <span className="text-[11px] text-muted-foreground">{KIND_HINT[rule.kind]}</span>
+          </div>
+          <Input
+            aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
+            value={rule.label}
+            onChange={(e) => onChange({ ...rule, label: e.target.value })}
+            placeholder="Libellé court (ex. mots-grossiers)"
+            disabled={pending}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 self-stretch">
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute top-1/2 left-2.5 size-2 -translate-y-1/2 rounded-full ${ACTION_DOT[rule.action]}`}
+            />
+            <Select
+              aria-label="Action"
+              value={rule.action}
+              onChange={(e) =>
+                onChange({ ...rule, action: e.target.value as 'delete' | 'warn' | 'mute' })
+              }
+              wrapperClassName="w-32"
+              disabled={pending}
+              className="pl-7"
+            >
+              <option value="delete">Delete</option>
+              <option value="warn">Warn</option>
+              <option value="mute">Mute</option>
+            </Select>
+          </div>
+          <Toggle
+            checked={rule.enabled}
+            onCheckedChange={(next) => onChange({ ...rule, enabled: next })}
+            disabled={pending}
+            label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            disabled={pending}
+            aria-label={`Supprimer ${rule.label || 'la règle'}`}
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            ✕
+          </Button>
+        </div>
       </div>
 
       {rule.kind === 'blacklist' || rule.kind === 'regex' ? (
