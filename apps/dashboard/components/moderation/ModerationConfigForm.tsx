@@ -10,15 +10,30 @@ interface RoleOption {
   readonly name: string;
 }
 
-export interface AutomodRuleClient {
+export type AiCategoryClient = 'toxicity' | 'harassment' | 'hate' | 'sexual' | 'self-harm' | 'spam';
+
+interface RuleBaseClient {
   readonly id: string;
   readonly label: string;
-  readonly kind: 'blacklist' | 'regex';
-  readonly pattern: string;
   readonly action: 'delete' | 'warn' | 'mute';
   readonly durationMs: number | null;
   readonly enabled: boolean;
 }
+
+export type AutomodRuleClient =
+  | (RuleBaseClient & { readonly kind: 'blacklist'; readonly pattern: string })
+  | (RuleBaseClient & { readonly kind: 'regex'; readonly pattern: string })
+  | (RuleBaseClient & {
+      readonly kind: 'rate-limit';
+      readonly count: number;
+      readonly windowMs: number;
+      readonly scope: 'user-guild' | 'user-channel';
+    })
+  | (RuleBaseClient & {
+      readonly kind: 'ai-classify';
+      readonly categories: readonly AiCategoryClient[];
+      readonly maxContentLength: number;
+    });
 
 export interface AutomodConfigClient {
   readonly rules: readonly AutomodRuleClient[];
@@ -38,7 +53,7 @@ export interface ModerationConfigFormProps {
 const newRuleId = (): string =>
   `rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-const blankRule = (): AutomodRuleClient => ({
+const blankBlacklist = (): AutomodRuleClient => ({
   id: newRuleId(),
   label: '',
   kind: 'blacklist',
@@ -48,19 +63,80 @@ const blankRule = (): AutomodRuleClient => ({
   enabled: true,
 });
 
+const blankRegex = (): AutomodRuleClient => ({
+  id: newRuleId(),
+  label: '',
+  kind: 'regex',
+  pattern: '',
+  action: 'delete',
+  durationMs: null,
+  enabled: true,
+});
+
+const blankRateLimit = (): AutomodRuleClient => ({
+  id: newRuleId(),
+  label: '',
+  kind: 'rate-limit',
+  count: 5,
+  windowMs: 10_000,
+  scope: 'user-guild',
+  action: 'mute',
+  durationMs: 600_000,
+  enabled: true,
+});
+
+const blankAiClassify = (): AutomodRuleClient => ({
+  id: newRuleId(),
+  label: '',
+  kind: 'ai-classify',
+  categories: ['toxicity'],
+  maxContentLength: 500,
+  action: 'delete',
+  durationMs: null,
+  enabled: true,
+});
+
+const KIND_LABEL: Record<AutomodRuleClient['kind'], string> = {
+  blacklist: 'Blacklist',
+  regex: 'Regex',
+  'rate-limit': 'Rate-limit',
+  'ai-classify': 'IA',
+};
+
+const KIND_BADGE_CLASS: Record<AutomodRuleClient['kind'], string> = {
+  blacklist: 'bg-muted text-muted-foreground',
+  regex: 'bg-muted text-muted-foreground',
+  'rate-limit': 'bg-warning/15 text-warning-foreground',
+  'ai-classify': 'bg-primary/15 text-primary',
+};
+
+const AI_CATEGORY_LABEL: Record<AiCategoryClient, string> = {
+  toxicity: 'Toxicité',
+  harassment: 'Harcèlement',
+  hate: 'Discours haineux',
+  sexual: 'Sexuel',
+  'self-harm': 'Auto-mutilation',
+  spam: 'Spam',
+};
+
 /**
- * Carte de config moderation. Deux champs :
- * - Rôle muet (select Discord) : assigné par `/mute` et `/tempmute`.
- *   Sans valeur, ces commandes refusent l'action en demandant de
- *   configurer ici.
- * - DM sur sanction (toggle) : envoie un message privé au membre
- *   sanctionné avec l'action et la raison. Échec silencieux si DMs
- *   fermés (la sanction s'applique quand même).
+ * Convertit une valeur en secondes (entrée admin) vers ms pour le
+ * stockage. Tronque au plus proche entier de seconde, plancher 1s.
+ */
+const secondsToMs = (s: number): number => Math.max(1, Math.round(s)) * 1000;
+const msToSeconds = (ms: number): number => Math.round(ms / 1000);
+
+/**
+ * Carte de config moderation. Trois sections :
+ * - Rôle muet + DM sur sanction (réglages globaux).
+ * - Automod : règles évaluées sur chaque message non-bot.
+ *   Quatre kinds : blacklist (substring), regex, rate-limit (sliding
+ *   window), ai-classify (catégorisation IA). Les règles synchrones
+ *   passent en premier ; l'IA n'est appelée qu'en fallback.
+ * - Rôles bypass : exclus de l'évaluation.
  *
- * Le formulaire est `dirty`-aware : le bouton Enregistrer ne devient
- * actif qu'après modification. Les erreurs de l'API sont affichées
- * en bandeau ; les issues Zod ne devraient pas survenir tant que la
- * validation côté client respecte le schéma (snowflake 17–20 chars).
+ * Le formulaire est `dirty`-aware : Enregistrer ne devient actif
+ * qu'après modification.
  */
 export function ModerationConfigForm({
   guildId,
@@ -84,6 +160,13 @@ export function ModerationConfigForm({
     JSON.stringify(rules) !== JSON.stringify(initial.automod.rules) ||
     JSON.stringify(bypassRoleIds) !== JSON.stringify(initial.automod.bypassRoleIds);
 
+  const isRuleComplete = (r: AutomodRuleClient): boolean => {
+    if (r.label.length === 0) return false;
+    if (r.kind === 'blacklist' || r.kind === 'regex') return r.pattern.length > 0;
+    if (r.kind === 'rate-limit') return r.count >= 2 && r.windowMs >= 1_000;
+    return r.categories.length > 0;
+  };
+
   const onSave = (): void => {
     setFeedback(null);
     startTransition(async () => {
@@ -92,7 +175,7 @@ export function ModerationConfigForm({
         mutedRoleId: mutedRoleId.length > 0 ? mutedRoleId : null,
         dmOnSanction,
         automod: {
-          rules: rules.filter((r) => r.label.length > 0 && r.pattern.length > 0),
+          rules: rules.filter(isRuleComplete),
           bypassRoleIds,
         },
       };
@@ -109,14 +192,14 @@ export function ModerationConfigForm({
     });
   };
 
-  const updateRule = (id: string, patch: Partial<AutomodRuleClient>): void => {
-    setRules((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const updateRule = <T extends AutomodRuleClient>(id: string, next: T): void => {
+    setRules((prev) => prev.map((r) => (r.id === id ? next : r)));
   };
   const removeRule = (id: string): void => {
     setRules((prev) => prev.filter((r) => r.id !== id));
   };
-  const addRule = (): void => {
-    setRules((prev) => [...prev, blankRule()]);
+  const addRule = (factory: () => AutomodRuleClient): void => {
+    setRules((prev) => [...prev, factory()]);
   };
 
   const toggleBypass = (roleId: string): void => {
@@ -178,8 +261,9 @@ export function ModerationConfigForm({
             <div className="flex-1 space-y-0.5">
               <p className="font-medium text-foreground">Automod</p>
               <p className="text-xs text-muted-foreground">
-                Règles évaluées sur chaque message non-bot. La première règle qui matche pose son
-                action. Les rôles bypass ne sont jamais évalués.
+                Règles évaluées sur chaque message non-bot. Les règles synchrones (blacklist / regex
+                / rate-limit) passent en premier ; la classification IA n'est appelée que si aucune
+                ne matche.
               </p>
             </div>
           </div>
@@ -193,79 +277,55 @@ export function ModerationConfigForm({
                   key={rule.id}
                   className="rounded-md border border-border bg-sidebar px-3 py-2.5"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
-                      value={rule.label}
-                      onChange={(e) => updateRule(rule.id, { label: e.target.value })}
-                      placeholder="Libellé (ex. mots-grossiers)"
-                      className="min-w-40 flex-1"
-                      disabled={pending}
-                    />
-                    <Select
-                      aria-label="Type de règle"
-                      value={rule.kind}
-                      onChange={(e) =>
-                        updateRule(rule.id, { kind: e.target.value as 'blacklist' | 'regex' })
-                      }
-                      wrapperClassName="w-32"
-                      disabled={pending}
-                    >
-                      <option value="blacklist">Blacklist</option>
-                      <option value="regex">Regex</option>
-                    </Select>
-                    <Select
-                      aria-label="Action"
-                      value={rule.action}
-                      onChange={(e) =>
-                        updateRule(rule.id, {
-                          action: e.target.value as 'delete' | 'warn' | 'mute',
-                        })
-                      }
-                      wrapperClassName="w-28"
-                      disabled={pending}
-                    >
-                      <option value="delete">Delete</option>
-                      <option value="warn">Warn</option>
-                      <option value="mute">Mute</option>
-                    </Select>
-                    <Toggle
-                      checked={rule.enabled}
-                      onCheckedChange={(next) => updateRule(rule.id, { enabled: next })}
-                      disabled={pending}
-                      label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeRule(rule.id)}
-                      disabled={pending}
-                      aria-label={`Supprimer ${rule.label}`}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                  <Input
-                    aria-label="Pattern"
-                    value={rule.pattern}
-                    onChange={(e) => updateRule(rule.id, { pattern: e.target.value })}
-                    placeholder={
-                      rule.kind === 'blacklist'
-                        ? 'Mot ou phrase (case-insensitive)'
-                        : 'Regex (ex. (https?:\\/\\/[^ ]+\\s+){3,})'
-                    }
-                    className="mt-2 font-mono text-xs"
-                    disabled={pending}
+                  <RuleEditor
+                    rule={rule}
+                    pending={pending}
+                    onChange={(next) => updateRule(rule.id, next)}
+                    onRemove={() => removeRule(rule.id)}
                   />
                 </li>
               ))}
             </ul>
           )}
 
-          <Button type="button" variant="outline" size="sm" onClick={addRule} disabled={pending}>
-            + Ajouter une règle
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => addRule(blankBlacklist)}
+              disabled={pending}
+            >
+              + Blacklist
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => addRule(blankRegex)}
+              disabled={pending}
+            >
+              + Regex
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => addRule(blankRateLimit)}
+              disabled={pending}
+            >
+              + Rate-limit
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => addRule(blankAiClassify)}
+              disabled={pending}
+            >
+              + IA
+            </Button>
+          </div>
 
           {roles.length > 0 ? (
             <div className="space-y-1 pt-2">
@@ -319,5 +379,186 @@ export function ModerationConfigForm({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+interface RuleEditorProps {
+  readonly rule: AutomodRuleClient;
+  readonly pending: boolean;
+  readonly onChange: (next: AutomodRuleClient) => void;
+  readonly onRemove: () => void;
+}
+
+function RuleEditor({ rule, pending, onChange, onRemove }: RuleEditorProps): ReactElement {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${KIND_BADGE_CLASS[rule.kind]}`}
+        >
+          {KIND_LABEL[rule.kind]}
+        </span>
+        <Input
+          aria-label={`Libellé règle ${rule.label || '(nouvelle)'}`}
+          value={rule.label}
+          onChange={(e) => onChange({ ...rule, label: e.target.value })}
+          placeholder="Libellé court (ex. mots-grossiers)"
+          className="min-w-40 flex-1"
+          disabled={pending}
+        />
+        <Select
+          aria-label="Action"
+          value={rule.action}
+          onChange={(e) =>
+            onChange({ ...rule, action: e.target.value as 'delete' | 'warn' | 'mute' })
+          }
+          wrapperClassName="w-28"
+          disabled={pending}
+        >
+          <option value="delete">Delete</option>
+          <option value="warn">Warn</option>
+          <option value="mute">Mute</option>
+        </Select>
+        <Toggle
+          checked={rule.enabled}
+          onCheckedChange={(next) => onChange({ ...rule, enabled: next })}
+          disabled={pending}
+          label={rule.enabled ? `Désactiver ${rule.label}` : `Activer ${rule.label}`}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          disabled={pending}
+          aria-label={`Supprimer ${rule.label}`}
+        >
+          ✕
+        </Button>
+      </div>
+
+      {rule.kind === 'blacklist' || rule.kind === 'regex' ? (
+        <Input
+          aria-label="Pattern"
+          value={rule.pattern}
+          onChange={(e) => onChange({ ...rule, pattern: e.target.value })}
+          placeholder={
+            rule.kind === 'blacklist'
+              ? 'Mot ou phrase (case-insensitive)'
+              : 'Regex (ex. (https?:\\/\\/[^ ]+\\s+){3,})'
+          }
+          className="mt-2 font-mono text-xs"
+          disabled={pending}
+        />
+      ) : null}
+
+      {rule.kind === 'rate-limit' ? (
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="space-y-1">
+            <label
+              htmlFor={`rl-count-${rule.id}`}
+              className="block text-[11px] font-medium text-muted-foreground"
+            >
+              Messages max (2-50)
+            </label>
+            <Input
+              id={`rl-count-${rule.id}`}
+              type="number"
+              min={2}
+              max={50}
+              value={rule.count}
+              onChange={(e) =>
+                onChange({
+                  ...rule,
+                  count: Math.max(2, Math.min(50, Number(e.target.value) || 2)),
+                })
+              }
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-1">
+            <label
+              htmlFor={`rl-window-${rule.id}`}
+              className="block text-[11px] font-medium text-muted-foreground"
+            >
+              Fenêtre (sec)
+            </label>
+            <Input
+              id={`rl-window-${rule.id}`}
+              type="number"
+              min={1}
+              max={600}
+              value={msToSeconds(rule.windowMs)}
+              onChange={(e) =>
+                onChange({
+                  ...rule,
+                  windowMs: secondsToMs(Math.max(1, Math.min(600, Number(e.target.value) || 1))),
+                })
+              }
+              disabled={pending}
+            />
+          </div>
+          <div className="space-y-1">
+            <label
+              htmlFor={`rl-scope-${rule.id}`}
+              className="block text-[11px] font-medium text-muted-foreground"
+            >
+              Scope
+            </label>
+            <Select
+              id={`rl-scope-${rule.id}`}
+              value={rule.scope}
+              onChange={(e) =>
+                onChange({ ...rule, scope: e.target.value as 'user-guild' | 'user-channel' })
+              }
+              disabled={pending}
+            >
+              <option value="user-guild">Par membre / serveur</option>
+              <option value="user-channel">Par membre / salon</option>
+            </Select>
+          </div>
+        </div>
+      ) : null}
+
+      {rule.kind === 'ai-classify' ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-[11px] font-medium text-muted-foreground">
+            Catégories surveillées (au moins une)
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(AI_CATEGORY_LABEL) as AiCategoryClient[]).map((cat) => {
+              const active = rule.categories.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() =>
+                    onChange({
+                      ...rule,
+                      categories: active
+                        ? rule.categories.filter((c) => c !== cat)
+                        : [...rule.categories, cat],
+                    })
+                  }
+                  disabled={pending}
+                  className={`rounded-md px-2 py-1 text-xs transition-colors ${
+                    active
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-surface-active text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {AI_CATEGORY_LABEL[cat]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Le bot envoie chaque message non-bot au classifier IA configuré (cf. Paramètres →
+            Fournisseur IA). Si la réponse correspond à l'une des catégories cochées, l'action est
+            appliquée. Coût IA payé seulement si aucune règle synchrone n'a déjà matché.
+          </p>
+        </div>
+      ) : null}
+    </>
   );
 }

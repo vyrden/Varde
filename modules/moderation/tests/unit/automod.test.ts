@@ -1,14 +1,26 @@
-import type { GuildMessageCreateEvent, ModuleContext } from '@varde/contracts';
+import type { AIService, GuildMessageCreateEvent, ModuleContext } from '@varde/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { createAutomodHandler, evaluateRules } from '../../src/automod.js';
-import { type AutomodRule, automodConfigSchema, automodRuleSchema } from '../../src/config.js';
+import {
+  createAutomodHandler,
+  createRateLimitTracker,
+  evaluateRulesAgainst,
+} from '../../src/automod.js';
+import {
+  type AutomodAiClassifyRule,
+  type AutomodBlacklistRule,
+  type AutomodRateLimitRule,
+  type AutomodRegexRule,
+  type AutomodRule,
+  automodConfigSchema,
+  automodRuleSchema,
+} from '../../src/config.js';
 
 const GUILD = '111' as never;
 const CHANNEL = '222' as never;
 const AUTHOR = '999' as never;
 const MESSAGE = '333' as never;
 
-const makeRule = (overrides: Partial<AutomodRule> = {}): AutomodRule =>
+const makeBlacklistRule = (overrides: Partial<AutomodBlacklistRule> = {}): AutomodBlacklistRule =>
   automodRuleSchema.parse({
     id: 'r1',
     label: 'test',
@@ -17,7 +29,63 @@ const makeRule = (overrides: Partial<AutomodRule> = {}): AutomodRule =>
     action: 'delete',
     enabled: true,
     ...overrides,
-  });
+  }) as AutomodBlacklistRule;
+
+const makeRegexRule = (overrides: Partial<AutomodRegexRule> = {}): AutomodRegexRule =>
+  automodRuleSchema.parse({
+    id: 'r-re',
+    label: 'regex test',
+    kind: 'regex',
+    pattern: '\\bspam\\b',
+    action: 'delete',
+    enabled: true,
+    ...overrides,
+  }) as AutomodRegexRule;
+
+const makeRateLimitRule = (overrides: Partial<AutomodRateLimitRule> = {}): AutomodRateLimitRule =>
+  automodRuleSchema.parse({
+    id: 'r-rl',
+    label: 'rate limit',
+    kind: 'rate-limit',
+    count: 3,
+    windowMs: 5_000,
+    scope: 'user-guild',
+    action: 'mute',
+    durationMs: null,
+    enabled: true,
+    ...overrides,
+  }) as AutomodRateLimitRule;
+
+const makeAiClassifyRule = (
+  overrides: Partial<AutomodAiClassifyRule> = {},
+): AutomodAiClassifyRule =>
+  automodRuleSchema.parse({
+    id: 'r-ai',
+    label: 'ai classify',
+    kind: 'ai-classify',
+    categories: ['toxicity', 'harassment'],
+    action: 'delete',
+    enabled: true,
+    ...overrides,
+  }) as AutomodAiClassifyRule;
+
+const makeAiService = (resolved: string): AIService =>
+  ({
+    classify: vi.fn().mockResolvedValue(resolved),
+    complete: vi.fn(),
+    summarize: vi.fn(),
+  }) as unknown as AIService;
+
+const evalEvent = (content: string, channelId: string = CHANNEL): GuildMessageCreateEvent =>
+  ({
+    type: 'guild.messageCreate',
+    guildId: GUILD,
+    channelId,
+    messageId: MESSAGE,
+    authorId: AUTHOR,
+    content,
+    createdAt: Date.now(),
+  }) as unknown as GuildMessageCreateEvent;
 
 describe('automodConfigSchema', () => {
   it('defaults : rules vides + bypass vides', () => {
@@ -37,44 +105,164 @@ describe('automodConfigSchema', () => {
   });
 });
 
-describe('evaluateRules', () => {
-  it('retourne null si aucune règle ne matche', () => {
-    const rules = [makeRule({ pattern: 'spam' })];
-    expect(evaluateRules('hello world', rules)).toBeNull();
+describe('evaluateRulesAgainst — règles synchrones', () => {
+  const baseCtx = (content: string) => ({
+    content,
+    event: evalEvent(content),
+    nowMs: 1_000_000,
+    rateLimit: createRateLimitTracker(),
+    ai: null,
   });
 
-  it('blacklist : substring case-insensitive', () => {
-    const rules = [makeRule({ pattern: 'SPAM', kind: 'blacklist' })];
-    const matched = evaluateRules('this is spam content', rules);
-    expect(matched?.id).toBe('r1');
+  it('retourne null si aucune règle ne matche', async () => {
+    const rules = [makeBlacklistRule({ pattern: 'spam' })];
+    expect(await evaluateRulesAgainst(rules, baseCtx('hello world'))).toBeNull();
   });
 
-  it('regex : compilation avec flag i', () => {
-    const rules = [makeRule({ pattern: '\\bnsfw\\b', kind: 'regex' })];
-    expect(evaluateRules('check this NSFW link', rules)?.id).toBe('r1');
-    expect(evaluateRules('chouettes', rules)).toBeNull();
+  it('blacklist : substring case-insensitive', async () => {
+    const rules = [makeBlacklistRule({ pattern: 'SPAM' })];
+    const matched = await evaluateRulesAgainst(rules, baseCtx('this is spam content'));
+    expect(matched?.rule.id).toBe('r1');
+    expect(matched?.kind).toBe('blacklist');
   });
 
-  it('regex invalide : règle inerte (jamais matche)', () => {
-    const rules = [makeRule({ id: 'bad', pattern: '[invalid(', kind: 'regex' })];
-    expect(evaluateRules('anything', rules)).toBeNull();
+  it('regex : compilation avec flag i', async () => {
+    const rules = [makeRegexRule({ pattern: '\\bnsfw\\b' })];
+    expect((await evaluateRulesAgainst(rules, baseCtx('check this NSFW link')))?.rule.id).toBe(
+      'r-re',
+    );
+    expect(await evaluateRulesAgainst(rules, baseCtx('chouettes'))).toBeNull();
   });
 
-  it('skip les règles désactivées', () => {
+  it('regex invalide : règle inerte (jamais matche)', async () => {
+    const rules = [makeRegexRule({ pattern: '[invalid(' })];
+    expect(await evaluateRulesAgainst(rules, baseCtx('anything'))).toBeNull();
+  });
+
+  it('skip les règles désactivées', async () => {
     const rules = [
-      makeRule({ id: 'off', pattern: 'spam', enabled: false }),
-      makeRule({ id: 'on', pattern: 'evil' }),
+      makeBlacklistRule({ id: 'off', pattern: 'spam', enabled: false }),
+      makeBlacklistRule({ id: 'on', pattern: 'evil' }),
     ];
-    expect(evaluateRules('spam', rules)).toBeNull();
-    expect(evaluateRules('evil words', rules)?.id).toBe('on');
+    expect(await evaluateRulesAgainst(rules, baseCtx('spam'))).toBeNull();
+    expect((await evaluateRulesAgainst(rules, baseCtx('evil words')))?.rule.id).toBe('on');
   });
 
-  it('renvoie la première règle qui matche (ordre déclaré)', () => {
+  it('renvoie la première règle qui matche (ordre déclaré)', async () => {
     const rules = [
-      makeRule({ id: 'first', pattern: 'foo' }),
-      makeRule({ id: 'second', pattern: 'foo' }),
+      makeBlacklistRule({ id: 'first', pattern: 'foo' }),
+      makeBlacklistRule({ id: 'second', pattern: 'foo' }),
     ];
-    expect(evaluateRules('foo bar', rules)?.id).toBe('first');
+    expect((await evaluateRulesAgainst(rules, baseCtx('foo bar')))?.rule.id).toBe('first');
+  });
+});
+
+describe('evaluateRulesAgainst — rate-limit', () => {
+  it('déclenche au-delà du seuil sur la fenêtre glissante', async () => {
+    const tracker = createRateLimitTracker();
+    const rule = makeRateLimitRule({ count: 3, windowMs: 5_000 });
+    const make = (nowMs: number) => ({
+      content: 'message',
+      event: evalEvent('message'),
+      nowMs,
+      rateLimit: tracker,
+      ai: null as AIService | null,
+    });
+    expect(await evaluateRulesAgainst([rule], make(1_000))).toBeNull();
+    expect(await evaluateRulesAgainst([rule], make(1_500))).toBeNull();
+    expect(await evaluateRulesAgainst([rule], make(2_000))).toBeNull();
+    const fourth = await evaluateRulesAgainst([rule], make(2_500));
+    expect(fourth?.kind).toBe('rate-limit');
+    expect(fourth?.rule.id).toBe('r-rl');
+  });
+
+  it('purge les timestamps hors fenêtre (pas de déclenchement après pause)', async () => {
+    const tracker = createRateLimitTracker();
+    const rule = makeRateLimitRule({ count: 2, windowMs: 1_000 });
+    const make = (nowMs: number) => ({
+      content: 'm',
+      event: evalEvent('m'),
+      nowMs,
+      rateLimit: tracker,
+      ai: null as AIService | null,
+    });
+    await evaluateRulesAgainst([rule], make(1_000));
+    await evaluateRulesAgainst([rule], make(1_400));
+    // 3e message après expiration de la fenêtre du 1er → ne doit pas déclencher
+    expect(await evaluateRulesAgainst([rule], make(2_500))).toBeNull();
+  });
+
+  it("scope: 'user-channel' isole les compteurs par salon", async () => {
+    const tracker = createRateLimitTracker();
+    const rule = makeRateLimitRule({ count: 2, windowMs: 5_000, scope: 'user-channel' });
+    const make = (channelId: string, nowMs: number) => ({
+      content: 'm',
+      event: evalEvent('m', channelId),
+      nowMs,
+      rateLimit: tracker,
+      ai: null as AIService | null,
+    });
+    await evaluateRulesAgainst([rule], make('chan-a', 1_000));
+    await evaluateRulesAgainst([rule], make('chan-a', 1_100));
+    // Salon différent : le compteur recommence à 0
+    expect(await evaluateRulesAgainst([rule], make('chan-b', 1_200))).toBeNull();
+    expect(await evaluateRulesAgainst([rule], make('chan-b', 1_300))).toBeNull();
+  });
+});
+
+describe('evaluateRulesAgainst — ai-classify', () => {
+  const baseCtx = (content: string, ai: AIService | null) => ({
+    content,
+    event: evalEvent(content),
+    nowMs: 1_000_000,
+    rateLimit: createRateLimitTracker(),
+    ai,
+  });
+
+  it("appelle ai.classify avec ['safe', ...categories] et matche si retour ∈ categories", async () => {
+    const ai = makeAiService('toxicity');
+    const matched = await evaluateRulesAgainst([makeAiClassifyRule()], baseCtx('blabla', ai));
+    expect(matched?.kind).toBe('ai-classify');
+    if (matched?.kind === 'ai-classify') {
+      expect(matched.category).toBe('toxicity');
+    }
+    expect(ai.classify).toHaveBeenCalledWith('blabla', ['safe', 'toxicity', 'harassment']);
+  });
+
+  it("retour 'safe' → null (pas de matche)", async () => {
+    const ai = makeAiService('safe');
+    expect(await evaluateRulesAgainst([makeAiClassifyRule()], baseCtx('hi', ai))).toBeNull();
+  });
+
+  it('retour hors-pool → null (fail-open)', async () => {
+    const ai = makeAiService('whatever-the-model-said');
+    expect(await evaluateRulesAgainst([makeAiClassifyRule()], baseCtx('hi', ai))).toBeNull();
+  });
+
+  it('ctx.ai === null : règle ai-classify silencieusement ignorée', async () => {
+    expect(
+      await evaluateRulesAgainst([makeAiClassifyRule()], baseCtx('toxic content', null)),
+    ).toBeNull();
+  });
+
+  it('ne paie pas le coût IA si une règle synchrone matche déjà', async () => {
+    const ai = makeAiService('toxicity');
+    const rules = [
+      makeBlacklistRule({ id: 'sync', pattern: 'spam' }),
+      makeAiClassifyRule({ id: 'r-ai' }),
+    ];
+    const matched = await evaluateRulesAgainst(rules, baseCtx('this is spam', ai));
+    expect(matched?.rule.id).toBe('sync');
+    expect(ai.classify).not.toHaveBeenCalled();
+  });
+
+  it('tronque le contenu à maxContentLength avant de l envoyer à l IA', async () => {
+    const ai = makeAiService('safe');
+    const rule = makeAiClassifyRule({ maxContentLength: 64 });
+    const long = 'x'.repeat(200);
+    await evaluateRulesAgainst([rule], baseCtx(long, ai));
+    const call = (ai.classify as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect((call?.[0] as string).length).toBe(64);
   });
 });
 
@@ -131,7 +319,7 @@ describe('createAutomodHandler', () => {
   };
 
   it('ignore les messages vides', async () => {
-    const ctx = makeCtx({ rules: [makeRule({ pattern: 'x' })] });
+    const ctx = makeCtx({ rules: [makeBlacklistRule({ pattern: 'x' })] });
     await createAutomodHandler(ctx)(makeEvent(''));
     expect((ctx.audit as unknown as { log: ReturnType<typeof vi.fn> }).log).not.toHaveBeenCalled();
   });
@@ -143,7 +331,7 @@ describe('createAutomodHandler', () => {
   });
 
   it("delete : supprime + audit avec applied='delete'", async () => {
-    const ctx = makeCtx({ rules: [makeRule({ pattern: 'spam', action: 'delete' })] });
+    const ctx = makeCtx({ rules: [makeBlacklistRule({ pattern: 'spam', action: 'delete' })] });
     await createAutomodHandler(ctx)(makeEvent('this is spam'));
     expect(
       (ctx.discord as unknown as { deleteMessage: ReturnType<typeof vi.fn> }).deleteMessage,
@@ -157,7 +345,7 @@ describe('createAutomodHandler', () => {
   });
 
   it('warn : audit seulement, pas de delete', async () => {
-    const ctx = makeCtx({ rules: [makeRule({ pattern: 'spam', action: 'warn' })] });
+    const ctx = makeCtx({ rules: [makeBlacklistRule({ pattern: 'spam', action: 'warn' })] });
     await createAutomodHandler(ctx)(makeEvent('SPAM here'));
     expect(
       (ctx.discord as unknown as { deleteMessage: ReturnType<typeof vi.fn> }).deleteMessage,
@@ -172,7 +360,7 @@ describe('createAutomodHandler', () => {
 
   it("mute sans rôle muet : delete + audit applied='mute-no-role'", async () => {
     const ctx = makeCtx({
-      rules: [makeRule({ pattern: 'spam', action: 'mute' })],
+      rules: [makeBlacklistRule({ pattern: 'spam', action: 'mute' })],
       mutedRoleId: null,
     });
     await createAutomodHandler(ctx)(makeEvent('spam'));
@@ -188,7 +376,7 @@ describe('createAutomodHandler', () => {
 
   it('mute avec rôle : delete + addMemberRole + audit', async () => {
     const ctx = makeCtx({
-      rules: [makeRule({ pattern: 'spam', action: 'mute' })],
+      rules: [makeBlacklistRule({ pattern: 'spam', action: 'mute' })],
       mutedRoleId: '123456789012345678',
     });
     await createAutomodHandler(ctx)(makeEvent('spam'));
@@ -199,7 +387,7 @@ describe('createAutomodHandler', () => {
 
   it('mute avec durationMs : programme le retrait via scheduler', async () => {
     const ctx = makeCtx({
-      rules: [makeRule({ pattern: 'spam', action: 'mute', durationMs: 600_000 })],
+      rules: [makeBlacklistRule({ pattern: 'spam', action: 'mute', durationMs: 600_000 })],
       mutedRoleId: '123456789012345678',
     });
     await createAutomodHandler(ctx)(makeEvent('spam'));
@@ -212,7 +400,7 @@ describe('createAutomodHandler', () => {
 
   it("bypass : auteur avec rôle bypass n'est pas évalué", async () => {
     const ctx = makeCtx({
-      rules: [makeRule({ pattern: 'spam', action: 'delete' })],
+      rules: [makeBlacklistRule({ pattern: 'spam', action: 'delete' })],
       bypassRoleIds: ['111111111111111111'],
     });
     (

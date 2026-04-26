@@ -13,7 +13,11 @@ import type { ReactElement } from 'react';
 import { auth } from '../../../../../auth';
 import { AuditView } from '../../../../../components/audit/AuditView';
 import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
-import { ModerationConfigForm } from '../../../../../components/moderation/ModerationConfigForm';
+import {
+  type AiCategoryClient,
+  type AutomodRuleClient,
+  ModerationConfigForm,
+} from '../../../../../components/moderation/ModerationConfigForm';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
@@ -41,15 +45,7 @@ const normalizeConfig = (
   mutedRoleId: string | null;
   dmOnSanction: boolean;
   automod: {
-    rules: ReadonlyArray<{
-      id: string;
-      label: string;
-      kind: 'blacklist' | 'regex';
-      pattern: string;
-      action: 'delete' | 'warn' | 'mute';
-      durationMs: number | null;
-      enabled: boolean;
-    }>;
+    rules: readonly AutomodRuleClient[];
     bypassRoleIds: readonly string[];
   };
 } => {
@@ -72,29 +68,71 @@ const normalizeConfig = (
       ? (automodRaw as Record<string, unknown>)
       : ({} as Record<string, unknown>);
   const rulesRaw = Array.isArray(automod['rules']) ? (automod['rules'] as unknown[]) : [];
-  const rules = rulesRaw.flatMap((r) => {
+  const rules = rulesRaw.flatMap((r): AutomodRuleClient[] => {
     if (typeof r !== 'object' || r === null) return [];
     const rule = r as Record<string, unknown>;
+    const id = rule['id'];
+    const label = rule['label'];
+    const action = rule['action'];
+    const kind = rule['kind'];
     if (
-      typeof rule['id'] !== 'string' ||
-      typeof rule['label'] !== 'string' ||
-      (rule['kind'] !== 'blacklist' && rule['kind'] !== 'regex') ||
-      typeof rule['pattern'] !== 'string' ||
-      (rule['action'] !== 'delete' && rule['action'] !== 'warn' && rule['action'] !== 'mute')
+      typeof id !== 'string' ||
+      typeof label !== 'string' ||
+      (action !== 'delete' && action !== 'warn' && action !== 'mute')
     ) {
       return [];
     }
-    return [
-      {
-        id: rule['id'],
-        label: rule['label'],
-        kind: rule['kind'] as 'blacklist' | 'regex',
-        pattern: rule['pattern'],
-        action: rule['action'] as 'delete' | 'warn' | 'mute',
-        durationMs: typeof rule['durationMs'] === 'number' ? (rule['durationMs'] as number) : null,
-        enabled: typeof rule['enabled'] === 'boolean' ? rule['enabled'] : true,
-      },
-    ];
+    const base = {
+      id,
+      label,
+      action: action as 'delete' | 'warn' | 'mute',
+      durationMs: typeof rule['durationMs'] === 'number' ? (rule['durationMs'] as number) : null,
+      enabled: typeof rule['enabled'] === 'boolean' ? rule['enabled'] : true,
+    };
+    if ((kind === 'blacklist' || kind === 'regex') && typeof rule['pattern'] === 'string') {
+      return [{ ...base, kind, pattern: rule['pattern'] as string }];
+    }
+    if (
+      kind === 'rate-limit' &&
+      typeof rule['count'] === 'number' &&
+      typeof rule['windowMs'] === 'number'
+    ) {
+      const scope = rule['scope'] === 'user-channel' ? 'user-channel' : 'user-guild';
+      return [
+        {
+          ...base,
+          kind: 'rate-limit',
+          count: rule['count'] as number,
+          windowMs: rule['windowMs'] as number,
+          scope,
+        },
+      ];
+    }
+    if (kind === 'ai-classify' && Array.isArray(rule['categories'])) {
+      const categories = (rule['categories'] as unknown[]).filter(
+        (c): c is AiCategoryClient =>
+          c === 'toxicity' ||
+          c === 'harassment' ||
+          c === 'hate' ||
+          c === 'sexual' ||
+          c === 'self-harm' ||
+          c === 'spam',
+      );
+      if (categories.length === 0) return [];
+      const maxContentLength =
+        typeof rule['maxContentLength'] === 'number'
+          ? Math.min(2000, Math.max(64, rule['maxContentLength'] as number))
+          : 500;
+      return [
+        {
+          ...base,
+          kind: 'ai-classify',
+          categories,
+          maxContentLength,
+        },
+      ];
+    }
+    return [];
   });
   const bypassRoleIds = Array.isArray(automod['bypassRoleIds'])
     ? (automod['bypassRoleIds'] as unknown[]).filter((s): s is string => typeof s === 'string')
