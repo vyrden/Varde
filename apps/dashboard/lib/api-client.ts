@@ -75,6 +75,9 @@ export interface AuditFilters {
   readonly action?: string;
   readonly actorType?: AuditActorType;
   readonly severity?: AuditSeverity;
+  readonly targetType?: 'user' | 'channel' | 'role' | 'message';
+  readonly targetId?: string;
+  readonly moduleId?: string;
   readonly since?: string;
   readonly until?: string;
   readonly cursor?: string;
@@ -140,6 +143,9 @@ export async function fetchAudit(
   if (filters.action) params.set('action', filters.action);
   if (filters.actorType) params.set('actorType', filters.actorType);
   if (filters.severity) params.set('severity', filters.severity);
+  if (filters.targetType) params.set('targetType', filters.targetType);
+  if (filters.targetId) params.set('targetId', filters.targetId);
+  if (filters.moduleId) params.set('moduleId', filters.moduleId);
   if (filters.since) params.set('since', filters.since);
   if (filters.until) params.set('until', filters.until);
   if (filters.cursor) params.set('cursor', filters.cursor);

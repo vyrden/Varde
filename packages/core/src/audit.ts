@@ -58,6 +58,12 @@ export interface AuditQueryOptions {
    * ULID, naturellement aligné avec l'ordre `createdAt desc` du query.
    */
   readonly cursor?: Ulid;
+  /** Filtre sur le type de cible (`user` / `channel` / `role` / `message`). */
+  readonly targetType?: 'user' | 'channel' | 'role' | 'message';
+  /** Snowflake / id de la cible (à combiner avec `targetType`). */
+  readonly targetId?: string;
+  /** Filtre sur l'id du module auteur. */
+  readonly moduleId?: ModuleId;
 }
 
 /** Options de purge par rétention. */
@@ -180,6 +186,9 @@ const selectRows = async <D extends DbDriver>(
       filters.action ? eq(auditLog.action, filters.action) : undefined,
       filters.actorType ? eq(auditLog.actorType, filters.actorType) : undefined,
       filters.severity ? eq(auditLog.severity, filters.severity) : undefined,
+      filters.targetType ? eq(auditLog.targetType, filters.targetType) : undefined,
+      filters.targetId ? eq(auditLog.targetId, filters.targetId) : undefined,
+      filters.moduleId ? eq(auditLog.moduleId, filters.moduleId) : undefined,
       sinceIso ? gte(auditLog.createdAt, new Date(sinceIso)) : undefined,
       untilIso ? lt(auditLog.createdAt, new Date(untilIso)) : undefined,
       filters.cursor ? lt(auditLog.id, filters.cursor) : undefined,
@@ -214,6 +223,9 @@ const selectRows = async <D extends DbDriver>(
     filters.action ? eq(auditLog.action, filters.action) : undefined,
     filters.actorType ? eq(auditLog.actorType, filters.actorType) : undefined,
     filters.severity ? eq(auditLog.severity, filters.severity) : undefined,
+    filters.targetType ? eq(auditLog.targetType, filters.targetType) : undefined,
+    filters.targetId ? eq(auditLog.targetId, filters.targetId) : undefined,
+    filters.moduleId ? eq(auditLog.moduleId, filters.moduleId) : undefined,
     sinceIso ? gte(auditLog.createdAt, sinceIso) : undefined,
     untilIso ? lt(auditLog.createdAt, untilIso) : undefined,
     filters.cursor ? lt(auditLog.id, filters.cursor) : undefined,
@@ -240,6 +252,50 @@ const selectRows = async <D extends DbDriver>(
     metadata: (r.metadata as Readonly<Record<string, unknown>>) ?? {},
     createdAt: r.createdAt as Iso8601DateTime,
   }));
+};
+
+const selectById = async <D extends DbDriver>(
+  client: DbClient<D>,
+  id: Ulid,
+): Promise<AuditLogRecord | null> => {
+  if (client.driver === 'pg') {
+    const { auditLog } = pgSchema;
+    const pg = client as DbClient<'pg'>;
+    const rows = await pg.db.select().from(auditLog).where(eq(auditLog.id, id)).limit(1);
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      id: r.id as Ulid,
+      guildId: r.guildId as GuildId,
+      actorType: r.actorType,
+      actorId: r.actorId,
+      action: r.action as ActionId,
+      targetType: r.targetType,
+      targetId: r.targetId,
+      moduleId: (r.moduleId ?? null) as ModuleId | null,
+      severity: r.severity,
+      metadata: (r.metadata as Readonly<Record<string, unknown>>) ?? {},
+      createdAt: toCanonicalDate(r.createdAt),
+    };
+  }
+  const { auditLog } = sqliteSchema;
+  const sqlite = client as DbClient<'sqlite'>;
+  const rows = sqlite.db.select().from(auditLog).where(eq(auditLog.id, id)).limit(1).all();
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id as Ulid,
+    guildId: r.guildId as GuildId,
+    actorType: r.actorType,
+    actorId: r.actorId,
+    action: r.action as ActionId,
+    targetType: r.targetType,
+    targetId: r.targetId,
+    moduleId: (r.moduleId ?? null) as ModuleId | null,
+    severity: r.severity,
+    metadata: (r.metadata as Readonly<Record<string, unknown>>) ?? {},
+    createdAt: r.createdAt as Iso8601DateTime,
+  };
 };
 
 const purgeRows = async <D extends DbDriver>(
@@ -273,6 +329,19 @@ export function createAuditService<D extends DbDriver>(
   const { client } = options;
   const scope: AuditScope = options.scope ?? { kind: 'core' };
 
+  /**
+   * Si le service est scopé à un module, on force le filtre
+   * `moduleId` au moduleId du scope, écrasant toute tentative de
+   * lecture cross-module. Source unique de vérité de l'isolation
+   * audit côté lecture.
+   */
+  const enforceScope = (filters: AuditQueryOptions): AuditQueryOptions => {
+    if (scope.kind === 'module') {
+      return { ...filters, moduleId: scope.moduleId };
+    }
+    return filters;
+  };
+
   return {
     async log(entry) {
       const guildId = requireGuildId(entry);
@@ -294,7 +363,18 @@ export function createAuditService<D extends DbDriver>(
     },
 
     async query(filters = {}) {
-      return selectRows(client, filters);
+      return selectRows(client, enforceScope(filters));
+    },
+
+    async get(id: Ulid) {
+      const direct = await selectById(client, id);
+      if (!direct) return null;
+      // Vérification de scope : si module-scoped, refuse les entrées
+      // qui n'appartiennent pas à ce module.
+      if (scope.kind === 'module' && direct.moduleId !== scope.moduleId) {
+        return null;
+      }
+      return direct;
     },
 
     async purge(purgeOptions) {

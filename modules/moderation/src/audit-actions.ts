@@ -25,6 +25,51 @@ export const PERM_BAN = 'moderation.actions.ban' as PermissionId;
 export const PERM_MUTE = 'moderation.actions.mute' as PermissionId;
 export const PERM_PURGE = 'moderation.actions.purge' as PermissionId;
 export const PERM_SLOWMODE = 'moderation.actions.slowmode' as PermissionId;
+export const PERM_CASES_READ = 'moderation.cases.read' as PermissionId;
+
+/** Toutes les actions `moderation.case.*` exposées par le module. */
+export const ALL_CASE_ACTIONS = [
+  ACTION_WARN,
+  ACTION_KICK,
+  ACTION_BAN,
+  ACTION_TEMPBAN,
+  ACTION_UNBAN,
+  ACTION_MUTE,
+  ACTION_TEMPMUTE,
+  ACTION_UNMUTE,
+] as const;
+
+/**
+ * Traduit une action audit en label court humain ("Warn", "Ban
+ * temporaire", etc.). Utilisé par `/infractions` pour rendre la
+ * liste lisible dans Discord.
+ */
+export function formatCaseLabel(action: ActionId): string {
+  switch (action) {
+    case ACTION_WARN:
+      return 'Warn';
+    case ACTION_KICK:
+      return 'Kick';
+    case ACTION_BAN:
+      return 'Ban';
+    case ACTION_TEMPBAN:
+      return 'Tempban';
+    case ACTION_UNBAN:
+      return 'Unban';
+    case ACTION_MUTE:
+      return 'Mute';
+    case ACTION_TEMPMUTE:
+      return 'Tempmute';
+    case ACTION_UNMUTE:
+      return 'Unmute';
+    case ACTION_PURGE:
+      return 'Purge';
+    case ACTION_SLOWMODE:
+      return 'Slowmode';
+    default:
+      return action;
+  }
+}
 
 /**
  * Traduit un `ModerationCheckReason` en message d'erreur affichable

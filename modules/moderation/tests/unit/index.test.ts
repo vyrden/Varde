@@ -7,12 +7,14 @@ describe('moderation defineModule', () => {
     expect(moderation.manifest.id).toBe('moderation');
   });
 
-  it('déclare 10 slash commands en PR 4.M.2b', () => {
+  it('déclare 12 slash commands en PR 4.M.3', () => {
     expect(moderation.commands).toBeDefined();
     const names = Object.keys(moderation.commands ?? {}).sort();
     expect(names).toEqual([
       'ban',
+      'case',
       'clear',
+      'infractions',
       'kick',
       'mute',
       'slowmode',

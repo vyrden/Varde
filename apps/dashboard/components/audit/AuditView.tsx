@@ -37,6 +37,13 @@ export interface AuditViewProps {
   readonly initialNextCursor: string | undefined;
   readonly initialFilters: AuditFilters;
   readonly knownActions: readonly string[];
+  /**
+   * Filtres "verrouillés" toujours appliqués, non éditables côté UI.
+   * Utilisé par les pages contextuelles (ex. modération filtre par
+   * `moduleId='moderation'`) pour scoper la vue. Mergés au niveau API
+   * à chaque fetch — même au reset de la barre de filtres.
+   */
+  readonly lockedFilters?: AuditFilters;
 }
 
 interface FiltersState {
@@ -533,6 +540,7 @@ export function AuditView({
   initialNextCursor,
   initialFilters,
   knownActions,
+  lockedFilters,
 }: AuditViewProps): ReactElement {
   const [draft, setDraft] = useState<FiltersState>(() => filtersFromInitial(initialFilters));
   const [applied, setApplied] = useState<FiltersState>(() => filtersFromInitial(initialFilters));
@@ -549,13 +557,20 @@ export function AuditView({
   // mélanger les pages d'anciens filtres.
   const requestTokenRef = useRef(0);
 
+  /** Merge des filtres "verrouillés" + filtres user — verrouillés gagnent. */
+  const mergeLocked = useCallback(
+    (filters: AuditFilters): AuditFilters =>
+      lockedFilters !== undefined ? { ...filters, ...lockedFilters } : filters,
+    [lockedFilters],
+  );
+
   const onApplyFilters = useCallback(async () => {
     const token = ++requestTokenRef.current;
     setApplied(draft);
     setLoading(true);
     setError(null);
     try {
-      const result = await loadAuditPage(guildId, toApiFilters(draft));
+      const result = await loadAuditPage(guildId, mergeLocked(toApiFilters(draft)));
       if (token !== requestTokenRef.current) return;
       setItems(result.items);
       setCursor(result.nextCursor);
@@ -567,7 +582,7 @@ export function AuditView({
     } finally {
       if (token === requestTokenRef.current) setLoading(false);
     }
-  }, [guildId, draft]);
+  }, [guildId, draft, mergeLocked]);
 
   const onReset = useCallback(() => {
     const cleared: FiltersState = {
@@ -586,7 +601,7 @@ export function AuditView({
     setError(null);
     void (async () => {
       try {
-        const result = await loadAuditPage(guildId, {});
+        const result = await loadAuditPage(guildId, mergeLocked({}));
         if (token !== requestTokenRef.current) return;
         setItems(result.items);
         setCursor(result.nextCursor);
@@ -599,7 +614,7 @@ export function AuditView({
         if (token === requestTokenRef.current) setLoading(false);
       }
     })();
-  }, [guildId]);
+  }, [guildId, mergeLocked]);
 
   // IntersectionObserver pour le scroll infini
   useEffect(() => {
@@ -614,7 +629,7 @@ export function AuditView({
         setLoading(true);
         void (async () => {
           try {
-            const result = await loadAuditPage(guildId, toApiFilters(applied, cursor));
+            const result = await loadAuditPage(guildId, mergeLocked(toApiFilters(applied, cursor)));
             if (token !== requestTokenRef.current) return;
             setItems((prev) => [...prev, ...result.items]);
             setCursor(result.nextCursor);
@@ -633,7 +648,7 @@ export function AuditView({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [guildId, cursor, loading, applied]);
+  }, [guildId, cursor, loading, applied, mergeLocked]);
 
   const stats = useMemo(() => {
     const distinctActors = new Set<string>();

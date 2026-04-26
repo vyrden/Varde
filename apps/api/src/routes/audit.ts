@@ -1,4 +1,4 @@
-import type { ActionId, AuditLogRecord, GuildId, Ulid } from '@varde/contracts';
+import type { ActionId, AuditLogRecord, GuildId, ModuleId, Ulid } from '@varde/contracts';
 import type { CoreAuditService } from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -29,10 +29,15 @@ import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
 const AUDIT_ACTOR_TYPES = ['user', 'system', 'module'] as const;
 const AUDIT_SEVERITIES = ['info', 'warn', 'error'] as const;
 
+const AUDIT_TARGET_TYPES = ['user', 'channel', 'role', 'message'] as const;
+
 const auditQuerySchema = z.object({
   action: z.string().min(1).optional(),
   actorType: z.enum(AUDIT_ACTOR_TYPES).optional(),
   severity: z.enum(AUDIT_SEVERITIES).optional(),
+  targetType: z.enum(AUDIT_TARGET_TYPES).optional(),
+  targetId: z.string().min(1).optional(),
+  moduleId: z.string().min(1).optional(),
   since: z.iso.datetime().optional(),
   until: z.iso.datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -78,6 +83,9 @@ const buildAuditOptions = (
     action?: ActionId;
     actorType?: 'user' | 'system' | 'module';
     severity?: 'info' | 'warn' | 'error';
+    targetType?: 'user' | 'channel' | 'role' | 'message';
+    targetId?: string;
+    moduleId?: ModuleId;
     since?: Date;
     until?: Date;
     cursor?: Ulid;
@@ -88,6 +96,9 @@ const buildAuditOptions = (
   if (parsed.action !== undefined) options.action = parsed.action as ActionId;
   if (parsed.actorType !== undefined) options.actorType = parsed.actorType;
   if (parsed.severity !== undefined) options.severity = parsed.severity;
+  if (parsed.targetType !== undefined) options.targetType = parsed.targetType;
+  if (parsed.targetId !== undefined) options.targetId = parsed.targetId;
+  if (parsed.moduleId !== undefined) options.moduleId = parsed.moduleId as ModuleId;
   if (parsed.since !== undefined) options.since = new Date(parsed.since);
   if (parsed.until !== undefined) options.until = new Date(parsed.until);
   if (parsed.cursor !== undefined) options.cursor = parsed.cursor as Ulid;

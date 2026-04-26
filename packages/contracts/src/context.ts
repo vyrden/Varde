@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod';
 
+import type { AuditLogRecord, Iso8601DateTime } from './db-records.js';
 import type { CoreEvent, CoreEventType, Emoji } from './events.js';
 import type {
   ActionId,
@@ -13,6 +14,7 @@ import type {
 } from './ids.js';
 import type { OnboardingActionDefinition } from './onboarding.js';
 import type { UIAttachment, UIEmbed } from './ui.js';
+import type { Ulid } from './ulid.js';
 
 /**
  * Interfaces des services exposés aux modules via `ctx`. Types
@@ -64,9 +66,52 @@ export interface AuditEntry {
   readonly guildId?: GuildId;
 }
 
-/** Service d'audit log. Append-only, écriture unique. */
+/**
+ * Filtre de lecture audit_log exposé aux modules. Par rapport à
+ * `CoreAuditService.query`, le `moduleId` n'est PAS exposé : la
+ * factory l'injecte automatiquement à l'`id` du module appelant
+ * pour empêcher un module de lire les entrées d'un autre module
+ * (règle ADR 0001 : isolation par module).
+ *
+ * Pour `/infractions @user`, un module passera typiquement
+ * `{ guildId, targetType: 'user', targetId: userId }` et récupérera
+ * uniquement ses propres entrées (auto-filtré par moduleId).
+ */
+export interface ModuleAuditQuery {
+  readonly guildId?: GuildId;
+  /** Action exacte (ex. `moderation.case.warn`). Pour un préfixe, faire plusieurs appels. */
+  readonly action?: ActionId;
+  /** Filtre sur le type de cible (`user` / `channel` / `role` / `message`). */
+  readonly targetType?: AuditTarget['type'];
+  /** Snowflake / id de la cible (à combiner avec `targetType`). */
+  readonly targetId?: string;
+  readonly actorType?: AuditActor['type'];
+  readonly severity?: AuditSeverity;
+  readonly since?: Date | Iso8601DateTime;
+  readonly until?: Date | Iso8601DateTime;
+  /** Limite de lignes (défaut 50, max 100 côté impl). */
+  readonly limit?: number;
+  /** Pagination cursor : retourne les lignes strictement plus anciennes que cet ULID. */
+  readonly cursor?: Ulid;
+}
+
+/**
+ * Service d'audit log exposé aux modules.
+ *
+ * - `log` : écrit une entrée (append-only).
+ * - `query` : lit les entrées de **ce module uniquement** (filtre
+ *   `moduleId` auto-injecté). Permet par exemple l'historique des
+ *   sanctions d'un user pour `/infractions @user`.
+ * - `get` : lookup direct par ULID, scopé au module appelant.
+ *
+ * Les modules ne peuvent pas lire les entrées des autres modules.
+ * Le dashboard a sa propre route `GET /guilds/:id/audit` qui passe
+ * par `CoreAuditService` (sans restriction de scope) côté API.
+ */
 export interface AuditService {
   readonly log: (entry: AuditEntry) => Promise<void>;
+  readonly query: (options: ModuleAuditQuery) => Promise<readonly AuditLogRecord[]>;
+  readonly get: (id: Ulid) => Promise<AuditLogRecord | null>;
 }
 
 /**

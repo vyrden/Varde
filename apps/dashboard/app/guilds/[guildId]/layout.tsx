@@ -14,7 +14,7 @@ import { ApiError, fetchAdminGuilds, fetchModules } from '../../../lib/api-clien
  * via la grille `/guilds/[guildId]` mais n'apparaît pas en
  * navigation persistante.
  */
-const MODULES_WITH_PAGE = new Set(['logs', 'reaction-roles', 'welcome']);
+const MODULES_WITH_PAGE = new Set(['logs', 'moderation', 'reaction-roles', 'welcome']);
 
 interface LayoutProps {
   readonly children: ReactNode;

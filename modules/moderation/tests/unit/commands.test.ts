@@ -24,8 +24,14 @@ const TARGET = '999' as never;
 const makeCtx = (
   configOverride: Record<string, unknown> = {},
   hierarchyOk: boolean | { reason: 'self' | 'bot' | 'owner' | 'rank' | 'unknown' } = true,
+  auditRows: ReadonlyArray<unknown> = [],
+  auditEntry: unknown = null,
 ): ModuleContext => {
-  const audit = { log: vi.fn().mockResolvedValue(undefined) };
+  const audit = {
+    log: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockResolvedValue(auditRows),
+    get: vi.fn().mockResolvedValue(auditEntry),
+  };
   const discord = {
     canModerate: vi
       .fn()
@@ -340,5 +346,126 @@ describe('handler /slowmode', () => {
     expect((ctx.audit as unknown as { log: ReturnType<typeof vi.fn> }).log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'moderation.case.slowmode' }),
     );
+  });
+});
+
+describe('handler /infractions', () => {
+  it("renvoie un message vide quand l'historique est vide", async () => {
+    const ctx = makeCtx({}, true, []);
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['infractions'];
+    if (!cmd) throw new Error('infractions introuvable');
+    const result = await cmd.handler(
+      inputFor('infractions', { member: TARGET }, { [TARGET]: { tag: 'a#0' } }),
+      ctx,
+    );
+    expect(result.kind).toBe('success');
+    expect(
+      (ctx.audit as unknown as { query: ReturnType<typeof vi.fn> }).query,
+    ).toHaveBeenCalledWith({
+      guildId: GUILD,
+      targetType: 'user',
+      targetId: TARGET,
+      limit: 10,
+    });
+  });
+
+  it('liste les sanctions trouvées', async () => {
+    const rows = [
+      {
+        id: '01HZ00000000000000000000A1',
+        action: 'moderation.case.warn',
+        actorType: 'user',
+        actorId: '7',
+        createdAt: '2026-04-26T10:30:00.000Z',
+        metadata: { reason: 'spam' },
+      },
+      {
+        id: '01HZ00000000000000000000A2',
+        action: 'moderation.case.kick',
+        actorType: 'user',
+        actorId: '7',
+        createdAt: '2026-04-26T11:00:00.000Z',
+        metadata: {},
+      },
+    ];
+    const ctx = makeCtx({}, true, rows);
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['infractions'];
+    if (!cmd) throw new Error('infractions introuvable');
+    const result = await cmd.handler(
+      inputFor('infractions', { member: TARGET }, { [TARGET]: { tag: 'a#0' } }),
+      ctx,
+    );
+    expect(result.kind).toBe('success');
+    const message = (result.payload as { message: string }).message;
+    expect(message).toContain('**2**');
+    expect(message).toContain('Warn');
+    expect(message).toContain('Kick');
+    expect(message).toContain('spam');
+  });
+});
+
+describe('handler /case', () => {
+  it('refuse un id non-ULID', async () => {
+    const ctx = makeCtx();
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['case'];
+    if (!cmd) throw new Error('case introuvable');
+    const result = await cmd.handler(inputFor('case', { id: 'pas-un-ulid' }), ctx);
+    expect(result.kind).toBe('error');
+  });
+
+  it("renvoie 'introuvable' si l'entrée n'existe pas (audit.get retourne null)", async () => {
+    const ctx = makeCtx({}, true, [], null);
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['case'];
+    if (!cmd) throw new Error('case introuvable');
+    const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);
+    expect(result.kind).toBe('error');
+  });
+
+  it("renvoie 'introuvable' si l'entrée appartient à une autre guild", async () => {
+    const otherGuildEntry = {
+      id: '01HZ00000000000000000000A1',
+      guildId: 'autre-guild',
+      action: 'moderation.case.warn',
+      actorType: 'user',
+      actorId: '7',
+      targetType: 'user',
+      targetId: TARGET,
+      createdAt: '2026-04-26T10:30:00.000Z',
+      metadata: {},
+    };
+    const ctx = makeCtx({}, true, [], otherGuildEntry);
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['case'];
+    if (!cmd) throw new Error('case introuvable');
+    const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);
+    expect(result.kind).toBe('error');
+  });
+
+  it("affiche le détail d'une sanction valide", async () => {
+    const entry = {
+      id: '01HZ00000000000000000000A1',
+      guildId: GUILD,
+      action: 'moderation.case.tempban',
+      actorType: 'user',
+      actorId: '7',
+      targetType: 'user',
+      targetId: TARGET,
+      createdAt: '2026-04-26T10:30:00.000Z',
+      metadata: { reason: 'raid', durationFormatted: '2h' },
+    };
+    const ctx = makeCtx({}, true, [], entry);
+    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
+    const cmd = commands['case'];
+    if (!cmd) throw new Error('case introuvable');
+    const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);
+    expect(result.kind).toBe('success');
+    const message = (result.payload as { message: string }).message;
+    expect(message).toContain('Tempban');
+    expect(message).toContain('2h');
+    expect(message).toContain('raid');
   });
 });
