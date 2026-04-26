@@ -69,7 +69,45 @@ export const communityGenericStarter: PresetDefinition = {
       readableBy: [],
       writableBy: [],
     },
+    {
+      localId: 'chan-logs',
+      categoryLocalId: 'cat-main',
+      name: 'logs',
+      nameFr: 'logs',
+      nameEn: 'logs',
+      type: 'text',
+      topic: 'Journal des actions modérateurs et événements serveur.',
+      topicFr: 'Journal des actions modérateurs et événements serveur.',
+      topicEn: 'Server moderation and event log.',
+      slowmodeSeconds: 0,
+      readableBy: [],
+      writableBy: [],
+    },
   ],
-  modules: [],
+  modules: [
+    {
+      moduleId: 'moderation',
+      enabled: false,
+      config: {
+        version: 1,
+        mutedRoleId: null,
+        dmOnSanction: true,
+        automod: {
+          rules: [
+            {
+              id: 'rule-everyone-abuse',
+              label: 'Mention @everyone / @here',
+              kind: 'regex',
+              pattern: '@(everyone|here)',
+              action: 'warn',
+              durationMs: null,
+              enabled: true,
+            },
+          ],
+          bypassRoleIds: [],
+        },
+      },
+    },
+  ],
   permissionBindings: [],
 };
