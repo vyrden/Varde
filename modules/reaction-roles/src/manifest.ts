@@ -10,7 +10,7 @@ import type { ManifestStatic, ModuleId, PermissionId } from '@varde/contracts';
 export const manifest: ManifestStatic = {
   id: 'reaction-roles' as ModuleId,
   name: 'Reaction-roles',
-  version: '1.0.0',
+  version: '1.1.0',
   coreVersion: '^1.0.0',
   description:
     "Auto-attribution de rôles quand les membres réagissent à un message (templates prêts à l'emploi : vérification, couleurs, continents, zodiaque, etc.).",

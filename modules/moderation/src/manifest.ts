@@ -23,7 +23,7 @@ import type { ManifestStatic, ModuleId, PermissionId } from '@varde/contracts';
 export const manifest: ManifestStatic = {
   id: 'moderation' as ModuleId,
   name: 'Moderation',
-  version: '1.0.0',
+  version: '1.1.0',
   coreVersion: '^1.0.0',
   description:
     'Commandes manuelles de modération (warn, kick, ban, mute, purge, slowmode) avec historique des sanctions.',

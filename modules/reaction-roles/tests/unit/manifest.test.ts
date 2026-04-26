@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { manifest } from '../../src/manifest.js';
 
 describe('manifest', () => {
-  it('id = reaction-roles, version 1.0.0', () => {
+  it('id = reaction-roles, version 1.1.0', () => {
     expect(manifest.id).toBe('reaction-roles');
-    expect(manifest.version).toBe('1.0.0');
+    expect(manifest.version).toBe('1.1.0');
   });
 
   it('déclare la permission reaction-roles.config.manage', () => {

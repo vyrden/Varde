@@ -21,7 +21,7 @@ import type { ManifestStatic, ModuleId, PermissionId } from '@varde/contracts';
 export const manifest: ManifestStatic = {
   id: 'logs' as ModuleId,
   name: 'Logs',
-  version: '1.0.0',
+  version: '1.1.0',
   coreVersion: '^1.0.0',
   description:
     'Dispatch les événements Discord (arrivées/départs, messages supprimés/édités, etc.) vers des salons de logs configurables.',
