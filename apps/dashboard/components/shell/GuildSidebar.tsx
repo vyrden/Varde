@@ -123,14 +123,26 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
               <Link
                 href={it.href}
                 aria-current={active ? 'page' : undefined}
-                className={`group flex items-center gap-3 rounded px-2.5 py-2 text-[14px] font-medium transition-all duration-100 ease-out ${
+                className={`group relative flex items-center gap-3 rounded-md px-2.5 py-2 text-[14px] font-medium transition-[background-color,color] duration-150 ease-out ${
                   active
-                    ? 'bg-surface-active text-foreground shadow-sm'
+                    ? 'bg-surface-active text-foreground'
                     : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground'
                 }`}
               >
+                {/*
+                 * Barre verticale gauche plus marquée pour signaler
+                 * l'élément actif — façon discord.com / VS Code.
+                 * Posée en absolute pour ne pas pousser le contenu,
+                 * scale-y pour entrer en douceur.
+                 */}
                 <span
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center transition-opacity duration-100 ease-out ${active ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
+                  aria-hidden="true"
+                  className={`absolute top-1/2 left-0 h-5 w-[3px] -translate-x-1.5 -translate-y-1/2 rounded-full bg-primary transition-transform duration-200 ease-out ${
+                    active ? 'scale-y-100' : 'scale-y-0 group-hover:scale-y-100'
+                  } ${active ? 'opacity-100' : 'opacity-50'}`}
+                />
+                <span
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center transition-opacity duration-150 ease-out ${active ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
                 >
                   {it.icon}
                 </span>
@@ -139,7 +151,9 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
                   <span
                     aria-hidden="true"
                     className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
-                      it.statusDot === 'on' ? 'bg-success' : 'bg-muted-foreground/40'
+                      it.statusDot === 'on'
+                        ? 'bg-success shadow-[0_0_0_2px_rgba(35,165,90,0.18)]'
+                        : 'bg-muted-foreground/40'
                     }`}
                   />
                 ) : null}

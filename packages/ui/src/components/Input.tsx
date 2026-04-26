@@ -16,11 +16,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       ref={ref}
       type={type}
       className={cn(
-        'flex h-10 w-full rounded border border-[var(--surface-active)] bg-input px-3 py-1.5',
+        'flex h-10 w-full rounded-md border border-[var(--surface-active)] bg-input px-3 py-1.5',
         'text-sm text-foreground placeholder:text-muted-foreground',
-        'transition-colors duration-100 ease-out',
-        'hover:border-primary/60',
-        'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-ring',
+        'shadow-[inset_0_1px_2px_rgba(0,0,0,0.18)]',
+        'transition-[color,background-color,border-color,box-shadow] duration-150 ease-out',
+        'hover:border-[var(--border-strong)]',
+        'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/45',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground',
         className,

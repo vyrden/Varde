@@ -124,7 +124,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
           >
             {moduleIcon('logs', 20)}
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">{logsModule.name}</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">{logsModule.name}</h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>

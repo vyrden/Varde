@@ -103,7 +103,7 @@ export default async function PermissionsPage({
               />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
             Permissions des modules
           </h1>
         </div>

@@ -115,7 +115,9 @@ export default async function SettingsHubPage({ params }: SettingsHubProps): Pro
               <circle cx="8" cy="6.5" r="1.5" fill="currentColor" />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Paramètres</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Paramètres
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Configuration globale du bot et des accès. Choisis une section pour entrer dans le détail.
@@ -128,7 +130,7 @@ export default async function SettingsHubPage({ params }: SettingsHubProps): Pro
             <li key={link.key}>
               <Link
                 href={`/guilds/${guildId}${link.hrefSuffix}`}
-                className="group flex h-full flex-col rounded-lg border border-border bg-card transition-[border-color,box-shadow] duration-150 ease-out hover:border-primary/60 hover:shadow-[0_4px_16px_rgba(0,0,0,0.4)] focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group interactive-lift flex h-full flex-col rounded-lg border border-border bg-card shadow-sm hover:border-primary/60 hover:shadow-glow-primary focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Card className="border-0 bg-transparent shadow-none">
                   <CardHeader>

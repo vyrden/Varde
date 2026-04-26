@@ -61,7 +61,9 @@ export default async function AiSettingsPage({
               />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Fournisseur IA</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Fournisseur IA
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Configurez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La

@@ -180,7 +180,9 @@ export default async function ReactionRolesPage({
           >
             {moduleIcon('reaction-roles', 20)}
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">{rrModule.name}</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            {rrModule.name}
+          </h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>

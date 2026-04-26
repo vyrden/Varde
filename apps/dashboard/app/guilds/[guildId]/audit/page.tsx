@@ -123,7 +123,9 @@ export default async function AuditPage({
               <rect x="6" y="1" width="4" height="2" rx="0.5" fill="currentColor" />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Journal d'audit</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Journal d'audit
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Historique des actions sur le serveur. Filtrez par type, acteur, sévérité ou fenêtre

@@ -101,7 +101,7 @@ export function ModuleList({ guildId, modules }: ModuleListProps): ReactElement 
                 ) : null}
                 <Link
                   href={`/guilds/${guildId}/modules/${module.id}`}
-                  className={`group flex h-full flex-col rounded-lg border bg-card transition-all duration-150 ease-out hover:border-primary/60 hover:shadow-[0_4px_16px_rgba(0,0,0,0.4)] focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  className={`group interactive-lift flex h-full flex-col rounded-lg border bg-card shadow-sm hover:border-primary/60 hover:shadow-glow-primary focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     enabled ? 'border-border' : 'border-border bg-card/60'
                   }`}
                 >

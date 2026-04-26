@@ -32,9 +32,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           className={cn(
             'w-full rounded-md border border-(--surface-active) bg-input px-3',
             'text-sm text-foreground',
-            'transition-colors duration-100 ease-out',
-            'hover:border-primary/60',
-            'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            'shadow-[inset_0_1px_2px_rgba(0,0,0,0.18)]',
+            'transition-[color,background-color,border-color,box-shadow] duration-150 ease-out',
+            'hover:border-[var(--border-strong)]',
+            'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45',
             'disabled:cursor-not-allowed disabled:opacity-50',
             isMultiple ? 'py-2' : 'flex h-10 cursor-pointer appearance-none items-center pr-9',
             className,

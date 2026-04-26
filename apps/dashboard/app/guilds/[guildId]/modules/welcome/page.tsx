@@ -213,7 +213,7 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
           >
             {moduleIcon('welcome', 20)}
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
             {welcomeModule.name}
           </h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>

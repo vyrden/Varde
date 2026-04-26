@@ -174,7 +174,9 @@ export default async function ModerationPage({
           >
             {moduleIcon('moderation', 20)}
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">{modModule.name}</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            {modModule.name}
+          </h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>

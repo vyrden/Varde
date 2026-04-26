@@ -97,7 +97,9 @@ export default async function OnboardingPage({
               />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Onboarding</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Onboarding
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30

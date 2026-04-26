@@ -138,7 +138,9 @@ export default async function GuildPage({ params }: GuildPageProps): Promise<Rea
               <rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor" />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Modules</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Modules
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Gérez et configurez les modules actifs sur votre serveur.

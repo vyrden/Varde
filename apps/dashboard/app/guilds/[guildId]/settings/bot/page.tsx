@@ -66,7 +66,9 @@ export default async function BotSettingsPage({
               />
             </svg>
           </div>
-          <h1 className="text-[22px] font-bold leading-tight text-foreground">Paramètres du bot</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Paramètres du bot
+          </h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Ajuste le comportement global du bot sur ce serveur. Langue, fuseau horaire et couleur des

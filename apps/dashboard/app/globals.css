@@ -3,8 +3,12 @@
 @source "../../../packages/ui/src";
 
 /*
- * Animations Discord-style. Toutes courtes (<= 200 ms) et ease-out :
+ * Animations Discord-style. Toutes courtes (<= 260 ms) et ease-out :
  * pas de bounce, pas de transitions décoratives. Cf. DA.md.
+ *
+ * Variables `--duration-*` et `--ease-*` viennent de @varde/ui/theme.css
+ * — un changement global se propage à tous les composants qui les
+ * réfèrent.
  */
 @layer utilities {
   @keyframes varde-fade-in {
@@ -18,8 +22,74 @@
     }
   }
 
+  @keyframes varde-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes varde-pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
   .animate-page-enter {
-    animation: varde-fade-in 0.18s ease-out both;
+    animation: varde-fade-in var(--duration-base) var(--ease-out) both;
+  }
+
+  .animate-fade-up {
+    animation: varde-fade-up var(--duration-slow) var(--ease-out) both;
+  }
+
+  .animate-pop-in {
+    animation: varde-pop-in var(--duration-base) var(--ease-spring) both;
+  }
+
+  /*
+   * Effet « lift » réutilisable sur les cards interactives — translation
+   * légère vers le haut + ombre plus présente au hover. Posé sur
+   * l'élément racine de la card (et pas sur le contenu) pour que le
+   * survol se sente sur toute la surface.
+   */
+  .interactive-lift {
+    transition:
+      transform var(--duration-fast) var(--ease-out),
+      box-shadow var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out);
+  }
+  .interactive-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .interactive-lift:active {
+    transform: translateY(0);
+    transition-duration: 60ms;
+  }
+
+  /*
+   * Boutons CTA : appui visuel léger au clic + rebond imperceptible
+   * en relâchant. À utiliser sur les actions principales d'une page.
+   */
+  .interactive-press {
+    transition:
+      transform var(--duration-fast) var(--ease-spring),
+      box-shadow var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+  .interactive-press:active {
+    transform: scale(0.97);
+    transition-duration: 40ms;
   }
 
   /* Réduit toutes les animations à 0 si l'utilisateur le demande. */
@@ -31,6 +101,13 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+
+    .interactive-lift:hover {
+      transform: none;
+    }
+    .interactive-press:active {
+      transform: none;
     }
   }
 }
