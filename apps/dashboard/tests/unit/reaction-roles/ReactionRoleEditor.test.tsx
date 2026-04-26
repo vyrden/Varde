@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  isPairValid,
-  type PairDraft,
-  parseEmoji,
-} from '../../../components/reaction-roles/ReactionRoleEditor';
+import { isPairValid, parseEmoji } from '../../../components/reaction-roles/ReactionRoleEditor';
+
+/**
+ * Forme locale d'un draft pour les tests — l'éditeur n'exporte pas
+ * son type interne (champs `kind`, `label`, `style` ajoutés en V2
+ * boutons mais hors-scope du parsing emoji).
+ */
+type PairDraft = {
+  readonly uid: string;
+  readonly kind: 'reaction' | 'button';
+  readonly emoji: string;
+  readonly label: string;
+  readonly style: 'primary' | 'secondary' | 'success' | 'danger';
+} & (
+  | { readonly roleMode: 'existing'; readonly roleId: string }
+  | { readonly roleMode: 'create'; readonly roleName: string }
+);
+
+const reactionDefaults = { kind: 'reaction', label: '', style: 'secondary' } as const;
 
 // ---------------------------------------------------------------------------
 // parseEmoji
@@ -54,6 +68,7 @@ describe('isPairValid', () => {
   it("valide une paire 'existing' avec emoji et roleId", () => {
     const pair: PairDraft = {
       uid: 'u1',
+      ...reactionDefaults,
       emoji: '🎉',
       roleMode: 'existing',
       roleId: '111111111111111111',
@@ -62,27 +77,59 @@ describe('isPairValid', () => {
   });
 
   it("invalide une paire 'existing' sans roleId", () => {
-    const pair: PairDraft = { uid: 'u1', emoji: '🎉', roleMode: 'existing', roleId: '' };
+    const pair: PairDraft = {
+      uid: 'u1',
+      ...reactionDefaults,
+      emoji: '🎉',
+      roleMode: 'existing',
+      roleId: '',
+    };
     expect(isPairValid(pair)).toBe(false);
   });
 
   it("valide une paire 'create' avec emoji et roleName", () => {
-    const pair: PairDraft = { uid: 'u1', emoji: '🌍', roleMode: 'create', roleName: 'Europe' };
+    const pair: PairDraft = {
+      uid: 'u1',
+      ...reactionDefaults,
+      emoji: '🌍',
+      roleMode: 'create',
+      roleName: 'Europe',
+    };
     expect(isPairValid(pair)).toBe(true);
   });
 
   it("invalide une paire 'create' sans roleName", () => {
-    const pair: PairDraft = { uid: 'u1', emoji: '🌍', roleMode: 'create', roleName: '' };
+    const pair: PairDraft = {
+      uid: 'u1',
+      ...reactionDefaults,
+      emoji: '🌍',
+      roleMode: 'create',
+      roleName: '',
+    };
     expect(isPairValid(pair)).toBe(false);
   });
 
   it('invalide une paire avec emoji vide', () => {
     const pair: PairDraft = {
       uid: 'u1',
+      ...reactionDefaults,
       emoji: '',
       roleMode: 'existing',
       roleId: '111111111111111111',
     };
     expect(isPairValid(pair)).toBe(false);
+  });
+
+  it('valide une paire kind: button avec emoji + label + roleName', () => {
+    const pair: PairDraft = {
+      uid: 'u2',
+      kind: 'button',
+      emoji: '🎮',
+      label: 'Joueur',
+      style: 'primary',
+      roleMode: 'create',
+      roleName: 'Joueur',
+    };
+    expect(isPairValid(pair)).toBe(true);
   });
 });

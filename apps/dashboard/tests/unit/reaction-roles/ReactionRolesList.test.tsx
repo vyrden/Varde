@@ -13,7 +13,15 @@ const msg = {
   message: 'Choisis ton continent',
   mode: 'unique' as const,
   feedback: 'dm' as const,
-  pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: '333' }],
+  pairs: [
+    {
+      kind: 'reaction' as const,
+      emoji: { type: 'unicode' as const, value: '🇪🇺' },
+      roleId: '333',
+      label: '',
+      style: 'secondary' as const,
+    },
+  ],
 };
 
 const baseProps = {

@@ -30,6 +30,8 @@ interface RawRRMessage {
   channelId?: unknown;
   messageId?: unknown;
   message?: unknown;
+  /** Historique : `'reactions' | 'buttons'` au niveau message (V2 initial). */
+  kind?: unknown;
   mode?: unknown;
   feedback?: unknown;
   pairs?: unknown;
@@ -44,8 +46,12 @@ interface RawRREmoji {
 }
 
 interface RawRRPair {
+  /** Nouveau (V2 finale) : `'reaction' | 'button'` par paire. */
+  kind?: unknown;
   emoji?: unknown;
   roleId?: unknown;
+  label?: unknown;
+  style?: unknown;
 }
 
 /**
@@ -57,9 +63,13 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
   const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation
   const messages = Array.isArray(obj['messages']) ? obj['messages'] : [];
+  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess
+  const messageLevelKind = obj['kind'];
   return messages
     .filter((m): m is RawRRMessage => typeof m === 'object' && m !== null)
     .map((m) => {
+      const fallbackPairKind: 'reaction' | 'button' =
+        m.kind === 'buttons' || messageLevelKind === 'buttons' ? 'button' : 'reaction';
       const rawPairs = Array.isArray(m.pairs) ? (m.pairs as unknown[]) : [];
       const pairs = rawPairs
         .filter((p): p is RawRRPair => typeof p === 'object' && p !== null)
@@ -77,7 +87,22 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
                   name: String(emoji.name ?? ''),
                   animated: Boolean(emoji.animated ?? false),
                 };
-          return { emoji: clientEmoji, roleId: String(p.roleId ?? '') };
+          const pairKind: 'reaction' | 'button' =
+            p.kind === 'button' || p.kind === 'reaction' ? p.kind : fallbackPairKind;
+          const style: 'primary' | 'secondary' | 'success' | 'danger' =
+            p.style === 'primary' ||
+            p.style === 'secondary' ||
+            p.style === 'success' ||
+            p.style === 'danger'
+              ? p.style
+              : 'secondary';
+          return {
+            kind: pairKind,
+            emoji: clientEmoji,
+            roleId: String(p.roleId ?? ''),
+            label: typeof p.label === 'string' ? p.label : '',
+            style,
+          };
         });
       const mode = m.mode;
       const feedback = m.feedback;
@@ -88,7 +113,7 @@ function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
         messageId: String(m.messageId ?? ''),
         message: typeof m.message === 'string' ? m.message : '',
         mode: mode === 'unique' || mode === 'verifier' ? mode : 'normal',
-        feedback: feedback === 'none' ? 'none' : 'dm',
+        feedback: feedback === 'none' ? 'none' : feedback === 'ephemeral' ? 'ephemeral' : 'dm',
         pairs,
       };
     });

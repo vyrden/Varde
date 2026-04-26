@@ -13,24 +13,38 @@ const buildCookieHeader = async (): Promise<string> => {
   return session ? `${SESSION_COOKIE}=${session.value}` : '';
 };
 
+/** Une paire emoji → rôle, soit posée en réaction, soit en bouton. */
+export interface PublishReactionRolePairInput {
+  /** Type de l'élément. Défaut côté API : `'reaction'`. */
+  readonly kind?: 'reaction' | 'button';
+  readonly emoji:
+    | { readonly type: 'unicode'; readonly value: string }
+    | {
+        readonly type: 'custom';
+        readonly id: string;
+        readonly name: string;
+        readonly animated?: boolean;
+      };
+  readonly roleId?: string;
+  readonly roleName?: string;
+  /** Texte du bouton (kind=button uniquement). */
+  readonly label?: string;
+  /** Couleur du bouton (kind=button uniquement). */
+  readonly style?: 'primary' | 'secondary' | 'success' | 'danger';
+}
+
 export interface PublishReactionRoleInput {
   readonly label: string;
   readonly channelId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
-  readonly feedback: 'dm' | 'none';
-  readonly pairs: ReadonlyArray<{
-    readonly emoji:
-      | { readonly type: 'unicode'; readonly value: string }
-      | {
-          readonly type: 'custom';
-          readonly id: string;
-          readonly name: string;
-          readonly animated?: boolean;
-        };
-    readonly roleId?: string;
-    readonly roleName?: string;
-  }>;
+  /**
+   * `'ephemeral'` exige qu'au moins une paire soit `kind: 'button'`
+   * (le serveur valide). Pour les paires `kind: 'reaction'`, le runtime
+   * retombe sur `dm`.
+   */
+  readonly feedback: 'dm' | 'ephemeral' | 'none';
+  readonly pairs: ReadonlyArray<PublishReactionRolePairInput>;
 }
 
 export type PublishResult =
@@ -89,7 +103,7 @@ export interface SyncReactionRoleInput {
   readonly channelId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
-  readonly feedback: 'dm' | 'none';
+  readonly feedback: 'dm' | 'ephemeral' | 'none';
   readonly pairs: PublishReactionRoleInput['pairs'];
 }
 

@@ -8,6 +8,22 @@ import { ReactionRolesList } from './ReactionRolesList';
 import { TemplatePicker } from './TemplatePicker';
 import type { ReactionRoleTemplate } from './templates';
 
+export type ReactionRolePairKindClient = 'reaction' | 'button';
+export type ReactionRoleButtonStyleClient = 'primary' | 'secondary' | 'success' | 'danger';
+
+export interface ReactionRolePairClient {
+  /** Type de l'élément (réaction emoji ou bouton Discord). */
+  readonly kind: ReactionRolePairKindClient;
+  readonly emoji:
+    | { type: 'unicode'; value: string }
+    | { type: 'custom'; id: string; name: string; animated: boolean };
+  readonly roleId: string;
+  /** Texte du bouton (kind=button uniquement). */
+  readonly label: string;
+  /** Couleur du bouton (kind=button uniquement). */
+  readonly style: ReactionRoleButtonStyleClient;
+}
+
 export interface ReactionRoleMessageClient {
   readonly id: string;
   readonly label: string;
@@ -15,13 +31,8 @@ export interface ReactionRoleMessageClient {
   readonly messageId: string;
   readonly message: string;
   readonly mode: 'normal' | 'unique' | 'verifier';
-  readonly feedback: 'dm' | 'none';
-  readonly pairs: readonly {
-    readonly emoji:
-      | { type: 'unicode'; value: string }
-      | { type: 'custom'; id: string; name: string; animated: boolean };
-    readonly roleId: string;
-  }[];
+  readonly feedback: 'dm' | 'ephemeral' | 'none';
+  readonly pairs: readonly ReactionRolePairClient[];
 }
 
 export interface ChannelOption {
