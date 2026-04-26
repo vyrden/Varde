@@ -6,6 +6,12 @@ import { signOut } from '../../auth';
 export interface UserPanelProps {
   readonly name: string;
   readonly avatarUrl?: string | null;
+  /**
+   * URL du PNG transparent de la décoration d'avatar Discord (Nitro
+   * profile decoration). Posé en overlay 1.4× au-dessus de l'avatar.
+   * Null si l'utilisateur n'en a pas configuré.
+   */
+  readonly avatarDecorationUrl?: string | null;
   /** Rôle affiché dans le badge. V1 : toujours `admin` ; `moderator` en attente de la vue mod (post-jalon-4). */
   readonly userRole: 'admin' | 'moderator';
 }
@@ -30,11 +36,16 @@ const ROLE_BADGE_CLASS: Record<UserPanelProps['userRole'], string> = {
  * `--primary` (cohérent avec le rail Discord pour les guilds sans
  * icône).
  */
-export function UserPanel({ name, avatarUrl, userRole }: UserPanelProps): ReactElement {
+export function UserPanel({
+  name,
+  avatarUrl,
+  avatarDecorationUrl,
+  userRole,
+}: UserPanelProps): ReactElement {
   const initial = name.charAt(0).toUpperCase() || '?';
   return (
     <div className="flex items-center gap-2 border-t border-black/30 bg-rail px-2 py-2">
-      <div className="relative shrink-0">
+      <div className="relative h-8 w-8 shrink-0">
         {avatarUrl ? (
           <Image
             src={avatarUrl}
@@ -51,9 +62,19 @@ export function UserPanel({ name, avatarUrl, userRole }: UserPanelProps): ReactE
             {initial}
           </div>
         )}
+        {avatarDecorationUrl ? (
+          <Image
+            src={avatarDecorationUrl}
+            alt=""
+            width={45}
+            height={45}
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1.5 h-11 w-11 max-w-none select-none"
+          />
+        ) : null}
         <span
           aria-hidden="true"
-          className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-rail bg-success"
+          className="absolute -right-0.5 -bottom-0.5 z-10 h-2.5 w-2.5 rounded-full border-2 border-rail bg-success"
         />
       </div>
 

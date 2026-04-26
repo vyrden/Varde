@@ -52,8 +52,12 @@ export default async function GuildLayout({
     hasDedicatedPage: MODULES_WITH_PAGE.has(m.id),
   }));
 
-  const userName = session.user.name ?? 'Utilisateur';
+  // global_name (le pseudo affiché public Discord) > username
+  // historique > fallback statique. Discord encourage global_name
+  // partout depuis 2023.
+  const userName = session.user.globalName ?? session.user.name ?? 'Utilisateur';
   const avatarUrl = session.user.image ?? null;
+  const avatarDecorationUrl = session.user.avatarDecorationUrl ?? null;
 
   return (
     <Toaster>
@@ -64,7 +68,14 @@ export default async function GuildLayout({
           guildId={guildId}
           guildName={currentGuild.name}
           modules={sidebarModules}
-          footer={<UserPanel name={userName} avatarUrl={avatarUrl} userRole="admin" />}
+          footer={
+            <UserPanel
+              name={userName}
+              avatarUrl={avatarUrl}
+              avatarDecorationUrl={avatarDecorationUrl}
+              userRole="admin"
+            />
+          }
         />
         <main className="animate-page-enter flex min-w-0 flex-1 flex-col bg-surface">
           {children}

@@ -80,19 +80,61 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token['accessToken'] = account.access_token;
       }
       if (profile && typeof profile === 'object') {
-        const discordProfile = profile as { id?: string; username?: string };
+        const discordProfile = profile as {
+          id?: string;
+          username?: string;
+          global_name?: string | null;
+          avatar?: string | null;
+          avatar_decoration_data?: { asset?: string; sku_id?: string } | null;
+        };
         if (discordProfile.id) token.sub = discordProfile.id;
         if (discordProfile.username) token['username'] = discordProfile.username;
+        if (typeof discordProfile.global_name === 'string') {
+          token['globalName'] = discordProfile.global_name;
+        }
+        // Hash avatar Discord (string vide ou null = pas d'avatar
+        // custom, on retombe sur le default Discord).
+        if (typeof discordProfile.avatar === 'string' && discordProfile.avatar.length > 0) {
+          token['avatarHash'] = discordProfile.avatar;
+        }
+        // Asset de la décoration d'avatar (Nitro). Présent
+        // uniquement si l'utilisateur en a une.
+        const decoAsset = discordProfile.avatar_decoration_data?.asset;
+        if (typeof decoAsset === 'string' && decoAsset.length > 0) {
+          token['avatarDecorationAsset'] = decoAsset;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       if (typeof token.sub === 'string' && token.sub.length > 0) {
         const username = token['username'];
+        const globalName = token['globalName'];
+        const avatarHash = token['avatarHash'];
+        const decoAsset = token['avatarDecorationAsset'];
+
+        // URL avatar : `/avatars/{userId}/{hash}.png`. Animé si
+        // hash commence par `a_` → on sert le `.gif` directement,
+        // Discord renvoie un fallback statique si Nitro absent.
+        const avatarUrl =
+          typeof avatarHash === 'string'
+            ? `https://cdn.discordapp.com/avatars/${token.sub}/${avatarHash}${
+                avatarHash.startsWith('a_') ? '.gif' : '.png'
+              }?size=64`
+            : null;
+        // URL de la décoration : PNG transparent overlay 96x96.
+        const decorationUrl =
+          typeof decoAsset === 'string'
+            ? `https://cdn.discordapp.com/avatar-decoration-presets/${decoAsset}.png?size=96&passthrough=true`
+            : null;
+
         session.user = {
           ...session.user,
           id: token.sub,
           ...(typeof username === 'string' ? { name: username } : {}),
+          ...(typeof globalName === 'string' ? { globalName } : {}),
+          ...(avatarUrl !== null ? { image: avatarUrl } : {}),
+          ...(decorationUrl !== null ? { avatarDecorationUrl: decorationUrl } : {}),
         };
       }
       return session;
@@ -105,7 +147,11 @@ declare module 'next-auth' {
     user: {
       id: string;
       name?: string | null;
+      /** `global_name` Discord — le pseudo affiché public, fallback `name`. */
+      globalName?: string | null;
       image?: string | null;
+      /** PNG transparent du décor d'avatar Nitro. Null si l'utilisateur n'en a pas. */
+      avatarDecorationUrl?: string | null;
       email?: string | null;
     };
   }
