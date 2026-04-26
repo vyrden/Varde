@@ -1,14 +1,6 @@
 'use client';
 
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  ExpandablePanel,
-  ReadonlySwitch,
-} from '@varde/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, ExpandablePanel } from '@varde/ui';
 import { useState, useTransition } from 'react';
 
 import {
@@ -17,6 +9,7 @@ import {
   testWelcomeAutorole,
   type WelcomeConfigClient,
 } from '../../lib/welcome-actions';
+import { ModuleEnabledToggle } from '../ModuleEnabledToggle';
 import { AccountAgeFilterSection } from './AccountAgeFilterSection';
 import { AutoroleSection } from './AutoroleSection';
 import { DiscordMessagePreview } from './DiscordMessagePreview';
@@ -362,10 +355,12 @@ export function WelcomeConfigEditor({
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">Statut</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-foreground">{isModuleEnabled ? 'Actif' : 'Inactif'}</span>
-                  <ReadonlySwitch enabled={isModuleEnabled} />
-                </div>
+                <ModuleEnabledToggle
+                  guildId={guildId}
+                  moduleId="welcome"
+                  moduleName="Welcome"
+                  initialEnabled={isModuleEnabled}
+                />
               </div>
               <p className="pt-1 text-xs text-muted-foreground">
                 Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes

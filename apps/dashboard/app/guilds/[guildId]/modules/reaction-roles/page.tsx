@@ -159,14 +159,6 @@ export default async function ReactionRolesPage({
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
-          <div className="ml-auto">
-            <ModuleEnabledToggle
-              guildId={guildId}
-              moduleId={rrModule.id}
-              moduleName={rrModule.name}
-              initialEnabled={isEnabled}
-            />
-          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis. Idéal pour
@@ -183,13 +175,21 @@ export default async function ReactionRolesPage({
         {!isEnabled ? (
           <div
             role="status"
-            className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
+            className="flex items-start justify-between gap-4 rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
           >
-            <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Tant qu'il reste désactivé, aucune réaction ne sera traitée. Activez-le via le toggle
-              en haut de la page pour reprendre l'attribution des rôles.
-            </p>
+            <div>
+              <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tant qu'il reste désactivé, aucune réaction ne sera traitée. Activez-le pour
+                reprendre l'attribution des rôles.
+              </p>
+            </div>
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={rrModule.id}
+              moduleName={rrModule.name}
+              initialEnabled={isEnabled}
+            />
           </div>
         ) : (
           <ReactionRolesConfigEditor

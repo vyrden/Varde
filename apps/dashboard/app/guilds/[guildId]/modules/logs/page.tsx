@@ -128,14 +128,6 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
-          <div className="ml-auto">
-            <ModuleEnabledToggle
-              guildId={guildId}
-              moduleId={logsModule.id}
-              moduleName={logsModule.name}
-              initialEnabled={isEnabled}
-            />
-          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Publie dans un salon Discord les événements importants de ton serveur — arrivées,
@@ -160,7 +152,8 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
                 <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Tant qu'il reste désactivé, aucun événement ne sera capturé ni envoyé vers un
-                  salon. Activez-le via le toggle en haut de la page pour reprendre la capture.
+                  salon. Activez-le via le toggle dans la sidebar « À propos » pour reprendre la
+                  capture.
                 </p>
               </div>
             ) : (
@@ -186,11 +179,12 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Statut</span>
-                  <span
-                    className={isEnabled ? 'text-success font-medium' : 'text-muted-foreground'}
-                  >
-                    {isEnabled ? 'Actif' : 'Inactif'}
-                  </span>
+                  <ModuleEnabledToggle
+                    guildId={guildId}
+                    moduleId={logsModule.id}
+                    moduleName={logsModule.name}
+                    initialEnabled={isEnabled}
+                  />
                 </div>
                 <p className="pt-1 text-xs text-muted-foreground">
                   Les logs sont envoyés en temps réel dans le salon sélectionné.

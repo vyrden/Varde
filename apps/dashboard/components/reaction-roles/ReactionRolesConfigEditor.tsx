@@ -92,6 +92,7 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
   if (view.kind === 'list') {
     return (
       <ReactionRolesList
+        guildId={props.guildId}
         messages={messages}
         channelNameById={channelNameById}
         version={props.moduleVersion}

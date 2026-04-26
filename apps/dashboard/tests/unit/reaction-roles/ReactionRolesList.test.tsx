@@ -17,6 +17,7 @@ const msg = {
 };
 
 const baseProps = {
+  guildId: 'g1',
   channelNameById: {},
   version: '1.0.0',
   isEnabled: true,

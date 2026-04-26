@@ -219,14 +219,6 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
-          <div className="ml-auto">
-            <ModuleEnabledToggle
-              guildId={guildId}
-              moduleId={welcomeModule.id}
-              moduleName={welcomeModule.name}
-              initialEnabled={isEnabled}
-            />
-          </div>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes neufs.
@@ -242,13 +234,21 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
         {!isEnabled ? (
           <div
             role="status"
-            className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
+            className="flex items-start justify-between gap-4 rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
           >
-            <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Tant qu'il reste désactivé, aucun message d'accueil ne sera posté. Activez-le via le
-              toggle en haut de la page pour reprendre les envois.
-            </p>
+            <div>
+              <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tant qu'il reste désactivé, aucun message d'accueil ne sera posté. Activez-le pour
+                reprendre les envois.
+              </p>
+            </div>
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={welcomeModule.id}
+              moduleName={welcomeModule.name}
+              initialEnabled={isEnabled}
+            />
           </div>
         ) : (
           <WelcomeConfigEditor

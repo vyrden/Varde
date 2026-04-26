@@ -9,13 +9,14 @@ import {
   CardHeader,
   CardTitle,
   InlineConfirm,
-  ReadonlySwitch,
 } from '@varde/ui';
 import { useState } from 'react';
 
+import { ModuleEnabledToggle } from '../ModuleEnabledToggle';
 import type { ReactionRoleMessageClient } from './ReactionRolesConfigEditor';
 
 export interface ReactionRolesListProps {
+  readonly guildId: string;
   readonly messages: readonly ReactionRoleMessageClient[];
   readonly channelNameById: Readonly<Record<string, string>>;
   readonly version: string;
@@ -88,6 +89,7 @@ function SmilePlusIcon() {
  * `confirm()` natif).
  */
 export function ReactionRolesList({
+  guildId,
   messages,
   channelNameById,
   version,
@@ -272,10 +274,12 @@ export function ReactionRolesList({
             </div>
             <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Statut</span>
-              <div className="flex items-center gap-3">
-                <span className="text-foreground">{isEnabled ? 'Actif' : 'Inactif'}</span>
-                <ReadonlySwitch enabled={isEnabled} />
-              </div>
+              <ModuleEnabledToggle
+                guildId={guildId}
+                moduleId="reaction-roles"
+                moduleName="Reaction Roles"
+                initialEnabled={isEnabled}
+              />
             </div>
             <p className="pt-1 text-xs text-muted-foreground">
               Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis.
