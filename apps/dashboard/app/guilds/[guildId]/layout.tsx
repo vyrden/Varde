@@ -6,6 +6,7 @@ import { auth } from '../../../auth';
 import { GuildRail } from '../../../components/shell/GuildRail';
 import { GuildSidebar } from '../../../components/shell/GuildSidebar';
 import { RouterRefreshOnFocus } from '../../../components/shell/RouterRefreshOnFocus';
+import { UserPanel } from '../../../components/shell/UserPanel';
 import { ApiError, fetchAdminGuilds, fetchModules } from '../../../lib/api-client';
 
 /**
@@ -51,12 +52,20 @@ export default async function GuildLayout({
     hasDedicatedPage: MODULES_WITH_PAGE.has(m.id),
   }));
 
+  const userName = session.user.name ?? 'Utilisateur';
+  const avatarUrl = session.user.image ?? null;
+
   return (
     <Toaster>
       <RouterRefreshOnFocus />
       <div className="flex min-h-screen bg-rail text-foreground">
         <GuildRail guilds={guilds} currentGuildId={guildId} />
-        <GuildSidebar guildId={guildId} guildName={currentGuild.name} modules={sidebarModules} />
+        <GuildSidebar
+          guildId={guildId}
+          guildName={currentGuild.name}
+          modules={sidebarModules}
+          footer={<UserPanel name={userName} avatarUrl={avatarUrl} userRole="admin" />}
+        />
         <main className="animate-page-enter flex min-w-0 flex-1 flex-col bg-surface">
           {children}
         </main>

@@ -17,6 +17,13 @@ export interface GuildSidebarProps {
   readonly guildId: string;
   readonly guildName: string;
   readonly modules: readonly ModuleEntry[];
+  /**
+   * Slot footer rendu en bas de la sidebar (pinned `mt-auto`). Le
+   * layout y branche typiquement `<UserPanel>` (Server Component
+   * avec server action signOut). Sidebar est `'use client'` donc on
+   * accepte un `ReactNode` plutôt que d'instancier le panel ici.
+   */
+  readonly footer?: ReactNode;
 }
 
 interface NavLink {
@@ -151,7 +158,12 @@ function SidebarSection({ label, items, currentPath }: SidebarSectionProps): Rea
  * onboarding), Paramètres (permissions / IA), Modules (un lien par
  * module avec page dédiée + pastille d'état).
  */
-export function GuildSidebar({ guildId, guildName, modules }: GuildSidebarProps): ReactElement {
+export function GuildSidebar({
+  guildId,
+  guildName,
+  modules,
+  footer,
+}: GuildSidebarProps): ReactElement {
   const pathname = usePathname() ?? '';
 
   const gestion: NavLink[] = [
@@ -224,7 +236,7 @@ export function GuildSidebar({ guildId, guildName, modules }: GuildSidebarProps)
         ) : null}
       </div>
 
-      <div className="mt-auto" />
+      <div className="mt-auto">{footer}</div>
     </aside>
   );
 }

@@ -3,8 +3,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 
-import { signOut } from '../../auth';
-
 interface RailGuild {
   readonly id: string;
   readonly name: string;
@@ -122,32 +120,6 @@ export function GuildRail({ guilds, currentGuildId }: GuildRailProps): ReactElem
       ) : null}
 
       <div className="mt-auto" />
-
-      {/* Sign-out — bouton dédié en bas du rail */}
-      <Tooltip text="Se déconnecter" side="right">
-        <form
-          action={async () => {
-            'use server';
-            await signOut({ redirectTo: '/' });
-          }}
-        >
-          <button
-            type="submit"
-            aria-label="Se déconnecter"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-active text-muted-foreground transition-[border-radius,background-color,color] duration-200 ease-out hover:rounded-xl hover:bg-destructive hover:text-destructive-foreground focus-visible:rounded-xl focus-visible:bg-destructive focus-visible:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </form>
-      </Tooltip>
     </nav>
   );
 }
