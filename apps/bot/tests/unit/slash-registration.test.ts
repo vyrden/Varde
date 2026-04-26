@@ -1,7 +1,9 @@
-import type { Logger, ModuleCommand } from '@varde/contracts';
+import type { GuildId, Logger, ModuleCommand, ModuleId } from '@varde/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createCommandRegistry } from '../../src/commands.js';
 import {
+  collectEnabledCommandsForGuild,
   registerSlashCommandsForGuild,
   type SlashRegistrationClient,
   toCommandPayload,
@@ -167,5 +169,36 @@ describe('registerSlashCommandsForGuild', () => {
     };
     await registerSlashCommandsForGuild(client, '111', [], noopLogger());
     expect(set).toHaveBeenCalledWith([], '111');
+  });
+});
+
+describe('collectEnabledCommandsForGuild', () => {
+  const moduleA = 'mod-a' as ModuleId;
+  const moduleB = 'mod-b' as ModuleId;
+  const guild = '111' as GuildId;
+
+  const buildCmd = (name: string): ModuleCommand => ({
+    name,
+    description: name,
+    handler: () => ({ kind: 'success', payload: { message: '' } }) as never,
+  });
+
+  it('renvoie uniquement les commandes des modules activés sur la guild', () => {
+    const registry = createCommandRegistry();
+    registry.register({ id: moduleA, version: '1.0.0' }, { warn: buildCmd('warn') });
+    registry.register({ id: moduleB, version: '1.0.0' }, { ping: buildCmd('ping') });
+
+    const enabled = new Set<string>([moduleA]);
+    const loader = { isEnabled: (m: ModuleId) => enabled.has(m) };
+
+    const out = collectEnabledCommandsForGuild(registry, loader, guild);
+    expect(out.map((c) => c.name)).toEqual(['warn']);
+  });
+
+  it('renvoie vide si aucun module activé pour la guild', () => {
+    const registry = createCommandRegistry();
+    registry.register({ id: moduleA, version: '1.0.0' }, { warn: buildCmd('warn') });
+    const out = collectEnabledCommandsForGuild(registry, { isEnabled: () => false }, guild);
+    expect(out).toEqual([]);
   });
 });

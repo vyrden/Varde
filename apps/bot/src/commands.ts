@@ -1,5 +1,6 @@
 import {
   type CommandInteractionInput,
+  type GuildId,
   type ModuleCommand,
   type ModuleCommandMap,
   type ModuleContext,
@@ -97,6 +98,16 @@ export interface CommandPermissionsPort {
   ) => Promise<boolean>;
 }
 
+/**
+ * Sonde d'activation des modules. Le routage refuse une commande
+ * dont le module auteur n'est pas activé sur la guild — défense
+ * en profondeur si Discord a gardé la commande en cache plus
+ * longtemps que prévu après un toggle off.
+ */
+export interface ModuleEnablementCheck {
+  readonly isEnabled: (moduleId: ModuleId, guildId: GuildId) => boolean;
+}
+
 /** Factory de ctx invoquée par le routage pour chaque interaction. */
 export type CommandCtxFactory = (ref: ModuleRef, input: CommandInteractionInput) => ModuleContext;
 
@@ -105,6 +116,13 @@ export interface RouteCommandOptions {
   readonly registry: CommandRegistry;
   readonly ctxFactory: CommandCtxFactory;
   readonly permissions?: CommandPermissionsPort;
+  /**
+   * Sonde d'activation. Si fournie, le routage refuse les commandes
+   * de modules désactivés pour la guild (réponse `ui.error`).
+   * Optionnel : sans sonde, toutes les commandes du registry sont
+   * routées sans filtrage runtime.
+   */
+  readonly enablementCheck?: ModuleEnablementCheck;
 }
 
 /**
@@ -123,13 +141,23 @@ export async function routeCommandInteraction(
   input: CommandInteractionInput,
   options: RouteCommandOptions,
 ): Promise<UIMessage> {
-  const { registry, ctxFactory, permissions } = options;
+  const { registry, ctxFactory, permissions, enablementCheck } = options;
   const hit = registry.resolve(input.commandName);
   if (!hit) {
     // Pas de module → message d'erreur minimal sans passer par un ctx.
     return Object.freeze<UIMessage>({
       kind: 'error',
       payload: Object.freeze({ message: `Commande "${input.commandName}" inconnue.` }),
+    });
+  }
+  // Defense in depth : si le module est désactivé pour cette guild,
+  // refus avant même de construire un ctx (évite tout side effect).
+  if (enablementCheck && !enablementCheck.isEnabled(hit.moduleRef.id, input.guildId)) {
+    return Object.freeze<UIMessage>({
+      kind: 'error',
+      payload: Object.freeze({
+        message: `Le module "${hit.moduleRef.id}" n'est pas activé sur ce serveur.`,
+      }),
     });
   }
   const ctx = ctxFactory(hit.moduleRef, input);

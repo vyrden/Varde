@@ -9,6 +9,7 @@ export {
   type CommandPermissionsPort,
   type CommandRegistry,
   createCommandRegistry,
+  type ModuleEnablementCheck,
   type RouteCommandOptions,
   routeCommandInteraction,
 } from './commands.js';
@@ -40,7 +41,9 @@ export {
   type ShutdownStep,
 } from './shutdown.js';
 export {
+  collectEnabledCommandsForGuild,
   type DiscordCommandPayload,
+  type ModuleEnablementProbe,
   registerSlashCommandsForGuild,
   type SlashRegistrationClient,
   toCommandPayload,

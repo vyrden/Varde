@@ -1,10 +1,14 @@
 import type {
+  GuildId,
   Logger,
   ModuleCommand,
   ModuleCommandOption,
   ModuleCommandOptionType,
+  ModuleId,
 } from '@varde/contracts';
 import type { Client } from 'discord.js';
+
+import type { CommandRegistry } from './commands.js';
 
 /**
  * Enregistrement REST des slash commands auprès de Discord.
@@ -157,3 +161,35 @@ export async function registerSlashCommandsForGuild(
     });
   }
 }
+
+/**
+ * Surface du `PluginLoader` consommée pour filtrer les commandes par
+ * état d'activation per-guild. On en isole le strict minimum
+ * (`isEnabled`) plutôt que d'importer tout `PluginLoader` ici — le
+ * couplage `@varde/bot` ↔ `@varde/core` reste léger. La signature
+ * utilise les types brandés `ModuleId` / `GuildId` directement, ce
+ * qui permet de passer un `PluginLoader` sans adaptateur.
+ */
+export interface ModuleEnablementProbe {
+  readonly isEnabled: (moduleId: ModuleId, guildId: GuildId) => boolean;
+}
+
+/**
+ * Filtre les commandes du registry pour ne garder que celles dont le
+ * module auteur est activé sur la guild visée. Utilisé par le bin de
+ * `@varde/server` pour enregistrer des slash commands par-guild qui
+ * ne reflètent que les modules opt-in par l'admin.
+ *
+ * Pas d'effet de bord : retour pur, l'appelant pousse à Discord via
+ * `registerSlashCommandsForGuild`.
+ */
+export const collectEnabledCommandsForGuild = (
+  registry: CommandRegistry,
+  loader: ModuleEnablementProbe,
+  guildId: GuildId,
+): ReadonlyArray<ModuleCommand> => {
+  return registry
+    .list()
+    .filter((entry) => loader.isEnabled(entry.moduleRef.id, guildId))
+    .map((entry) => entry.command);
+};

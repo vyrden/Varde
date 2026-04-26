@@ -33,6 +33,7 @@ import {
 } from '@varde/api';
 import {
   attachDiscordClient,
+  collectEnabledCommandsForGuild,
   createDiscordJsChannelSender,
   createDiscordService,
   createOnboardingDiscordBridge,
@@ -54,25 +55,17 @@ import { createServer } from './server.js';
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
-const LOGS_ID = 'logs' as ModuleId;
-const MODERATION_ID = 'moderation' as ModuleId;
-const REACTION_ROLES_ID = 'reaction-roles' as ModuleId;
-const WELCOME_ID = 'welcome' as ModuleId;
 
 /**
- * Modules activés par défaut sur toute guild connue. `hello-world`
- * reste dans la liste tant qu'il sert de témoin ; `logs`,
- * `moderation`, `reaction-roles` et `welcome` sont les modules
- * officiels V1 (jalon 4). `onboarding-presets` s'y ajoutera quand
- * il sera livré.
+ * Modules activés par défaut sur toute guild connue. **Politique
+ * V1 : seul `hello-world` est auto-activé** (témoin du contrat
+ * core/module). Les modules officiels (`logs`, `moderation`,
+ * `reaction-roles`, `welcome`) restent désactivés tant que l'admin
+ * ne les active pas explicitement via le toggle du dashboard. C'est
+ * un opt-in volontaire pour que l'admin garde la main sur ce qui
+ * tourne sur son serveur.
  */
-const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [
-  HELLO_WORLD_ID,
-  LOGS_ID,
-  MODERATION_ID,
-  REACTION_ROLES_ID,
-  WELCOME_ID,
-];
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -272,7 +265,7 @@ function subscribeAutoOnboard(
       await registerSlashCommandsForGuild(
         client,
         event.guildId,
-        collectRegisteredCommands(handle),
+        collectCommandsForGuild(handle, event.guildId as GuildId),
         logger,
       );
     }
@@ -401,13 +394,14 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
 }
 
 /**
- * Liste les commandes à enregistrer auprès de Discord. Source de
- * vérité : le `CommandRegistry` du bot, alimenté juste après
- * `loader.loadAll()` par parcours du `loadOrder`. Lecture stable
- * (tri par nom) pour que la registration REST soit déterministe.
+ * Filtre les commandes à publier à Discord pour une guild donnée
+ * selon les modules activés runtime. Un module désactivé pour cette
+ * guild ne contribue pas ses commandes — l'admin les voit
+ * apparaître/disparaître dans le client Discord en synchrone avec
+ * le toggle.
  */
-const collectRegisteredCommands = (handle: ServerHandle) =>
-  handle.commandRegistry.list().map((entry) => entry.command);
+const collectCommandsForGuild = (handle: ServerHandle, guildId: GuildId) =>
+  collectEnabledCommandsForGuild(handle.commandRegistry, handle.loader, guildId);
 
 function attachDiscordToHandle(
   attachment: DiscordAttachment,
@@ -417,13 +411,13 @@ function attachDiscordToHandle(
   attachment.client.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
-    const commands = collectRegisteredCommands(handle);
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
       await enableDefaultModulesOn(handle, guild.id, logger);
       // Enregistre les slash commands auprès de Discord pour cette
-      // guild. Idempotent : remplace l'intégralité des commandes
-      // existantes côté Discord à chaque boot.
+      // guild, filtrées par modules activés. Idempotent : remplace
+      // l'intégralité des commandes côté Discord à chaque boot.
+      const commands = collectCommandsForGuild(handle, guild.id as GuildId);
       await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
@@ -462,6 +456,14 @@ async function main(): Promise<void> {
   // recevoir les events gateway.
   const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
 
+  // Holder de la callback `onModuleToggled` : assignée après que
+  // `handle` (et donc `commandRegistry`/`loader`) est disponible. Le
+  // closure passé à `createServer` lit `slashSyncRef.fn` à chaque
+  // toggle — pattern late-binding via référence mutable.
+  const slashSyncRef: {
+    fn: ((guildId: GuildId, moduleId: ModuleId) => Promise<void>) | null;
+  } = { fn: null };
+
   const driver = pickDriver(databaseUrl);
   const handle =
     driver === 'pg'
@@ -478,6 +480,9 @@ async function main(): Promise<void> {
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
           welcomeUploads,
+          onModuleToggled: async (g, m) => {
+            await slashSyncRef.fn?.(g, m);
+          },
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -492,6 +497,9 @@ async function main(): Promise<void> {
           ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
           ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
           welcomeUploads,
+          onModuleToggled: async (g, m) => {
+            await slashSyncRef.fn?.(g, m);
+          },
         });
 
   handle.loader.register(helloWorld);
@@ -520,6 +528,15 @@ async function main(): Promise<void> {
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
     discord !== null && discordAttachment !== null ? discordAttachment.client : null,
   );
+
+  // Late-binding : la callback de re-publication des slash commands
+  // est désormais opérationnelle (registry hydraté + handle dispo).
+  // Le toggle d'un module appelera ceci pour synchroniser Discord.
+  slashSyncRef.fn = async (guildId: GuildId) => {
+    if (discordAttachment === null) return;
+    const commands = collectCommandsForGuild(handle, guildId);
+    await registerSlashCommandsForGuild(discordAttachment.client, guildId, commands, logger);
+  };
 
   await seedFromEnv(handle, seedIds, logger);
 
