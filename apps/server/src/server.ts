@@ -55,6 +55,7 @@ import {
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
+  type I18nMessages,
   type OnboardingExecutor,
   type OnboardingHostService,
   type PluginLoader,
@@ -193,6 +194,20 @@ export interface CreateServerOptions<D extends DbDriver> {
    * (lève une erreur explicite si un module tente de l'appeler).
    */
   readonly discordService?: DiscordService;
+  /**
+   * Locales par module, indexées par `moduleId`. Chaque entrée est
+   * un dict `{ locale: { key: message } }` (forme `I18nMessages`).
+   * Permet à `ctx.i18n.t(key, params)` de résoudre la clé. Sans
+   * mapping, le service retourne la clé brute (utile pour repérer
+   * les chaînes manquantes mais inacceptable en prod).
+   */
+  readonly locales?: Readonly<Record<string, I18nMessages>>;
+  /**
+   * Locale par défaut utilisée par le i18n quand la guild n'en a
+   * pas encore défini une via `core.bot-settings`. Défaut `'en'`
+   * côté `createCtxFactory` ; le fallback est toujours `'en'`.
+   */
+  readonly defaultLocale?: string;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -269,6 +284,8 @@ export async function createServer<D extends DbDriver>(
       ? { keystorePreviousMasterKey: options.keystore.previousMasterKey }
       : {}),
     ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
+    ...(options.locales !== undefined ? { locales: options.locales } : {}),
+    ...(options.defaultLocale !== undefined ? { defaultLocale: options.defaultLocale } : {}),
   });
 
   const loader = createPluginLoader({

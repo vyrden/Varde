@@ -42,10 +42,10 @@ import {
 import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
-import { helloWorld } from '@varde/module-hello-world';
-import { logs } from '@varde/module-logs';
+import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
+import { logs, locales as logsLocales } from '@varde/module-logs';
 import { moderation } from '@varde/module-moderation';
-import { reactionRoles } from '@varde/module-reaction-roles';
+import { reactionRoles, locales as reactionRolesLocales } from '@varde/module-reaction-roles';
 import { welcome } from '@varde/module-welcome';
 import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
 
@@ -54,6 +54,20 @@ import { createServer } from './server.js';
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
+
+/**
+ * Aggrégation des locales fournies par chaque module officiel,
+ * indexée par `moduleId`. Passée à `createServer` qui la propage à
+ * `createCtxFactory` pour que `ctx.i18n.t(key, params)` résolve les
+ * chaînes depuis le bon dictionnaire. Les modules sans locales
+ * (welcome, moderation V1) sont absents — le fallback i18n reste la
+ * clé brute, mais ils n'utilisent pas `ctx.i18n.t` actuellement.
+ */
+const MODULE_LOCALES = {
+  'hello-world': helloWorldLocales,
+  logs: logsLocales,
+  'reaction-roles': reactionRolesLocales,
+} as const;
 
 /**
  * Modules activés par défaut sur toute guild connue. **Politique
@@ -465,6 +479,8 @@ async function main(): Promise<void> {
           api: { port, host, corsOrigin, authSecret },
           keystore: { masterKey: keystoreMasterKey },
           logger,
+          locales: MODULE_LOCALES,
+          defaultLocale: 'fr',
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
           ...(discordAttachment
@@ -479,6 +495,8 @@ async function main(): Promise<void> {
           api: { port, host, corsOrigin, authSecret },
           keystore: { masterKey: keystoreMasterKey },
           logger,
+          locales: MODULE_LOCALES,
+          defaultLocale: 'fr',
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
           ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
           ...(discordAttachment
