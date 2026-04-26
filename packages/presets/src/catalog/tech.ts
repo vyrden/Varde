@@ -172,7 +172,7 @@ export const communityTechSmall: PresetDefinition = {
               enabled: true,
             },
           ],
-          bypassRoleIds: [],
+          bypassRoleIds: ['@role:role-mod'],
         },
       },
     },
@@ -182,6 +182,14 @@ export const communityTechSmall: PresetDefinition = {
       config: {
         accountAgeFilter: { enabled: true, minDays: 1, action: 'kick', quarantineRoleId: null },
       },
+    },
+    {
+      // Pré-câble le module logs sur le salon `chan-logs` créé par
+      // ce preset. Le placeholder `@channel:chan-logs` est résolu
+      // par `core.patchModuleConfig` au moment de l'apply.
+      moduleId: 'logs',
+      enabled: false,
+      config: { channelId: '@channel:chan-logs' },
     },
   ],
   permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],

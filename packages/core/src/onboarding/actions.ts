@@ -1,4 +1,8 @@
-import type { DiscordPermissionOverwrite, OnboardingActionDefinition } from '@varde/contracts';
+import type {
+  DiscordPermissionOverwrite,
+  OnboardingActionContext,
+  OnboardingActionDefinition,
+} from '@varde/contracts';
 import { z } from 'zod';
 
 /**
@@ -292,6 +296,60 @@ export interface PatchModuleConfigResult {
   readonly previous: Readonly<Record<string, unknown>> | null;
 }
 
+/**
+ * Pattern d'un placeholder de référence à un `localId` créé en amont
+ * dans la séquence d'actions onboarding. Le préfixe (`role`,
+ * `channel`, `category`, `user`) est purement informatif côté
+ * lecteur — `ctx.resolveLocalId` n'a pas de notion de kind, le
+ * mapping `localId → snowflake` est plat.
+ *
+ * Exemples valides :
+ *   `@role:role-mod`
+ *   `@channel:chan-logs`
+ *   `@category:cat-info`
+ *
+ * Toute string config qui ne matche pas est laissée intacte.
+ */
+const REF_PATTERN = /^@(role|channel|category|user):(.+)$/;
+
+/**
+ * Walk récursif sur la config du module : remplace toute string
+ * `'@<kind>:<localId>'` par le snowflake résolu via
+ * `ctx.resolveLocalId`. Préserve les structures (arrays, objets
+ * imbriqués, primitives non-string).
+ *
+ * Si une référence ne résout pas (création en amont absente ou
+ * orpheline), jette une `Error` explicite — l'executor rollback la
+ * séquence onboarding au lieu de persister un placeholder cassé.
+ */
+const resolveConfigRefs = (value: unknown, ctx: OnboardingActionContext, path: string): unknown => {
+  if (typeof value === 'string') {
+    const match = REF_PATTERN.exec(value);
+    if (match) {
+      const localId = match[2] as string;
+      const resolved = ctx.resolveLocalId(localId);
+      if (resolved === null) {
+        throw new Error(
+          `core.patchModuleConfig : localId "${localId}" référencé en "${path}" non résolu (action upstream manquante ou orpheline)`,
+        );
+      }
+      return resolved;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v, i) => resolveConfigRefs(v, ctx, `${path}[${i}]`));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = resolveConfigRefs(v, ctx, path === '' ? k : `${path}.${k}`);
+    }
+    return out;
+  }
+  return value;
+};
+
 export const patchModuleConfigAction: OnboardingActionDefinition<
   PatchModuleConfigPayload,
   PatchModuleConfigResult
@@ -300,8 +358,11 @@ export const patchModuleConfigAction: OnboardingActionDefinition<
   schema: patchModuleConfigPayloadSchema,
   canUndo: false,
   apply: async (ctx, payload) => {
+    const resolved = resolveConfigRefs(payload.config, ctx, '') as Readonly<
+      Record<string, unknown>
+    >;
     await ctx.configPatch({
-      modules: { [payload.moduleId]: payload.config },
+      modules: { [payload.moduleId]: resolved },
     });
     return { previous: null };
   },
