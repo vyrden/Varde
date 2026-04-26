@@ -67,18 +67,21 @@ const emojiSchema = z.discriminatedUnion('type', [
 ]);
 
 const buttonStyleSchema = z.enum(['primary', 'secondary', 'success', 'danger']);
+const pairKindSchema = z.enum(['reaction', 'button']).default('reaction');
 
 const pairSchema = z
   .object({
+    /** Type de l'élément. Défaut `reaction` pour rétro-compat. */
+    kind: pairKindSchema,
     emoji: emojiSchema,
     roleId: z
       .string()
       .regex(/^\d{17,19}$/)
       .optional(),
     roleName: z.string().min(1).max(100).optional(),
-    /** Texte du bouton en mode `kind: 'buttons'`. Ignoré sinon. */
+    /** Texte du bouton (kind=button uniquement). Ignoré sinon. */
     label: z.string().max(80).default(''),
-    /** Couleur du bouton en mode `kind: 'buttons'`. Ignoré sinon. */
+    /** Couleur du bouton (kind=button uniquement). Ignoré sinon. */
     style: buttonStyleSchema.default('secondary'),
   })
   .refine((p) => p.roleId !== undefined || p.roleName !== undefined, {
@@ -86,33 +89,31 @@ const pairSchema = z
   });
 
 /**
- * Body partagé entre publish et sync. `kind` optionnel pour rester
- * rétro-compatible avec le dashboard V1 qui ne l'envoie pas — défaut
- * `reactions`. `feedback: 'ephemeral'` n'est valide qu'avec
- * `kind: 'buttons'` (refine final).
+ * Body partagé entre publish et sync. `feedback: 'ephemeral'` exige
+ * qu'au moins une paire soit `kind: 'button'` (Discord ne permet pas
+ * les réponses éphémères en réponse à une réaction emoji).
  */
 const baseBodyShape = {
   label: z.string().min(1).max(64),
   channelId: z.string().regex(/^\d{17,19}$/),
   message: z.string().min(1).max(2000),
   mode: z.enum(['normal', 'unique', 'verifier']),
-  kind: z.enum(['reactions', 'buttons']).default('reactions'),
   feedback: z.enum(['dm', 'ephemeral', 'none']).default('dm'),
   pairs: z.array(pairSchema).min(1).max(20),
 } as const;
 
-const ephemeralRequiresButtons = (body: {
-  kind: 'reactions' | 'buttons';
+const ephemeralRequiresAtLeastOneButton = (body: {
   feedback: 'dm' | 'ephemeral' | 'none';
-}): boolean => body.feedback !== 'ephemeral' || body.kind === 'buttons';
+  pairs: ReadonlyArray<{ kind: 'reaction' | 'button' }>;
+}): boolean => body.feedback !== 'ephemeral' || body.pairs.some((p) => p.kind === 'button');
 
-const publishBodySchema = z.object(baseBodyShape).refine(ephemeralRequiresButtons, {
-  message: "Le feedback 'ephemeral' n'est disponible qu'avec kind: 'buttons'",
+const publishBodySchema = z.object(baseBodyShape).refine(ephemeralRequiresAtLeastOneButton, {
+  message: "Le feedback 'ephemeral' nécessite au moins une paire kind: 'button'.",
   path: ['feedback'],
 });
 
-const syncBodySchema = z.object(baseBodyShape).refine(ephemeralRequiresButtons, {
-  message: "Le feedback 'ephemeral' n'est disponible qu'avec kind: 'buttons'",
+const syncBodySchema = z.object(baseBodyShape).refine(ephemeralRequiresAtLeastOneButton, {
+  message: "Le feedback 'ephemeral' nécessite au moins une paire kind: 'button'.",
   path: ['feedback'],
 });
 
@@ -121,13 +122,15 @@ const syncBodySchema = z.object(baseBodyShape).refine(ephemeralRequiresButtons, 
 // ---------------------------------------------------------------------------
 
 type ButtonStyle = 'primary' | 'secondary' | 'success' | 'danger';
+type PairKind = 'reaction' | 'button';
 
 interface ResolvedPair {
+  readonly kind: PairKind;
   readonly emoji: Emoji;
   readonly roleId: RoleId;
-  /** Pertinent uniquement pour `kind: 'buttons'`. Vide → fallback nom du rôle. */
+  /** Pertinent uniquement pour `kind: 'button'`. Vide → fallback nom du rôle. */
   readonly label: string;
-  /** Pertinent uniquement pour `kind: 'buttons'`. */
+  /** Pertinent uniquement pour `kind: 'button'`. */
   readonly style: ButtonStyle;
 }
 
@@ -137,7 +140,6 @@ interface RRMessage {
   readonly channelId: string;
   readonly messageId: string;
   readonly message: string;
-  readonly kind: 'reactions' | 'buttons';
   readonly mode: 'normal' | 'unique' | 'verifier';
   readonly feedback: 'dm' | 'ephemeral' | 'none';
   readonly pairs: readonly ResolvedPair[];
@@ -147,6 +149,41 @@ interface RRMessage {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Normalise une entrée historique : pose un `kind` par paire si absent
+ * (`'button'` quand l'entrée portait l'ancien `kind: 'buttons'` au
+ * niveau message, sinon `'reaction'`). Idempotent — une entrée déjà
+ * au format pair-level passe inchangée. Symétrique de la migration
+ * Zod côté module reaction-roles.
+ */
+const normalizeMessage = (raw: Record<string, unknown>): RRMessage => {
+  const messageKind = raw['kind'];
+  const fallbackPairKind: PairKind = messageKind === 'buttons' ? 'button' : 'reaction';
+  const pairs = Array.isArray(raw['pairs'])
+    ? (raw['pairs'] as ReadonlyArray<Record<string, unknown>>).map((p): ResolvedPair => {
+        const kind = (p['kind'] as PairKind | undefined) ?? fallbackPairKind;
+        const emoji = p['emoji'] as Emoji;
+        const roleId = p['roleId'] as RoleId;
+        const label = typeof p['label'] === 'string' ? (p['label'] as string) : '';
+        const style =
+          typeof p['style'] === 'string' && (p['style'] as string) in BUTTON_STYLE_VALUES
+            ? (p['style'] as ButtonStyle)
+            : 'secondary';
+        return { kind, emoji, roleId, label, style };
+      })
+    : [];
+  return {
+    id: String(raw['id'] ?? ''),
+    label: String(raw['label'] ?? ''),
+    channelId: String(raw['channelId'] ?? ''),
+    messageId: String(raw['messageId'] ?? ''),
+    message: typeof raw['message'] === 'string' ? (raw['message'] as string) : '',
+    mode: (raw['mode'] as RRMessage['mode']) ?? 'normal',
+    feedback: (raw['feedback'] as RRMessage['feedback']) ?? 'dm',
+    pairs,
+  };
+};
+
 /** Extrait le tableau de messages de la config persistée. */
 const extractMessages = (snapshot: unknown): RRMessage[] => {
   if (typeof snapshot !== 'object' || snapshot === null) return [];
@@ -155,7 +192,10 @@ const extractMessages = (snapshot: unknown): RRMessage[] => {
   const rr = (modules as Record<string, unknown>)['reaction-roles'];
   if (typeof rr !== 'object' || rr === null) return [];
   const msgs = (rr as { messages?: unknown }).messages;
-  return Array.isArray(msgs) ? (msgs as RRMessage[]) : [];
+  if (!Array.isArray(msgs)) return [];
+  return (msgs as ReadonlyArray<unknown>)
+    .filter((m): m is Record<string, unknown> => typeof m === 'object' && m !== null)
+    .map(normalizeMessage);
 };
 
 /** Clé unique d'un emoji, pour le diff. */
@@ -163,24 +203,23 @@ const emojiKey = (emoji: Emoji): string =>
   emoji.type === 'unicode' ? `u:${emoji.value}` : `c:${emoji.id}`;
 
 /**
- * Construit la liste de composants `ActionRow` pour un message
- * `kind: 'buttons'`. Discord limite à 5 boutons par row et 5 rows par
- * message ; nos `pairs` sont déjà cappées à 20 (== 4 rows max). Les
- * paires non-textuelles utilisent l'emoji comme contenu de bouton ;
- * un `label` de paire vide est traduit en label vide côté Discord
- * (l'emoji suffit alors visuellement).
- *
- * `entryId` est l'UUID stable de l'entrée — il préfixe les
- * `customId` pour permettre au runtime du module de retrouver l'entrée
- * sans aller-retour DB sur chaque click.
+ * Construit la liste de composants `ActionRow` à partir des paires
+ * `kind: 'button'`. Les paires `kind: 'reaction'` sont ignorées —
+ * elles seront posées séparément via `addReaction`. Discord limite à
+ * 5 boutons par row et 5 rows par message ; les `pairs` sont déjà
+ * cappées à 20 (== 4 rows max). `entryId` est l'UUID stable de
+ * l'entrée — il préfixe les `customId` pour permettre au runtime du
+ * module de retrouver la paire sans aller-retour DB sur chaque click.
  */
 const buildButtonComponents = (
   entryId: string,
   pairs: readonly ResolvedPair[],
 ): ReadonlyArray<unknown> => {
+  const buttonPairs = pairs.filter((p) => p.kind === 'button');
+  if (buttonPairs.length === 0) return [];
   const rows: unknown[] = [];
-  for (let i = 0; i < pairs.length; i += 5) {
-    const slice = pairs.slice(i, i + 5);
+  for (let i = 0; i < buttonPairs.length; i += 5) {
+    const slice = buttonPairs.slice(i, i + 5);
     rows.push({
       type: 1, // ActionRow
       components: slice.map((p) => {
@@ -279,6 +318,7 @@ export function registerReactionRolesRoutes(
           }
         }
         resolvedPairs.push({
+          kind: pair.kind,
           emoji: pair.emoji as Emoji,
           roleId,
           label: pair.label,
@@ -286,20 +326,21 @@ export function registerReactionRolesRoutes(
         });
       }
 
-      // Génère l'entryId avant de poster — le customId des boutons en
-      // `kind: 'buttons'` doit l'embarquer pour permettre au runtime du
-      // module de retrouver l'entrée sans aller-retour DB.
+      // Génère l'entryId avant de poster — le customId des boutons doit
+      // l'embarquer pour permettre au runtime du module de retrouver
+      // la paire sans aller-retour DB sur chaque click.
       const entryId = randomUUID();
+      const components = buildButtonComponents(entryId, resolvedPairs);
+      const reactionPairs = resolvedPairs.filter((p) => p.kind === 'reaction');
 
-      // Étape 2 : poster le message (avec composants en mode buttons)
+      // Étape 2 : poster le message — avec composants si au moins une
+      // paire est `kind: 'button'`.
       let postedMessageId: MessageId;
       try {
         const posted = await discordService.postMessage(
           typedChannelId,
           body.message,
-          body.kind === 'buttons'
-            ? { components: buildButtonComponents(entryId, resolvedPairs) }
-            : undefined,
+          components.length > 0 ? { components } : undefined,
         );
         postedMessageId = posted.id;
       } catch (error) {
@@ -316,28 +357,25 @@ export function registerReactionRolesRoutes(
         });
       }
 
-      // Étape 3 : en kind 'reactions', ajouter les réactions (50 ms
-      // entre chaque). En kind 'buttons', les composants sont déjà
-      // posés avec le message — pas de réactions à ajouter.
-      if (body.kind === 'reactions') {
-        for (const pair of resolvedPairs) {
-          try {
-            await discordService.addReaction(typedChannelId, postedMessageId, pair.emoji);
-          } catch (error) {
-            request.log.warn({ err: error }, 'reaction-roles: addReaction (publish) a échoué');
-            if (error instanceof DiscordSendError) {
-              return reply.code(502).send({
-                reason: error.reason,
-                ...(error.reason === 'unknown' ? { detail: error.message } : {}),
-              });
-            }
-            return reply.code(500).send({
-              reason: 'unknown',
-              detail: error instanceof Error ? error.message : String(error),
+      // Étape 3 : ajouter les réactions pour les paires `kind: 'reaction'`
+      // (50 ms entre chaque pour respecter le rate-limit Discord).
+      for (const pair of reactionPairs) {
+        try {
+          await discordService.addReaction(typedChannelId, postedMessageId, pair.emoji);
+        } catch (error) {
+          request.log.warn({ err: error }, 'reaction-roles: addReaction (publish) a échoué');
+          if (error instanceof DiscordSendError) {
+            return reply.code(502).send({
+              reason: error.reason,
+              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
             });
           }
-          await new Promise((r) => setTimeout(r, 50));
+          return reply.code(500).send({
+            reason: 'unknown',
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
+        await new Promise((r) => setTimeout(r, 50));
       }
 
       // Étape 4 : lire la config existante et persister
@@ -355,7 +393,6 @@ export function registerReactionRolesRoutes(
         channelId: body.channelId,
         messageId: postedMessageId,
         message: body.message,
-        kind: body.kind,
         mode: body.mode,
         feedback: body.feedback,
         pairs: resolvedPairs,
@@ -440,12 +477,17 @@ export function registerReactionRolesRoutes(
           }
         }
         resolvedNewPairs.push({
+          kind: pair.kind,
           emoji: pair.emoji as Emoji,
           roleId,
           label: pair.label,
           style: pair.style,
         });
       }
+
+      const newComponents = buildButtonComponents(existingEntry.id, resolvedNewPairs);
+      const newReactionPairs = resolvedNewPairs.filter((p) => p.kind === 'reaction');
+      const oldReactionPairs = existingEntry.pairs.filter((p) => p.kind === 'reaction');
 
       // Cas A : changement de salon → delete-old + post-new + reactions
       if (channelChanged) {
@@ -469,9 +511,7 @@ export function registerReactionRolesRoutes(
           const posted = await discordService.postMessage(
             newChannelId,
             body.message,
-            body.kind === 'buttons'
-              ? { components: buildButtonComponents(existingEntry.id, resolvedNewPairs) }
-              : undefined,
+            newComponents.length > 0 ? { components: newComponents } : undefined,
           );
           postedMessageId = posted.id;
         } catch (error) {
@@ -488,28 +528,26 @@ export function registerReactionRolesRoutes(
           });
         }
 
-        if (body.kind === 'reactions') {
-          for (const pair of resolvedNewPairs) {
-            try {
-              await discordService.addReaction(newChannelId, postedMessageId, pair.emoji);
-            } catch (error) {
-              request.log.warn(
-                { err: error },
-                'reaction-roles: addReaction (sync, channel change) a échoué',
-              );
-              if (error instanceof DiscordSendError) {
-                return reply.code(502).send({
-                  reason: error.reason,
-                  ...(error.reason === 'unknown' ? { detail: error.message } : {}),
-                });
-              }
-              return reply.code(500).send({
-                reason: 'unknown',
-                detail: error instanceof Error ? error.message : String(error),
+        for (const pair of newReactionPairs) {
+          try {
+            await discordService.addReaction(newChannelId, postedMessageId, pair.emoji);
+          } catch (error) {
+            request.log.warn(
+              { err: error },
+              'reaction-roles: addReaction (sync, channel change) a échoué',
+            );
+            if (error instanceof DiscordSendError) {
+              return reply.code(502).send({
+                reason: error.reason,
+                ...(error.reason === 'unknown' ? { detail: error.message } : {}),
               });
             }
-            await new Promise((r) => setTimeout(r, 50));
+            return reply.code(500).send({
+              reason: 'unknown',
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
+          await new Promise((r) => setTimeout(r, 50));
         }
 
         const movedEntry: RRMessage = {
@@ -518,7 +556,6 @@ export function registerReactionRolesRoutes(
           channelId: body.channelId,
           messageId: postedMessageId,
           message: body.message,
-          kind: body.kind,
           mode: body.mode,
           feedback: body.feedback,
           pairs: resolvedNewPairs,
@@ -537,86 +574,43 @@ export function registerReactionRolesRoutes(
         });
       }
 
-      // Cas B : même salon → édition contenu + diff réactions OU
-      // re-render des composants selon le kind.
+      // Cas B : même salon → édition contenu (et composants si la
+      // composition de boutons a changé) + diff des réactions emoji.
       const typedChannelId = assertChannelId(existingEntry.channelId);
       const typedMessageId = assertMessageId(messageId);
 
-      if (body.kind === 'buttons') {
-        // En mode boutons, toute modif (texte, paires, label, style)
-        // se propage par un editMessage qui réécrit le contenu et les
-        // composants. Pas de diff réactions à appliquer.
-        try {
-          await discordService.editMessage(typedChannelId, typedMessageId, body.message, {
-            components: buildButtonComponents(existingEntry.id, resolvedNewPairs),
-          });
-        } catch (error) {
-          request.log.warn({ err: error }, 'reaction-roles: editMessage (buttons) a échoué');
-          if (error instanceof DiscordSendError) {
-            return reply.code(502).send({
-              reason: error.reason,
-              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
-            });
-          }
-          return reply.code(500).send({
-            reason: 'unknown',
-            detail: error instanceof Error ? error.message : String(error),
+      // Toujours réécrire les composants : leur état de référence est
+      // la config dashboard, pas Discord. Si toutes les paires sont
+      // `kind: 'reaction'`, on passe `components: []` pour vider une
+      // éventuelle barre de boutons précédente.
+      try {
+        await discordService.editMessage(typedChannelId, typedMessageId, body.message, {
+          components: newComponents,
+        });
+      } catch (error) {
+        request.log.warn({ err: error }, 'reaction-roles: editMessage a échoué');
+        if (error instanceof DiscordSendError) {
+          return reply.code(502).send({
+            reason: error.reason,
+            ...(error.reason === 'unknown' ? { detail: error.message } : {}),
           });
         }
-
-        const updatedEntry: RRMessage = {
-          ...existingEntry,
-          label: body.label,
-          message: body.message,
-          kind: 'buttons',
-          mode: body.mode,
-          feedback: body.feedback,
-          pairs: resolvedNewPairs,
-        };
-        const updatedMessages = existingMessages.map((m, i) =>
-          i === entryIndex ? updatedEntry : m,
-        );
-        await options.config.setWith(
-          typedGuildId,
-          { modules: { 'reaction-roles': { version: 1, messages: updatedMessages } } },
-          { scope: 'modules.reaction-roles', updatedBy: session.userId as UserId },
-        );
-        return reply.code(200).send({
-          added: 0,
-          removed: 0,
-          channelChanged: false,
-          kind: 'buttons',
+        return reply.code(500).send({
+          reason: 'unknown',
+          detail: error instanceof Error ? error.message : String(error),
         });
       }
 
-      // Mode `reactions` (V1) : édition contenu si modifié + diff
-      // réactions add/remove.
-      if (body.message !== existingEntry.message) {
-        try {
-          await discordService.editMessage(typedChannelId, typedMessageId, body.message);
-        } catch (error) {
-          request.log.warn({ err: error }, 'reaction-roles: editMessage a échoué');
-          if (error instanceof DiscordSendError) {
-            return reply.code(502).send({
-              reason: error.reason,
-              ...(error.reason === 'unknown' ? { detail: error.message } : {}),
-            });
-          }
-          return reply.code(500).send({
-            reason: 'unknown',
-            detail: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      const oldByKey = new Map<string, ResolvedPair>(
-        existingEntry.pairs.map((p) => [emojiKey(p.emoji), p]),
+      // Diff des réactions emoji uniquement (les boutons sont déjà
+      // synchronisés via editMessage).
+      const oldReactionByKey = new Map<string, ResolvedPair>(
+        oldReactionPairs.map((p) => [emojiKey(p.emoji), p]),
       );
-      const newByKey = new Map<string, ResolvedPair>(
-        resolvedNewPairs.map((p) => [emojiKey(p.emoji), p]),
+      const newReactionByKey = new Map<string, ResolvedPair>(
+        newReactionPairs.map((p) => [emojiKey(p.emoji), p]),
       );
-      const toAdd = resolvedNewPairs.filter((p) => !oldByKey.has(emojiKey(p.emoji)));
-      const toRemove = existingEntry.pairs.filter((p) => !newByKey.has(emojiKey(p.emoji)));
+      const toAdd = newReactionPairs.filter((p) => !oldReactionByKey.has(emojiKey(p.emoji)));
+      const toRemove = oldReactionPairs.filter((p) => !newReactionByKey.has(emojiKey(p.emoji)));
 
       for (const pair of toAdd) {
         try {
@@ -660,7 +654,6 @@ export function registerReactionRolesRoutes(
         ...existingEntry,
         label: body.label,
         message: body.message,
-        kind: 'reactions',
         mode: body.mode,
         feedback: body.feedback,
         pairs: resolvedNewPairs,

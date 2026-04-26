@@ -47,14 +47,14 @@ describe('reactionRoleEmojiSchema', () => {
 });
 
 describe('reactionRoleMessageSchema', () => {
-  it('accepte un message valide avec 1 paire', () => {
+  it('accepte un message valide avec 1 paire (kind: reaction par défaut)', () => {
     expect(reactionRoleMessageSchema.parse(validMessage)).toEqual({
       ...validMessage,
       message: '',
-      kind: 'reactions',
       feedback: 'dm',
       pairs: [
         {
+          kind: 'reaction',
           emoji: { type: 'unicode', value: '🇪🇺' },
           roleId: SNOWFLAKE_C,
           label: '',
@@ -64,38 +64,69 @@ describe('reactionRoleMessageSchema', () => {
     });
   });
 
-  it("autorise le feedback 'ephemeral' uniquement avec kind: 'buttons'", () => {
-    const buttonOk = reactionRoleMessageSchema.safeParse({
-      ...validMessage,
-      kind: 'buttons',
-      feedback: 'ephemeral',
-    });
-    expect(buttonOk.success).toBe(true);
-
-    const reactionsKo = reactionRoleMessageSchema.safeParse({
+  it("autorise le feedback 'ephemeral' tant qu'au moins une paire est kind: 'button'", () => {
+    const mixOk = reactionRoleMessageSchema.safeParse({
       ...validMessage,
       feedback: 'ephemeral',
-    });
-    expect(reactionsKo.success).toBe(false);
-  });
-
-  it("accepte le kind 'buttons' avec un label et un style sur les paires", () => {
-    const buttons = {
-      ...validMessage,
-      kind: 'buttons' as const,
       pairs: [
         {
+          kind: 'button',
           emoji: { type: 'unicode' as const, value: '🇪🇺' },
           roleId: SNOWFLAKE_C,
-          label: 'Europe',
+        },
+      ],
+    });
+    expect(mixOk.success).toBe(true);
+
+    const allReactionsKo = reactionRoleMessageSchema.safeParse({
+      ...validMessage,
+      feedback: 'ephemeral',
+    });
+    expect(allReactionsKo.success).toBe(false);
+  });
+
+  it('mélange kind par paire dans un même message (1 réaction + 1 bouton)', () => {
+    const mixed = {
+      ...validMessage,
+      pairs: [
+        {
+          kind: 'reaction' as const,
+          emoji: { type: 'unicode' as const, value: '🇪🇺' },
+          roleId: SNOWFLAKE_C,
+        },
+        {
+          kind: 'button' as const,
+          emoji: { type: 'unicode' as const, value: '🌏' },
+          roleId: SNOWFLAKE_A,
+          label: 'Asie',
           style: 'primary' as const,
         },
       ],
     };
-    expect(reactionRoleMessageSchema.parse(buttons).pairs[0]).toMatchObject({
-      label: 'Europe',
-      style: 'primary',
-    });
+    const parsed = reactionRoleMessageSchema.parse(mixed);
+    expect(parsed.pairs[0]?.kind).toBe('reaction');
+    expect(parsed.pairs[1]).toMatchObject({ kind: 'button', label: 'Asie', style: 'primary' });
+  });
+
+  it("migre une ancienne entrée message-level kind: 'buttons' vers kind: 'button' par paire", () => {
+    const legacy = {
+      ...validMessage,
+      kind: 'buttons',
+      pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: SNOWFLAKE_C }],
+    };
+    const parsed = reactionRoleMessageSchema.parse(legacy);
+    expect(parsed.pairs[0]?.kind).toBe('button');
+    expect((parsed as { kind?: string }).kind).toBeUndefined();
+  });
+
+  it("migre une ancienne entrée message-level kind: 'reactions' vers kind: 'reaction'", () => {
+    const legacy = {
+      ...validMessage,
+      kind: 'reactions',
+      pairs: [{ emoji: { type: 'unicode' as const, value: '🇪🇺' }, roleId: SNOWFLAKE_C }],
+    };
+    const parsed = reactionRoleMessageSchema.parse(legacy);
+    expect(parsed.pairs[0]?.kind).toBe('reaction');
   });
 
   it('refuse 0 paire', () => {
@@ -182,13 +213,25 @@ describe('reactionRoleModeSchema', () => {
 });
 
 describe('reactionRolePairSchema', () => {
-  it('accepte une paire valide (label/style par défaut)', () => {
+  it('accepte une paire valide (kind/label/style par défaut)', () => {
     const pair = { emoji: { type: 'unicode' as const, value: '🎉' }, roleId: SNOWFLAKE_A };
     expect(reactionRolePairSchema.parse(pair)).toEqual({
       ...pair,
+      kind: 'reaction',
       label: '',
       style: 'secondary',
     });
+  });
+
+  it('accepte une paire kind: button avec label et style', () => {
+    const pair = {
+      kind: 'button' as const,
+      emoji: { type: 'unicode' as const, value: '🎉' },
+      roleId: SNOWFLAKE_A,
+      label: 'Fêtard',
+      style: 'success' as const,
+    };
+    expect(reactionRolePairSchema.parse(pair)).toEqual(pair);
   });
 
   it('refuse un roleId non-snowflake', () => {

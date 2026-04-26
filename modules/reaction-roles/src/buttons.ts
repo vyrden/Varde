@@ -1,6 +1,8 @@
 import type {
   ButtonInteractionInput,
+  ChannelId,
   GuildId,
+  MessageId,
   ModuleContext,
   RoleId,
   UIMessage,
@@ -64,18 +66,17 @@ interface ResolvedEntry {
 }
 
 /**
- * Cherche dans la config une entrée `kind: 'buttons'` qui matche le
- * customId parsé. Retourne `null` si l'entrée n'existe plus, n'est
- * pas en mode boutons, ou si le rôle n'est plus listé dans ses paires
+ * Cherche dans la config une paire `kind: 'button'` qui matche le
+ * customId parsé. Retourne `null` si l'entrée n'existe plus, si la
+ * paire n'est plus listée, ou si elle n'est plus de kind `button`
  * — protège contre les boutons obsolètes encore visibles sur Discord
- * après une suppression côté dashboard.
+ * après une suppression / un changement côté dashboard.
  */
 function findEntry(cfg: ReactionRolesConfig, parsed: ParsedButtonCustomId): ResolvedEntry | null {
   for (const entry of cfg.messages) {
     if (entry.id !== parsed.entryId) continue;
-    if (entry.kind !== 'buttons') return null;
-    const matches = entry.pairs.find((p) => p.roleId === parsed.roleId);
-    if (!matches) return null;
+    const match = entry.pairs.find((p) => p.roleId === parsed.roleId);
+    if (!match || match.kind !== 'button') return null;
     return { entry, roleId: parsed.roleId };
   }
   return null;
@@ -194,6 +195,9 @@ export async function handleButtonClick(
   }
 
   // Mode unique : retirer les autres rôles du set quand on en ajoute un.
+  // Pour les paires `kind: 'reaction'` du même message, on retire aussi
+  // la réaction de l'utilisateur — sinon l'UI Discord garde une trace
+  // visible (réaction posée) qui ne reflète plus son état réel.
   if (result === 'added' && entry.mode === 'unique') {
     for (const otherPair of entry.pairs) {
       if (otherPair.roleId === roleId) continue;
@@ -222,6 +226,21 @@ export async function handleButtonClick(
         ctx.logger.warn('reaction-roles : removeMemberRole (unique-swap) a échoué (button)', {
           error: error instanceof Error ? error.message : String(error),
         });
+        continue;
+      }
+      if (otherPair.kind === 'reaction') {
+        try {
+          await ctx.discord.removeUserReaction(
+            entry.channelId as ChannelId,
+            entry.messageId as MessageId,
+            userId,
+            otherPair.emoji,
+          );
+        } catch (error) {
+          ctx.logger.debug('reaction-roles : removeUserReaction (unique-swap) a échoué (button)', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
   }

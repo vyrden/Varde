@@ -47,9 +47,10 @@ const notifyUser = async (
 };
 
 /**
- * Recherche la paire (message, pair) correspondant à un event entrant.
- * Retourne null si aucun reaction-role ne matche (event pour un message
- * qui n'est pas géré par nous).
+ * Recherche la paire `kind: 'reaction'` correspondant à un event
+ * entrant. Retourne null si aucun reaction-role ne matche (event pour
+ * un message qui n'est pas géré par nous, ou paire `kind: 'button'`
+ * publiée à part — les clics buttons passent par `buttons.ts`).
  */
 function findPair(
   cfg: ReactionRolesConfig,
@@ -61,6 +62,7 @@ function findPair(
     if (msg.channelId !== channelId) continue;
     if (msg.messageId !== messageId) continue;
     for (const pair of msg.pairs) {
+      if (pair.kind !== 'reaction') continue;
       if (emojiKey(emoji) === emojiKey(pair.emoji)) {
         return { message: msg, roleId: pair.roleId };
       }
@@ -141,9 +143,14 @@ export async function handleReactionAdd(
 
   if (message.mode === 'unique') {
     // Pour chaque autre paire du même message, si le user a ce rôle,
-    // on le retire ET on enlève sa réaction (tracker self-caused).
+    // on le retire. Pour les paires `kind: 'reaction'`, on enlève aussi
+    // la réaction de l'utilisateur (avec tracker self-caused) ; pour
+    // les paires `kind: 'button'`, il n'y a rien à nettoyer côté UI.
     for (const otherPair of message.pairs) {
-      if (emojiKey(otherPair.emoji) === emojiKey(event.emoji)) continue;
+      if (otherPair.roleId === roleId) continue;
+      if (otherPair.kind === 'reaction' && emojiKey(otherPair.emoji) === emojiKey(event.emoji)) {
+        continue;
+      }
 
       const hasRole = await ctx.discord.memberHasRole(
         typedGuildId,
@@ -164,19 +171,21 @@ export async function handleReactionAdd(
         continue;
       }
 
-      // Track self-caused AVANT l'appel API.
-      tracker.mark(event.userId, event.messageId, emojiKey(otherPair.emoji));
-      try {
-        await ctx.discord.removeUserReaction(
-          event.channelId as ChannelId,
-          event.messageId as MessageId,
-          event.userId as UserId,
-          otherPair.emoji,
-        );
-      } catch (error) {
-        ctx.logger.warn('reaction-roles : removeUserReaction a échoué', {
-          error: error instanceof Error ? error.message : String(error),
-        });
+      if (otherPair.kind === 'reaction') {
+        // Track self-caused AVANT l'appel API.
+        tracker.mark(event.userId, event.messageId, emojiKey(otherPair.emoji));
+        try {
+          await ctx.discord.removeUserReaction(
+            event.channelId as ChannelId,
+            event.messageId as MessageId,
+            event.userId as UserId,
+            otherPair.emoji,
+          );
+        } catch (error) {
+          ctx.logger.warn('reaction-roles : removeUserReaction a échoué', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       void ctx.audit.log({

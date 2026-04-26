@@ -285,7 +285,7 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
     }
   });
 
-  it("kind: 'buttons' poste avec components et n'appelle pas addReaction", async () => {
+  it("paires kind: 'button' postent avec components et n'appellent pas addReaction", async () => {
     const discordService = makeDiscordService();
     const config = makeConfig();
     const { app } = await build(adminFetch, discordService, config);
@@ -299,10 +299,10 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
           channelId: CHANNEL,
           message: 'Choisis ton rôle',
           mode: 'normal',
-          kind: 'buttons',
           feedback: 'ephemeral',
           pairs: [
             {
+              kind: 'button',
               emoji: { type: 'unicode', value: '🎮' },
               roleId: ROLE_ID,
               label: 'Joueur',
@@ -328,16 +328,63 @@ describe('POST /guilds/:guildId/modules/reaction-roles/publish', () => {
         unknown,
       ];
       const patch = setWithArgs[1] as {
-        modules: { 'reaction-roles': { messages: { kind: string; feedback: string }[] } };
+        modules: {
+          'reaction-roles': {
+            messages: { feedback: string; pairs: { kind: string }[] }[];
+          };
+        };
       };
-      expect(patch.modules['reaction-roles'].messages[0]?.kind).toBe('buttons');
       expect(patch.modules['reaction-roles'].messages[0]?.feedback).toBe('ephemeral');
+      expect(patch.modules['reaction-roles'].messages[0]?.pairs[0]?.kind).toBe('button');
     } finally {
       await app.close();
     }
   });
 
-  it("400 si feedback: 'ephemeral' avec kind: 'reactions' (default)", async () => {
+  it("mélange kind: 'reaction' + 'button' : poste components ET appelle addReaction pour la paire reaction", async () => {
+    const discordService = makeDiscordService();
+    const { app } = await build(adminFetch, discordService);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url,
+        headers: { ...authHeader, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          label: 'Mix',
+          channelId: CHANNEL,
+          message: 'Choisis comme tu veux',
+          mode: 'normal',
+          feedback: 'ephemeral',
+          pairs: [
+            {
+              kind: 'reaction',
+              emoji: { type: 'unicode', value: '🎮' },
+              roleId: ROLE_ID,
+            },
+            {
+              kind: 'button',
+              emoji: { type: 'unicode', value: '🎨' },
+              roleId: ROLE_ID,
+              label: 'Artiste',
+            },
+          ],
+        }),
+      });
+      expect(res.statusCode).toBe(201);
+      expect(discordService.postMessage).toHaveBeenCalledOnce();
+      const callArgs = (discordService.postMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        string,
+        string,
+        { components?: unknown[] },
+      ];
+      expect(callArgs[2]?.components).toHaveLength(1); // une row, un seul bouton
+      expect(discordService.addReaction).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("400 si feedback: 'ephemeral' sans aucune paire kind: 'button'", async () => {
     const { app } = await build(adminFetch, makeDiscordService());
     try {
       const res = await app.inject({
