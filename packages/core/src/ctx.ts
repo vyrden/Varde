@@ -16,6 +16,7 @@ import type { DbClient, DbDriver } from '@varde/db';
 import { type CoreAuditService, createAuditService } from './audit.js';
 import type { CoreConfigService } from './config.js';
 import { createI18n, type I18nMessages } from './i18n.js';
+import { type CoreInteractionsRegistry, createInteractionsRegistry } from './interactions.js';
 import { createKeystoreService } from './keystore.js';
 import type { CtxFactory, ModuleRef } from './loader.js';
 import type { CorePermissionService } from './permissions.js';
@@ -85,6 +86,13 @@ export interface CtxBundle {
   readonly factory: CtxFactory;
   /** Arrête les services scopés (schedulers). Idempotent. */
   readonly shutdown: () => Promise<void>;
+  /**
+   * Registre d'interactions partagé (boutons Discord). Exposé pour
+   * que l'host (apps/bot) puisse y dispatcher les `interactionCreate`
+   * de type bouton — chaque module y a déjà accès en écriture via
+   * `ctx.interactions` au runtime.
+   */
+  readonly interactions: CoreInteractionsRegistry;
 }
 
 const scopedDbStub: ScopedDatabase = Object.freeze({ __scoped: true });
@@ -228,6 +236,7 @@ export function createCtxFactory<D extends DbDriver>(
   } = options;
 
   const ui = createUIService();
+  const interactions = createInteractionsRegistry();
   const schedulers = new Map<ModuleId, CoreSchedulerService>();
   const audits = new Map<ModuleId, CoreAuditService>();
   const loggers = new Map<ModuleId, Logger>();
@@ -326,6 +335,7 @@ export function createCtxFactory<D extends DbDriver>(
       ai,
       ui,
       onboarding,
+      interactions: interactions.serviceFor(moduleId),
     });
   };
 
@@ -340,5 +350,5 @@ export function createCtxFactory<D extends DbDriver>(
     keystores.clear();
   };
 
-  return { factory, shutdown };
+  return { factory, shutdown, interactions };
 }

@@ -212,6 +212,7 @@ type SendPayload =
       readonly content: string;
       readonly files?: ReadonlyArray<{ readonly name: string; readonly attachment: Buffer }>;
       readonly embeds?: ReadonlyArray<unknown>;
+      readonly components?: ReadonlyArray<unknown>;
     };
 
 /** Forme minimale d'un User discord.js pour les DMs. */
@@ -458,6 +459,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       options?: {
         readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
         readonly embeds?: ReadonlyArray<unknown>;
+        readonly components?: ReadonlyArray<unknown>;
       },
     ): Promise<{ readonly id: MessageId }> {
       const channel = client?.channels.cache.get(channelId);
@@ -475,19 +477,24 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         );
       }
       try {
-        const payload: SendPayload =
-          options && (options.files !== undefined || options.embeds !== undefined)
-            ? {
-                content,
-                // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
-                ...(options.files !== undefined
-                  ? {
-                      files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
-                    }
-                  : {}),
-                ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
-              }
-            : content;
+        const hasOptions =
+          options !== undefined &&
+          (options.files !== undefined ||
+            options.embeds !== undefined ||
+            options.components !== undefined);
+        const payload: SendPayload = hasOptions
+          ? {
+              content,
+              // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
+              ...(options?.files !== undefined
+                ? {
+                    files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
+                  }
+                : {}),
+              ...(options?.embeds !== undefined ? { embeds: options.embeds } : {}),
+              ...(options?.components !== undefined ? { components: options.components } : {}),
+            }
+          : content;
         const message = await textChannel.send(payload);
         return { id: message.id as MessageId };
       } catch (err) {
@@ -529,7 +536,14 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       }
     },
 
-    async editMessage(channelId: ChannelId, messageId: MessageId, content: string): Promise<void> {
+    async editMessage(
+      channelId: ChannelId,
+      messageId: MessageId,
+      content: string,
+      options?: {
+        readonly components?: ReadonlyArray<unknown>;
+      },
+    ): Promise<void> {
       const channel = client?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
@@ -539,7 +553,10 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       }
       const textChannel = channel as TextChannelLike;
       try {
-        await textChannel.messages.edit(messageId, { content });
+        await textChannel.messages.edit(messageId, {
+          content,
+          ...(options?.components !== undefined ? { components: options.components } : {}),
+        });
       } catch (err) {
         const reason = classifyError(err);
         throw new DiscordSendError(

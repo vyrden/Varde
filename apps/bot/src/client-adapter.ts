@@ -1,12 +1,15 @@
 import type {
+  ButtonInteractionInput,
   ChannelId,
   GuildId,
   Logger,
+  MessageId,
   ResolvedChannel,
   ResolvedCommandInput,
   ResolvedRole,
   ResolvedUser,
   RoleId,
+  UIMessage,
   UserId,
 } from '@varde/contracts';
 import type {
@@ -243,14 +246,27 @@ const reactionInput = (
 };
 
 /**
+ * Routeur d'interactions bouton. Reçoit un click et retourne un
+ * `UIMessage` rendu en réponse éphémère, ou `null` si aucun handler
+ * ne matche (le bot accuse alors silencieusement réception). Wiré
+ * sur `CoreInteractionsRegistry.dispatchButton` côté server.
+ */
+export type ButtonDispatcher = (input: ButtonInteractionInput) => Promise<UIMessage | null>;
+
+/**
  * Attache les handlers discord.js au dispatcher. Retourne une
  * fonction `detach` à appeler au shutdown pour retirer proprement
  * les listeners (utile en tests et pour hot-reload post-V1).
+ *
+ * `dispatchButton` est optionnel : sans lui, les `interactionCreate`
+ * de type bouton sont ignorés silencieusement (utile pour les tests
+ * qui ne couvrent que les commandes).
  */
 export function attachDiscordClient(
   client: Client,
   dispatcher: BotDispatcher,
   logger: Logger,
+  dispatchButton?: ButtonDispatcher,
 ): AttachResult {
   const log = logger.child({ component: 'client-adapter' });
 
@@ -297,8 +313,9 @@ export function attachDiscordClient(
   );
 
   // Interaction routing.
-  const interactionHandler = async (interaction: Interaction): Promise<void> => {
-    if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
+  const handleChatInputCommand = async (
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> => {
     const guildId = interaction.guildId;
     if (!guildId) return;
     try {
@@ -321,6 +338,62 @@ export function attachDiscordClient(
       if (!interaction.replied) {
         await interaction.reply({ content: 'Erreur interne.', ephemeral: true }).catch(() => {});
       }
+    }
+  };
+
+  /**
+   * Click sur un bouton Discord. Toujours répondu en éphémère — c'est
+   * la valeur ajoutée des composants par rapport aux réactions emoji.
+   * Si aucun handler ne matche, on accuse silencieusement réception
+   * pour éviter le spinner « cette interaction a échoué » dans le
+   * client Discord.
+   */
+  const handleButton = async (
+    interaction: import('discord.js').ButtonInteraction,
+  ): Promise<void> => {
+    if (!dispatchButton) {
+      // Pas de routeur câblé → on accuse réception poliment.
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    }
+    const guildId = interaction.guildId;
+    if (!guildId || !interaction.message) {
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    }
+    try {
+      const result = await dispatchButton({
+        guildId: guildId as GuildId,
+        channelId: interaction.channelId as ChannelId,
+        messageId: interaction.message.id as MessageId,
+        userId: interaction.user.id as UserId,
+        customId: interaction.customId,
+      });
+      if (result === null) {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      const content = renderUIMessage(result as UIMessageLike);
+      await interaction.reply({ content, ephemeral: true });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.error('button interaction handler a échoué', err, {
+        customId: interaction.customId,
+      });
+      if (!interaction.replied) {
+        await interaction.reply({ content: 'Erreur interne.', ephemeral: true }).catch(() => {});
+      }
+    }
+  };
+
+  const interactionHandler = async (interaction: Interaction): Promise<void> => {
+    if (interaction.isChatInputCommand() && interaction.inGuild()) {
+      await handleChatInputCommand(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.inGuild()) {
+      await handleButton(interaction);
+      return;
     }
   };
   client.on('interactionCreate', interactionHandler as (...args: unknown[]) => void);

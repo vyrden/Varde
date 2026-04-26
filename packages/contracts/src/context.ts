@@ -163,6 +163,49 @@ export interface I18nService {
   readonly t: (key: string, params?: Record<string, string | number>) => string;
 }
 
+/**
+ * Entrée d'une interaction de type bouton Discord. Produit par le bot
+ * (cf. `apps/bot`) au moment d'un click utilisateur sur un message
+ * porteur de composants (`message.components`). Les modules y accèdent
+ * via les handlers enregistrés sur `ctx.interactions.onButton`.
+ *
+ * `customId` est la chaîne posée à la création du bouton : c'est sur
+ * elle que le routing s'appuie (préfixe `<moduleId>:`). Le handler
+ * peut la parser pour récupérer ses arguments encodés.
+ */
+export interface ButtonInteractionInput {
+  readonly guildId: GuildId;
+  readonly channelId: ChannelId;
+  readonly messageId: MessageId;
+  readonly userId: UserId;
+  readonly customId: string;
+}
+
+/**
+ * Handler d'une interaction bouton. Retourne un `UIMessage` rendu en
+ * réponse éphémère (visible uniquement par l'utilisateur qui a cliqué)
+ * ou `null`/`void` pour ne rien renvoyer. Le bot accuse toujours
+ * réception côté Discord pour éviter le spinner « cette interaction a
+ * échoué » même quand le handler ne renvoie rien.
+ */
+export type ButtonHandler = (
+  input: ButtonInteractionInput,
+) => Promise<UIMessage | null | undefined> | UIMessage | null | undefined;
+
+/**
+ * Service d'enregistrement de handlers pour les interactions bouton.
+ *
+ * Le routage par module se fait par préfixe de `customId` :
+ *   `ctx.interactions.onButton('rr:', handler)`
+ * matche tout `customId` qui commence par `rr:`. Le préfixe doit être
+ * unique dans le runtime — un conflit lève une erreur explicite à
+ * l'enregistrement. La fonction de désouscription retournée est
+ * idempotente.
+ */
+export interface InteractionsService {
+  readonly onButton: (customIdPrefix: string, handler: ButtonHandler) => () => void;
+}
+
 /** Service d'accès au keystore chiffré. */
 export interface KeystoreService {
   readonly put: (guildId: GuildId, key: string, value: string) => Promise<void>;
@@ -251,7 +294,9 @@ export interface DiscordService {
    *
    * `options.files` permet d'attacher une ou plusieurs pièces jointes
    * (carte d'accueil pour le module welcome). `options.embeds` accepte
-   * des embeds Discord encodés en JSON brut.
+   * des embeds Discord encodés en JSON brut. `options.components`
+   * accepte des `ActionRow` Discord encodées en JSON brut — utilisé par
+   * reaction-roles V2 pour publier des boutons cliquables.
    *
    * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
    */
@@ -261,6 +306,7 @@ export interface DiscordService {
     options?: {
       readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
       readonly embeds?: ReadonlyArray<unknown>;
+      readonly components?: ReadonlyArray<unknown>;
     },
   ) => Promise<{ readonly id: MessageId }>;
 
@@ -310,6 +356,10 @@ export interface DiscordService {
 
   /**
    * Édite le contenu d'un message Discord posté par le bot.
+   * `options.components` permet de remplacer la barre de boutons sans
+   * toucher au texte (utile pour ajouter / retirer un bouton après
+   * édition de la config reaction-roles).
+   *
    * Lève `DiscordSendError` avec
    * `reason: 'channel-not-found' | 'message-not-found' | 'missing-permission' | 'unknown'`.
    */
@@ -317,6 +367,9 @@ export interface DiscordService {
     channelId: ChannelId,
     messageId: MessageId,
     content: string,
+    options?: {
+      readonly components?: ReadonlyArray<unknown>;
+    },
   ) => Promise<void>;
 
   /**
@@ -576,4 +629,11 @@ export interface ModuleContext {
   readonly ai: AIService | null;
   readonly ui: UIService;
   readonly onboarding: OnboardingService;
+  /**
+   * Service d'enregistrement de handlers pour les interactions bouton
+   * (Discord message components). Permet aux modules de réagir à un
+   * click utilisateur sur un bouton en répondant éphémère — un
+   * comportement impossible avec les réactions emoji classiques.
+   */
+  readonly interactions: InteractionsService;
 }

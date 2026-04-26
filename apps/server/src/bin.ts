@@ -436,7 +436,9 @@ function attachDiscordToHandle(
       await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
-  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
+  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger, (input) =>
+    handle.ctxBundle.interactions.dispatchButton(input),
+  );
   return {
     detach,
     destroy: () => attachment.client.destroy(),
