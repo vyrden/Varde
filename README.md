@@ -1,206 +1,221 @@
 # Varde
 
-Bot Discord auto-hébergé, pensé comme une plateforme d'extensions. Noyau
-minimal, modules officiels et tiers indiscernables, onboarding adaptatif, IA en
-copilote de l'admin.
+> **Un bot Discord pensé pour les humains qui gèrent des communautés.**
+> Pas un produit commercial, pas un gadget, pas un mouchard.
+> Vous l'installez chez vous, vous décidez ce qu'il fait.
 
-## Statut
+![Licence](https://img.shields.io/badge/licence-Apache%202.0-blue.svg)
+![Statut](https://img.shields.io/badge/statut-en%20cours%20avant%20V1.0-orange.svg)
+![Auto-hébergé](https://img.shields.io/badge/auto--hébergé-oui-success.svg)
+![Sans paywall](https://img.shields.io/badge/paywall-aucun-success.svg)
 
-Projet en conception avancée — jalon 5 livré, jalon 6 (polish V1)
-restant avant V1.0.0.
+---
 
-- Jalon 1 (core minimum viable) terminé (2026-04-21) : le noyau sait
-  charger un module, le brancher sur un événement Discord et lui
-  faire exercer toute l'API publique (audit, scheduler, config,
-  permissions, i18n, UI). Un module témoin `hello-world` valide le
-  critère de sortie dans les tests d'intégration de bout en bout.
-- Jalon 2 (dashboard minimum viable) terminé (2026-04-21) : un admin
-  logué via Discord OAuth2 peut lister ses serveurs, piloter la
-  config d'un module depuis un formulaire généré, et parcourir le
-  journal d'audit. Single-origin bot + API via `apps/server`
-  (ADR 0004), session partagée par cookie JWT HS256 (ADR 0006).
-- Jalon 3 (moteur d'onboarding) terminé (2026-04-22) : un admin
-  peut lancer un onboarding depuis un preset hand-curé ou depuis
-  une proposition IA, prévisualiser la liste d'actions, appliquer
-  sur le serveur Discord réel (bridge discord.js v14 :
-  création rôles / catégories / salons avec permission overwrites),
-  et rollback dans les 30 min. IA en copilote BYO-LLM — aucun
-  provider par défaut (CLAUDE.md §13 : pas de phone home), l'admin
-  branche Ollama en local ou un backend OpenAI-compatible
-  (OpenAI / OpenRouter / Groq / vLLM / LM Studio), la clé vit
-  chiffrée AES-256-GCM dans le keystore (ADR 0007).
-- Jalon 4 (modules officiels V1) terminé (2026-04-27) : les cinq
-  capacités V1 sont livrées et utilisables depuis le dashboard sans
-  fichier de config par serveur — `logs` (audit Discord routé par
-  type d'événement), `welcome` (accueil/départ avec carte d'avatar
-  générée + auto-rôle + filtre comptes neufs), `reaction-roles`
-  (réactions emoji et boutons mélangeables, modes normal/unique/
-  vérificateur), `moderation` (slash commands manuelles + automod
-  multi-règles incluant rate-limit et classification IA),
-  `onboarding-presets` (livré comme service API plus que comme
-  module bot — voir ADR 0010, catalogue de 5 presets éditables avec
-  apply/rollback Discord). Refonte UX/UI single-page sur les quatre
-  pages module avec primitives partagées (`StickyActionBar`,
-  `CollapsibleSection`, `EntityMultiPicker`, `DiscordMessagePreview`,
-  `useDirtyExitGuard`).
-- Jalon 5 (sécurité béton + polish technique) terminé (2026-04-27) :
-  surface d'attaque auditée et fermée, debt visible adressée,
-  performances mesurées, robustesse vérifiée. Concrètement —
-  `pnpm audit` clean (zéro CRITICAL/HIGH, audit bloquant en CI),
-  headers de sécurité (CSP, HSTS, X-Frame-Options, etc.) posés sur
-  100 % des réponses HTTP côté API (`@fastify/helmet`) et dashboard
-  (`next.config.mjs#headers()`), rate limiting global API
-  (300 req/min/IP) avec plafond serré sur `/onboarding/ai/*`
-  (10 req/min/IP), magic bytes check sur les uploads d'image, test
-  statique qui empêche toute future route mutante d'oublier
-  `requireGuildAdmin`, observabilité gateway Discord (listeners
-  error / shardError / shardDisconnect / shardReconnecting /
-  shardReady / shardResume / warn), résilience DB validée
-  (graceful 5xx, pas de crash process), audit du flow Auth.js v5
-  avec redaction `accessToken` sur `/me`, rotation master key
-  testée bout-en-bout, couverture tests core/api > 75 % avec
-  plancher anti-régression en CI, bundle dashboard sous plafond
-  (~355 KB gzipped) avec check CI. `SECURITY.md` enrichi : modèle
-  de menaces V1 explicite et procédures opérateur (rotation
-  `VARDE_KEYSTORE_MASTER_KEY`, rotation `VARDE_AUTH_SECRET`,
-  révocation token bot, révocation clé API IA, bench p95,
-  validation 24 h pré-release).
+## 🌱 Pourquoi ce projet ?
 
-Paquets livrés à ce jour :
+Si vous avez déjà géré un serveur Discord un peu vivant, vous connaissez l'histoire :
 
-- `@varde/contracts` — types et schémas partagés, `defineModule()`,
-  `ConfigUi` et `ConfigFieldSpec` pour les métadonnées de rendu.
-- `@varde/db` — schéma Postgres/SQLite des 11 tables du core, client
-  Drizzle, migrations.
-- `@varde/core` — logger, i18n, keystore (AES-256-GCM), config, audit,
-  permissions, event bus, scheduler (mode dégradé DB-polling), plugin
-  loader, ctx factory, UIService.
-- `@varde/bot` — mapper discord.js → `CoreEvent`, command registry,
-  DiscordService avec rate limit, dispatcher, shutdown coordinator.
-- `@varde/api` — serveur Fastify : `/health`, `/me`, `/guilds`,
-  `/guilds/:id/modules` (+ config GET/PUT), `/guilds/:id/audit`
-  (filtres + cursor). JWT authenticator via `jose`, middleware
-  `requireGuildAdmin` (MANAGE_GUILD via Discord).
-- `@varde/server` — point d'entrée composé qui instancie core + API
-  Fastify + client discord.js en un seul process (ADR 0004).
-- `@varde/ui` — design system Tailwind 4 CSS-first : primitives
-  (Button, Input, Label, Card, Badge, Header, Sidebar, EmptyState,
-  PageTitle) partagées par le dashboard.
-- `@varde/dashboard` — app Next.js 16 / React 19 / Auth.js v5 :
-  liste des serveurs, page guild, formulaire de config
-  (`ConfigForm`) dérivé de `configUi` + validation Ajv client
-  (ADR 0005), page de journal d'audit.
-- `@varde/testing` — `createTestHarness` pour les tests d'intégration
-  de modules (SQLite in-memory, faux temps injectable, executor
-  onboarding pré-câblé avec les actions core).
-- `@varde/ai` — contrat `AIProvider` + service tracé
-  (`ai_invocations`, hash prompt SHA-256) + trois providers :
-  stub rule-based déterministe, Ollama, OpenAI-compatible.
-  Timeout 30 s, erreurs typées (`timeout | unavailable |
-  invalid_response | quota_exceeded | unauthorized | unknown`).
-- `@varde/presets` — catalogue de 5 presets hand-curés (tech,
-  gaming, creative, study, generic starter) validés Zod +
-  validator sémantique sur les refs locales.
-- `modules/logs` — audit Discord routé par type d'événement (ajouts,
-  départs, modifs rôles/salons, suppressions de messages, etc.) avec
-  filtres globaux et exclusions, mode simple monosalon ou mode
-  avancé multi-routes.
-- `modules/welcome` — message d'accueil et de départ (salon ou DM),
-  carte d'avatar 700×250 PNG générée via `@napi-rs/canvas` (avatar
-  circulaire, fond couleur ou image custom uploadée, polices
-  intégrées et système), auto-rôle avec délai et filtre comptes
-  neufs (kick ou quarantaine).
-- `modules/reaction-roles` — messages avec paires emoji-rôle
-  modifiables sur le dashboard, réactions emoji et boutons Discord
-  mélangeables sur un même message, modes `normal` / `unique` /
-  `vérificateur`, feedback DM ou éphémère selon le mode.
-- `modules/moderation` — slash commands manuelles (`/ban`, `/kick`,
-  `/mute`, `/tempban`, `/tempmute`, `/warn`, `/clear`, `/slowmode`,
-  `/case`, `/infractions`, …) avec audit, et automod multi-règles
-  (blacklist, regex, keyword-list multi-langues, rate-limit,
-  ai-classify, invites, links, caps, emojis, spoilers, mentions,
-  zalgo) avec actions composables (`delete` / `warn` / `mute`),
-  bypass roles, salons restreints.
-- `modules/hello-world` — module témoin de l'API core.
-- `modules/onboarding-test` — module témoin du contrat
-  d'extension onboarding : contribue une action custom et un hint
-  via `ctx.onboarding.*` (PR 3.13).
+- 🔒 **MEE6** verrouille des fonctions de base derrière un abonnement.
+- 🧰 **Carl-bot** est honnête mais très généraliste.
+- 🛠️ **YAGPDB** est puissant mais austère.
 
-Reste à livrer avant V1.0.0 :
+Aucun n'est vraiment **votre** outil. Vous bricolez avec ce qu'on vous laisse.
 
-- **Jalon 6 — polish V1** : internationalisation FR/EN du dashboard,
-  documentation utilisateur, guide création de module tiers,
-  compose production, tests Playwright sur parcours critiques,
-  changelog. Critère de sortie : V1.0.0 publiable.
+**Varde**, c'est un bot que vous **hébergez vous-même**, qui se configure depuis une interface web claire, et qui ne vous facture rien parce qu'il n'y a personne à facturer : pas de société derrière, pas de serveur central, pas de service à payer.
 
-Le jalon 5 (sécurité béton + polish technique) est par ailleurs
-**récurrent** : sa checklist complète est rejouée tous les 4-5
-jalons de développement pour empêcher la dette de s'accumuler
-(audit dépendances, hygiène code, couverture, headers,
-robustesse, doc procédures opérateur).
+> 🧭 **L'idée en une phrase :** un outil de gestion de communauté Discord qui se comporte comme un vrai logiciel libre — propre, documenté, modulaire, et qui respecte la personne qui l'installe.
 
-Tags publiés : `v0.4.0` (fin jalon 4), `v0.5.0` (fin jalon 5).
-Pas encore de release V1.0.0.
+---
 
-## Pourquoi un bot de plus
+## ✨ Ce que ça fait, simplement
 
-Le paysage des bots Discord est saturé mais mal adressé pour les communautés
-exigeantes. MEE6 est devenu un produit commercial qui verrouille des
-fonctionnalités de base derrière un paywall. Carl-bot est plus honnête mais
-tout aussi généraliste. YAGPDB est puissant mais austère. Aucun n'est pensé
-comme un vrai logiciel modulaire, documenté, auto-hébergeable et respectueux de
-l'admin.
+Varde s'occupe des tâches répétitives qui mangent votre temps de modérateur ou d'admin :
 
-Ce projet part d'un constat simple : les communautés tech et créatives veulent
-le même niveau de qualité d'outillage que celui qu'elles exigent de leurs
-propres projets. Code ouvert, configuration déclarative, extensibilité propre,
-transparence des choix.
+| Tâche | Détail |
+| --- | --- |
+| 👋 **Accueillir** | Message de bienvenue, image personnalisée, rôle automatique, départ propre. |
+| 🛡️ **Modérer** | Avertissements, mutes, bans (manuels ou automatiques selon des règles claires). |
+| 🎭 **Distribuer des rôles** | Les membres choisissent leurs rôles via des réactions ou des boutons. |
+| 📜 **Garder une trace** | Tout ce qui se passe est tracé proprement, consultable depuis un tableau de bord. |
+| 🚀 **Démarrer un serveur** | Un assistant configure pour vous rôles, salons et modules selon le type de communauté. |
 
-## Ce que le bot fait
+**Le tout pilotable depuis un site web** que vous lancez à côté du bot. Pas de fichier texte mystérieux à éditer, pas de commande à mémoriser.
 
-À la V1 :
+---
 
-- Accompagne la création ou l'adaptation d'un serveur Discord via un
-  onboarding adaptatif (rôles, salons, modules, configuration initiale).
-- Modère manuellement et automatiquement.
-- Accueille les nouveaux membres, gère les départs, assigne des rôles à
-  l'arrivée, filtre les comptes neufs.
-- Gère les rôles assignables par les membres (menus, reaction roles, rôles
-  temporaires).
-- Journalise tout ce qui se passe sur le serveur dans un audit log unifié.
+## ✅ Ce qui fonctionne aujourd'hui
 
-Le tout piloté depuis un dashboard web.
+Cette section liste ce qui est **déjà opérationnel**. Pas de promesses, pas de "à venir" : ce que vous voyez ci-dessous tourne réellement.
 
-## Ce que le bot ne fait pas
+### 🤖 Le bot
 
-Pas de leveling, pas de musique, pas de mini-jeux, pas d'intégrations Twitch
-ou YouTube en V1. Ces capacités viendront en modules additionnels, officiels
-ou tiers.
+| Fonction | Détails |
+| --- | --- |
+| **Accueil & départs** | Message personnalisé en salon ou en DM. Carte d'avatar 700×250 px générée automatiquement (avatar circulaire, fond couleur ou image que vous uploadez). Auto-rôle avec délai et filtre anti-comptes-neufs. |
+| **Rôles à la carte** | Messages où les membres récupèrent un rôle via une réaction emoji **ou** via un bouton Discord. Les deux peuvent être mélangés sur le même message. Trois modes : libre, exclusif, vérificateur. |
+| **Modération manuelle** | `/ban`, `/kick`, `/mute`, `/tempban`, `/tempmute`, `/warn`, `/clear`, `/slowmode`, `/case`, `/infractions`. |
+| **Modération automatique** | Règles configurables : liste noire, mots-clés multilingues, regex, anti-flood, liens, invitations, majuscules, mentions, spoilers, zalgo, classification IA optionnelle. Actions composables (supprimer, avertir, mute). |
+| **Journal d'audit** | Tout ce qui se passe sur le serveur (arrivées, départs, modifs de rôles, suppressions de messages, etc.) routé par type d'événement, avec filtres et exclusions. |
+| **Onboarding adaptatif** | 5 modèles prêts à l'emploi (tech, gaming, créatif, étude, générique). Prévisualisation avant application, retour en arrière possible pendant 30 minutes. |
 
-Pas de télémétrie, pas de phone home, pas de dépendance à un service central.
-L'admin installe, configure, héberge. Le projet ne sait rien de son instance.
+### 🌐 Le tableau de bord
 
-Pas de chatbot IA généraliste. L'IA sert l'admin (analyser, suggérer, résumer)
-sans jamais parler à la place de la communauté.
+Une interface web complète permet de :
 
-## Architecture en une phrase
+- 🔑 Se connecter avec son compte Discord.
+- 📋 Voir la liste de **vos** serveurs (uniquement ceux où vous êtes admin).
+- ⚙️ Configurer chaque module via un formulaire généré automatiquement, avec validation à la volée.
+- 🕵️ Parcourir le journal d'audit du serveur avec filtres et pagination.
+- 🎨 Une UI cohérente entre tous les modules (mêmes barres d'action, mêmes prévisualisations Discord, mêmes pickers de rôles/salons).
 
-Un noyau TypeScript strict expose un contrat typé à des modules découvrables,
-chargés dynamiquement, qui contribuent leurs commandes Discord, pages
-dashboard, hooks d'onboarding et logiques métier via des points d'extension
-explicites.
+### 🧠 Côté IA (optionnelle)
 
-## Installation
+> L'IA est un **assistant**, pas un décideur. Elle peut proposer un brouillon ou une analyse, jamais agir seule.
 
-Une image de production Docker n'est pas encore publiée (attendue à la
-V1.0.0). À ce stade le projet se lance depuis les sources.
+- Aucun fournisseur d'IA imposé. Vous branchez **votre propre** moteur : Ollama en local, ou n'importe quel backend compatible OpenAI (OpenAI, OpenRouter, Groq, vLLM, LM Studio).
+- Votre clé d'API est chiffrée (AES-256-GCM) avant d'être stockée.
+- Aucune trace de prompt en clair : seuls des hash sont conservés pour traçabilité.
+- Si vous ne fournissez pas de clé, un mode "règles" déterministe prend le relais.
 
-Prérequis : Node.js 24 LTS, pnpm 10, Docker + Docker Compose (pour la
-DB de dev). La procédure complète de setup local (token Discord,
-application de test, permissions OAuth2, lancement des services) est
-dans [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+### 🔐 Sécurité (jalon 5 livré)
 
-Aperçu :
+| Mesure | Statut |
+| --- | :---: |
+| Audit de dépendances bloquant en CI | ✅ |
+| En-têtes HTTP de sécurité (CSP, HSTS, X-Frame-Options…) | ✅ |
+| Limite de débit globale + plafond serré sur les routes sensibles | ✅ |
+| Vérification du type réel des images uploadées (magic bytes) | ✅ |
+| Test statique : impossible d'oublier le contrôle d'accès admin sur une route mutante | ✅ |
+| Observabilité de la connexion Discord (déconnexions, reconnexions, warnings) | ✅ |
+| Procédures de rotation de clés documentées (master key, secret d'authentification, token bot, clé IA) | ✅ |
+| Couverture de tests > 75 % sur le cœur et l'API, plancher anti-régression en CI | ✅ |
+
+---
+
+## 🗺️ Feuille de route
+
+| Jalon | Sujet | Statut |
+| :---: | --- | :---: |
+| 1 | Cœur technique (chargement de modules, événements, permissions, audit) | ✅ Livré (21/04/2026) |
+| 2 | Tableau de bord minimum viable (login Discord, config, audit) | ✅ Livré (21/04/2026) |
+| 3 | Moteur d'onboarding (presets, prévisualisation, application, rollback) | ✅ Livré (22/04/2026) |
+| 4 | Cinq modules officiels V1 (logs, accueil, rôles, modération, presets) | ✅ Livré (27/04/2026) |
+| 5 | Sécurité béton et polissage technique | ✅ Livré (27/04/2026) |
+| 6 | Polissage V1 : traduction FR/EN, doc utilisateur, guide module tiers, tests E2E | 🚧 En cours |
+
+> 📌 Versions publiées : **v0.4.0** (fin jalon 4) et **v0.5.0** (fin jalon 5). La V1.0.0 sortira à la fin du jalon 6.
+>
+> 🔁 Le jalon 5 (sécurité + polissage technique) sera **rejoué tous les 4 à 5 jalons** par la suite, pour ne jamais laisser la dette technique s'accumuler.
+
+---
+
+## 🚫 Ce que Varde **ne fait pas**
+
+C'est volontaire. Mieux vaut bien faire peu que mal faire tout.
+
+- ❌ Pas de système de niveaux / XP.
+- ❌ Pas de musique, pas de mini-jeux.
+- ❌ Pas d'intégrations Twitch / YouTube en V1.
+- ❌ Pas de chatbot IA généraliste qui parle à votre place.
+- ❌ Aucune télémétrie, aucun "phone home". Le projet ne sait **rien** de votre instance.
+
+Ces capacités pourront arriver plus tard, **en modules optionnels**, officiels ou tiers — jamais imposées.
+
+---
+
+## 🛡️ Confidentialité et contrôle
+
+> **Votre serveur, vos données, vos règles.**
+
+- 🏠 **Auto-hébergé.** Vous lancez Varde sur votre machine, votre VPS, votre Raspberry Pi. Pas d'instance partagée.
+- 🚫 **Aucun service central.** Le projet ne contacte aucun serveur tiers pour fonctionner.
+- 🔍 **Transparent.** Le code est ouvert, les choix techniques sont documentés (voir [`docs/`](./docs/)).
+- 🔑 **Vos secrets restent chez vous.** Token bot, clés API, master key : tout vit dans **votre** environnement.
+- 📖 **Auditable.** Toute action significative est tracée dans un journal centralisé que vous pouvez consulter.
+
+---
+
+## 💬 Envie d'essayer ou de contribuer ?
+
+- 👀 Vous voulez juste **voir** ce que ça donne → la procédure d'installation est plus bas, dans la section dev.
+- 🐛 Vous avez trouvé un **bug** ou une idée → ouvrez une issue sur GitHub.
+- 🧩 Vous voulez écrire **votre propre module** → c'est prévu dès le départ. Le contrat d'extension est documenté dans [`docs/PLUGIN-API.md`](./docs/PLUGIN-API.md).
+- 🔐 Vous avez trouvé une **faille de sécurité** → voir [`SECURITY.md`](./SECURITY.md). Surtout, **n'ouvrez pas d'issue publique** pour ça.
+
+---
+
+<details>
+<summary><strong>📦 Pour les développeurs</strong> (cliquez pour déplier)</summary>
+
+### Stack technique
+
+- **Monorepo** : pnpm workspaces + Turborepo
+- **Langage** : TypeScript 6.x strict, cible Node.js 24 LTS
+- **Bot Discord** : discord.js v14
+- **API HTTP** : Fastify
+- **ORM** : Drizzle (PostgreSQL principal, SQLite pour petits déploiements)
+- **Cache / queues** : Redis + BullMQ
+- **Frontend** : Next.js 16 (App Router) + React 19 + TailwindCSS 4 + shadcn/ui
+- **Authentification** : Auth.js v5 avec provider Discord OAuth2
+- **Logs** : Pino
+- **Tests** : Vitest + Playwright
+- **Lint / format** : Biome
+- **Container** : Docker + docker-compose
+- **CI** : GitHub Actions
+
+### Architecture en une phrase
+
+Un noyau TypeScript strict expose un contrat typé à des modules découvrables, chargés dynamiquement, qui contribuent leurs commandes Discord, pages dashboard, hooks d'onboarding et logiques métier via des points d'extension explicites.
+
+### Structure du monorepo
+
+```text
+.
+├── apps/
+│   ├── bot/                  Processus bot (connexion Discord, dispatch événements)
+│   ├── api/                  API HTTP pour le dashboard (Fastify)
+│   ├── dashboard/            Frontend Next.js
+│   └── server/               Point d'entrée composé bot + API (single-origin, ADR 0004)
+├── packages/
+│   ├── core/                 Permissions, événements, config, audit, plugin loader, keystore
+│   ├── ui/                   Design system partagé
+│   ├── db/                   Schémas Drizzle, migrations, client
+│   ├── contracts/            Types partagés core ↔ modules ↔ dashboard
+│   ├── ai/                   Contrat AIProvider et providers (stub, Ollama, OpenAI-compat)
+│   ├── presets/              Catalogue des presets d'onboarding
+│   ├── testing/              Harness pour les tests d'intégration de modules
+│   └── config/               Config TS, Biome, Vitest partagées
+├── modules/
+│   ├── moderation/
+│   ├── welcome/
+│   ├── reaction-roles/
+│   ├── logs/
+│   ├── hello-world/          Module témoin de l'API core
+│   └── onboarding-test/      Module témoin du contrat d'extension onboarding
+├── docker/
+├── docs/
+└── scripts/
+```
+
+### Paquets livrés à ce jour
+
+- `@varde/contracts` — types et schémas partagés, `defineModule()`, `ConfigUi` et `ConfigFieldSpec`.
+- `@varde/db` — schéma Postgres/SQLite des 11 tables du core, client Drizzle, migrations.
+- `@varde/core` — logger, i18n, keystore (AES-256-GCM), config, audit, permissions, event bus, scheduler, plugin loader, ctx factory, UIService.
+- `@varde/bot` — mapper discord.js → `CoreEvent`, command registry, DiscordService avec rate limit, dispatcher, shutdown coordinator.
+- `@varde/api` — serveur Fastify : `/health`, `/me`, `/guilds`, `/guilds/:id/modules` (+ config GET/PUT), `/guilds/:id/audit` (filtres + cursor). JWT via `jose`, middleware `requireGuildAdmin`.
+- `@varde/server` — point d'entrée composé core + API + client discord.js en un seul process (ADR 0004).
+- `@varde/ui` — design system Tailwind 4 CSS-first, primitives partagées par le dashboard.
+- `@varde/dashboard` — app Next.js 16 / React 19 / Auth.js v5 : liste serveurs, page guild, formulaire de config dérivé de `configUi` (ADR 0005), journal d'audit.
+- `@varde/testing` — `createTestHarness` pour tests d'intégration de modules.
+- `@varde/ai` — contrat `AIProvider` + service tracé + trois providers (stub, Ollama, OpenAI-compat). Timeout 30 s, erreurs typées.
+- `@varde/presets` — 5 presets hand-curés validés Zod + validateur sémantique.
+
+### Installation depuis les sources
+
+> Une image Docker de production sera publiée à la V1.0.0. En attendant, le projet se lance depuis les sources.
+
+**Prérequis :** Node.js 24 LTS, pnpm 10, Docker + Docker Compose (pour la base de données de dev).
 
 ```sh
 pnpm install
@@ -210,28 +225,32 @@ pnpm check   # lint + typecheck + tests
 pnpm build
 ```
 
-La configuration applicative par serveur est stockée en base (pas de
-fichier de config par serveur) et se pilote depuis le dashboard web
-(`apps/dashboard`), qui lit et écrit via l'API Fastify
-(`apps/api`). Un module expose un `configSchema` (Zod) pour la
-validation et un `configUi` (sidecar, ADR 0005) pour le rendu du
-formulaire côté admin.
+La procédure complète (création de l'application Discord, scopes OAuth2, variables d'environnement, lancement des services) est dans [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-## Contribuer
+### Configuration
 
-Lire [`CONTRIBUTING.md`](./CONTRIBUTING.md) pour le setup local, le
-workflow de PR, et les standards attendus.
+La configuration applicative par serveur est stockée **en base** (pas de fichier de config par serveur) et se pilote depuis le dashboard. Un module expose un `configSchema` (Zod) pour la validation et un `configUi` (sidecar, ADR 0005) pour le rendu du formulaire.
 
-Les modules tiers sont bienvenus tant qu'ils respectent le contrat
-d'extension et les conventions UI. Ils se développent dans des repos
-séparés.
+### Contribuer
 
-## Sécurité
+Lire [`CONTRIBUTING.md`](./CONTRIBUTING.md) pour le setup local, le workflow de PR et les standards attendus. Les modules tiers sont bienvenus tant qu'ils respectent le contrat d'extension et les conventions UI ; ils se développent dans des repos séparés.
 
-Pour signaler une vulnérabilité, voir [`SECURITY.md`](./SECURITY.md).
-Ne jamais ouvrir d'issue publique pour un problème de sécurité.
+### Documentation détaillée
 
-## Licence
+- [`docs/SCOPE.md`](./docs/SCOPE.md) — périmètre V1 et hors-scope
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — stack, décisions, trade-offs
+- [`docs/PLUGIN-API.md`](./docs/PLUGIN-API.md) — contrat core / module
+- [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) — spec de l'onboarding adaptatif
+- [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — conventions de code
+- [`docs/TESTING.md`](./docs/TESTING.md) — stratégie de test
+- [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) — branches, CI, releases
+- [`docs/adr/`](./docs/adr/) — décisions d'architecture (ADR)
+- [`docs/plans/`](./docs/plans/) — plans détaillés par jalon
 
-Apache 2.0. Voir [`LICENSE`](./LICENSE). Les modules officiels sont
-distribués sous la même licence.
+</details>
+
+---
+
+## 📜 Licence
+
+Apache 2.0. Voir [`LICENSE`](./LICENSE). Les modules officiels sont distribués sous la même licence.
