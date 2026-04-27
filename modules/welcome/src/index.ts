@@ -32,7 +32,6 @@ export const welcome = defineModule({
     subscriptions.clear();
 
     // Enregistrement des polices : embarquées + admin (uploads/fonts/).
-    // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess pour process.env
     const uploadsDir = process.env['VARDE_UPLOADS_DIR'] ?? './uploads';
     await registerWelcomeFonts(uploadsDir);
 

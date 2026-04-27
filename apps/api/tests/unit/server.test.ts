@@ -98,6 +98,33 @@ describe('createApiServer — /me', () => {
     expect(response.json()).toEqual({ userId: '42', username: 'alice' });
   });
 
+  it("ne fuite jamais l'accessToken Discord, même quand la session en porte un (jalon 5 PR 5.10)", async () => {
+    // Une session avec accessToken peuplé : si la route le retourne
+    // tel quel, le token Discord OAuth devient visible côté client.
+    // La redaction explicite dans `/me` doit le filtrer.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: {
+        'x-test-session': JSON.stringify({
+          userId: '42',
+          username: 'alice',
+          accessToken: 'discord-oauth-secret',
+        }),
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Record<string, unknown>;
+    expect(body['accessToken']).toBeUndefined();
+    expect(body['userId']).toBe('42');
+    expect(body['username']).toBe('alice');
+    // Au cas où une refacto introduirait un spread implicite — on
+    // vérifie aussi par scan de la chaîne sérialisée.
+    const serialized = response.body;
+    expect(serialized).not.toContain('discord-oauth-secret');
+    expect(serialized).not.toContain('accessToken');
+  });
+
   it('renvoie 401 si la session est présente mais malformée (JSON invalide)', async () => {
     const response = await app.inject({
       method: 'GET',
@@ -105,6 +132,95 @@ describe('createApiServer — /me', () => {
       headers: { 'x-test-session': '{not-json' },
     });
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('createApiServer — security headers', () => {
+  it('pose les headers de sécurité par défaut (helmet)', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+    });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/health' });
+      // Helmet pose ces headers d'office sur toutes les réponses.
+      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['referrer-policy']).toBe('no-referrer');
+      expect(response.headers['x-dns-prefetch-control']).toBe('off');
+      expect(response.headers['x-download-options']).toBe('noopen');
+      expect(response.headers['x-permitted-cross-domain-policies']).toBe('none');
+      // CSP par défaut helmet : `default-src 'self'` + sous-directives
+      // restrictives. On vérifie sa présence sans figer la valeur
+      // exacte (helmet l'enrichit selon les versions).
+      expect(typeof response.headers['content-security-policy']).toBe('string');
+      expect(response.headers['content-security-policy']).toContain("default-src 'self'");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('cache la version Fastify (x-powered-by absent)', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+    });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/health' });
+      expect(response.headers['x-powered-by']).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('createApiServer — rate limiting', () => {
+  it('renvoie 429 quand le plafond global est dépassé', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+      // Plafond minimal pour tester la limite sans flooder le test.
+      rateLimitMax: 3,
+      rateLimitTimeWindow: '1 minute',
+    });
+    try {
+      // 3 réponses 200 puis 429 sur la 4e.
+      const r1 = await app.inject({ method: 'GET', url: '/health' });
+      const r2 = await app.inject({ method: 'GET', url: '/health' });
+      const r3 = await app.inject({ method: 'GET', url: '/health' });
+      const r4 = await app.inject({ method: 'GET', url: '/health' });
+      expect(r1.statusCode).toBe(200);
+      expect(r2.statusCode).toBe(200);
+      expect(r3.statusCode).toBe(200);
+      expect(r4.statusCode).toBe(429);
+      // Headers informatifs posés par le plugin.
+      expect(r1.headers['x-ratelimit-limit']).toBeDefined();
+      expect(r1.headers['x-ratelimit-remaining']).toBeDefined();
+      expect(r4.headers['retry-after']).toBeDefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rateLimitMax=false désactive le plafond', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+      rateLimitMax: false,
+    });
+    try {
+      // 10 requêtes consécutives sans 429.
+      for (let i = 0; i < 10; i += 1) {
+        const r = await app.inject({ method: 'GET', url: '/health' });
+        expect(r.statusCode).toBe(200);
+      }
+    } finally {
+      await app.close();
+    }
   });
 });
 

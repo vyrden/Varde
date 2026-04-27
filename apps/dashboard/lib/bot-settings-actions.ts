@@ -11,7 +11,6 @@ import type { BotLanguage, BotTimezone } from './bot-settings-types.js';
  * session au Fastify, mutations invalidées via `revalidatePath`.
  */
 
-// biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on process.env
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 const SESSION_COOKIE = 'varde.session';
 

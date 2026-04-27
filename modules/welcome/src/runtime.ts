@@ -26,7 +26,6 @@ import { renderTemplate, type TemplateVariables } from './template-render.js';
  * V2 : injecter un service uploads via ctx pour découpler.
  */
 const resolveBackgroundAbsolute = (relativePath: string): string => {
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for process.env
   const uploadsDir = process.env['VARDE_UPLOADS_DIR'] ?? './uploads';
   return resolvePath(uploadsDir, relativePath);
 };

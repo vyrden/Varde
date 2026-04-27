@@ -1,5 +1,7 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import type { Logger } from '@varde/contracts';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
@@ -40,6 +42,14 @@ export interface CreateApiServerOptions {
   readonly corsOrigin?: string | false;
   /** Exposer `/health` publiquement (défaut : `true`). */
   readonly exposeHealth?: boolean;
+  /**
+   * Plafond global de requêtes par IP par minute. Défaut : `300`
+   * (5/s en moyenne, large). Mettre `false` pour désactiver le
+   * rate limiting (utile pour les benchmarks de tests).
+   */
+  readonly rateLimitMax?: number | false;
+  /** Fenêtre de comptage. Défaut : `'1 minute'`. */
+  readonly rateLimitTimeWindow?: string;
 }
 
 /**
@@ -48,7 +58,15 @@ export interface CreateApiServerOptions {
  * fonctions aux PR 2.4–2.6.
  */
 export async function createApiServer(options: CreateApiServerOptions): Promise<FastifyInstance> {
-  const { authenticator, corsOrigin = false, exposeHealth = true, logger, version } = options;
+  const {
+    authenticator,
+    corsOrigin = false,
+    exposeHealth = true,
+    logger,
+    version,
+    rateLimitMax = 300,
+    rateLimitTimeWindow = '1 minute',
+  } = options;
 
   // Fastify a son propre logger Pino interne ; on se contente d'un
   // relai via le logger injecté pour les quelques messages posés
@@ -66,8 +84,41 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
   // modes de déploiement.
   await app.register(cookie);
 
+  // Headers de sécurité (jalon 5). L'API ne sert que du JSON donc la
+  // CSP par défaut de helmet est sans effet pratique côté navigateur,
+  // mais la pose des headers reste utile au cas où une réponse HTML
+  // d'erreur passerait, et signale aux scanners de sécurité que la
+  // surface est durcie. HSTS s'active uniquement quand le client est
+  // en HTTPS — en dev (HTTP) Fastify ne l'envoie pas.
+  await app.register(helmet, {
+    // L'API n'embarque pas de page HTML : on laisse les défauts
+    // helmet (CSP `default-src 'self'`, X-Frame-Options DENY, etc.).
+    // L'option `crossOriginResourcePolicy: 'same-site'` autoriserait
+    // un futur dashboard sous-domaine à fetch ; aujourd'hui on est en
+    // single-origin via reverse-proxy donc le défaut `same-origin`
+    // est plus strict et conforme.
+  });
+
   if (corsOrigin !== false) {
     await app.register(cors, { origin: corsOrigin, credentials: true });
+  }
+
+  // Rate limiting global (jalon 5). Posé avant les routes pour que
+  // le pre-handler check tous les endpoints, même `/health`. Les
+  // routes coûteuses (LLM via `/onboarding/ai/*`) imposent un
+  // plafond plus strict via `config.rateLimit` au niveau route.
+  // `skipOnError: true` (défaut) : si le store interne plante, on
+  // laisse passer plutôt que de DoS soi-même.
+  if (rateLimitMax !== false) {
+    await app.register(rateLimit, {
+      max: rateLimitMax,
+      timeWindow: rateLimitTimeWindow,
+      // Identifie l'appelant par IP. En prod derrière un reverse-
+      // proxy (Caddy/Traefik), Fastify lit `X-Forwarded-For` si la
+      // chaîne `trustProxy` est posée — pas nécessaire en V1
+      // tant qu'on est en single-host. Doc à compléter au jalon 6.
+      keyGenerator: (request) => request.ip,
+    });
   }
 
   const ensureSession = async (request: FastifyRequest): Promise<SessionData> => {
@@ -127,7 +178,22 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
     }));
   }
 
-  app.get('/me', async (request) => ensureSession(request));
+  // GET /me — identité de l'admin courant. **Redaction explicite**
+  // de `accessToken` (jalon 5 PR 5.10) : le token Discord OAuth
+  // sert exclusivement aux appels server-to-server (API → Discord
+  // pour `/users/@me/guilds`), il ne doit jamais transiter dans une
+  // réponse exposée au client. La SessionData en mémoire le porte ;
+  // l'endpoint en retourne une projection nettoyée.
+  app.get('/me', async (request) => {
+    const session = await ensureSession(request);
+    // Whitelist explicite — toute future addition au JWT (ex. role,
+    // permissions précompilées) doit être réfléchie ici, pas leakée
+    // par un spread implicite.
+    return {
+      userId: session.userId,
+      ...(session.username !== undefined ? { username: session.username } : {}),
+    };
+  });
 
   return app;
 }

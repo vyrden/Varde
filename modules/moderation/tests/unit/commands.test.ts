@@ -103,7 +103,6 @@ const inputFor = (
 describe('handler /warn', () => {
   it('happy path : DM + audit + success', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['warn'];
     if (!cmd) throw new Error('warn introuvable');
     const result = await cmd.handler(
@@ -126,7 +125,6 @@ describe('handler /warn', () => {
 
   it("refuse si canModerate retourne ok=false avec raison 'rank'", async () => {
     const ctx = makeCtx({}, { reason: 'rank' });
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['warn'];
     if (!cmd) throw new Error('warn introuvable');
     const result = await cmd.handler(
@@ -139,7 +137,6 @@ describe('handler /warn', () => {
 
   it('refuse si option member absente', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['warn'];
     if (!cmd) throw new Error('warn introuvable');
     const result = await cmd.handler(inputFor('warn', {}), ctx);
@@ -150,7 +147,6 @@ describe('handler /warn', () => {
 describe('handler /kick', () => {
   it('appelle kickMember + audit warn severity', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['kick'];
     if (!cmd) throw new Error('kick introuvable');
     await cmd.handler(
@@ -169,7 +165,6 @@ describe('handler /kick', () => {
 describe('handler /ban', () => {
   it('passe deleteDays à banMember si fourni', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['ban'];
     if (!cmd) throw new Error('ban introuvable');
     await cmd.handler(
@@ -189,7 +184,6 @@ describe('handler /ban', () => {
 describe('handler /tempban', () => {
   it('programme la levée via scheduler.in avec la durée parsée', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['tempban'];
     if (!cmd) throw new Error('tempban introuvable');
     await cmd.handler(
@@ -212,7 +206,6 @@ describe('handler /tempban', () => {
 
   it('refuse si la durée est invalide', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['tempban'];
     if (!cmd) throw new Error('tempban introuvable');
     const result = await cmd.handler(
@@ -229,7 +222,6 @@ describe('handler /tempban', () => {
 describe('handler /unban', () => {
   it('appelle unbanMember sans check de hiérarchie', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['unban'];
     if (!cmd) throw new Error('unban introuvable');
     await cmd.handler(
@@ -248,7 +240,6 @@ describe('handler /unban', () => {
 describe('handler /mute', () => {
   it("refuse si mutedRoleId n'est pas configuré", async () => {
     const ctx = makeCtx({ mutedRoleId: null });
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['mute'];
     if (!cmd) throw new Error('mute introuvable');
     const result = await cmd.handler(
@@ -263,7 +254,6 @@ describe('handler /mute', () => {
 
   it('happy path : assigne le rôle muet + audit', async () => {
     const ctx = makeCtx({ mutedRoleId: '123456789012345678' });
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['mute'];
     if (!cmd) throw new Error('mute introuvable');
     await cmd.handler(
@@ -279,7 +269,6 @@ describe('handler /mute', () => {
 describe('handler /tempmute', () => {
   it('assigne le rôle muet + programme le retrait', async () => {
     const ctx = makeCtx({ mutedRoleId: '123456789012345678' });
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['tempmute'];
     if (!cmd) throw new Error('tempmute introuvable');
     await cmd.handler(
@@ -301,7 +290,6 @@ describe('handler /tempmute', () => {
 describe('handler /unmute', () => {
   it('retire le rôle muet + audit', async () => {
     const ctx = makeCtx({ mutedRoleId: '123456789012345678' });
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['unmute'];
     if (!cmd) throw new Error('unmute introuvable');
     await cmd.handler(inputFor('unmute', { member: TARGET }, { [TARGET]: { tag: 'h#0' } }), ctx);
@@ -314,7 +302,6 @@ describe('handler /unmute', () => {
 describe('handler /clear', () => {
   it('supprime count messages + audit', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['clear'];
     if (!cmd) throw new Error('clear introuvable');
     const result = await cmd.handler(inputFor('clear', { count: 10 }), ctx);
@@ -335,7 +322,6 @@ describe('handler /clear', () => {
 describe('handler /slowmode', () => {
   it('configure le slowmode + audit', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['slowmode'];
     if (!cmd) throw new Error('slowmode introuvable');
     await cmd.handler(inputFor('slowmode', { seconds: 60 }), ctx);
@@ -352,7 +338,6 @@ describe('handler /slowmode', () => {
 describe('handler /infractions', () => {
   it("renvoie un message vide quand l'historique est vide", async () => {
     const ctx = makeCtx({}, true, []);
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['infractions'];
     if (!cmd) throw new Error('infractions introuvable');
     const result = await cmd.handler(
@@ -390,7 +375,6 @@ describe('handler /infractions', () => {
       },
     ];
     const ctx = makeCtx({}, true, rows);
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['infractions'];
     if (!cmd) throw new Error('infractions introuvable');
     const result = await cmd.handler(
@@ -409,7 +393,6 @@ describe('handler /infractions', () => {
 describe('handler /case', () => {
   it('refuse un id non-ULID', async () => {
     const ctx = makeCtx();
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['case'];
     if (!cmd) throw new Error('case introuvable');
     const result = await cmd.handler(inputFor('case', { id: 'pas-un-ulid' }), ctx);
@@ -418,7 +401,6 @@ describe('handler /case', () => {
 
   it("renvoie 'introuvable' si l'entrée n'existe pas (audit.get retourne null)", async () => {
     const ctx = makeCtx({}, true, [], null);
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['case'];
     if (!cmd) throw new Error('case introuvable');
     const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);
@@ -438,7 +420,6 @@ describe('handler /case', () => {
       metadata: {},
     };
     const ctx = makeCtx({}, true, [], otherGuildEntry);
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['case'];
     if (!cmd) throw new Error('case introuvable');
     const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);
@@ -458,7 +439,6 @@ describe('handler /case', () => {
       metadata: { reason: 'raid', durationFormatted: '2h' },
     };
     const ctx = makeCtx({}, true, [], entry);
-    // biome-ignore lint/complexity/useLiteralKeys: index signature on ModuleCommandMap
     const cmd = commands['case'];
     if (!cmd) throw new Error('case introuvable');
     const result = await cmd.handler(inputFor('case', { id: '01HZ00000000000000000000A1' }), ctx);

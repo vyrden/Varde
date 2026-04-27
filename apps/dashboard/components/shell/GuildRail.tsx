@@ -21,7 +21,6 @@ export interface GuildRailProps {
  * sécu, mais pour un bot auto-hébergé c'est l'usage habituel.
  */
 function buildInviteUrl(): string | null {
-  // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on process.env
   const clientId = process.env['VARDE_DISCORD_CLIENT_ID'];
   if (!clientId) return null;
   const params = new URLSearchParams({

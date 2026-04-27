@@ -69,9 +69,7 @@ interface RawRRPair {
  */
 function normalizeMessages(raw: unknown): readonly ReactionRoleMessageClient[] {
   const obj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation
   const messages = Array.isArray(obj['messages']) ? obj['messages'] : [];
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess
   const messageLevelKind = obj['kind'];
   return messages
     .filter((m): m is RawRRMessage => typeof m === 'object' && m !== null)

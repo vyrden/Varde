@@ -402,7 +402,6 @@ export function DiscordMessagePreview({
                 />
               ) : null}
               {cardImageUrl !== undefined && cardImageUrl !== null ? (
-                // biome-ignore lint/performance/noImgElement: aperçu data URL — Image component non-pertinent
                 <img
                   src={cardImageUrl}
                   alt=""
@@ -422,7 +421,6 @@ export function DiscordMessagePreview({
         ) : cardImageUrl !== undefined && cardImageUrl !== null ? (
           // Carte hors embed (le contenu principal est au-dessus, la
           // carte ferme le message comme une pièce jointe).
-          // biome-ignore lint/performance/noImgElement: aperçu data URL
           <img
             src={cardImageUrl}
             alt=""

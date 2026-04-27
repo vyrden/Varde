@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from '@varde/ui';
+import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactElement } from 'react';
 
@@ -39,9 +40,11 @@ export function ServerList({ guilds }: ServerListProps): ReactElement {
           <Card>
             <CardHeader className="flex-row items-center gap-3">
               {guild.iconUrl ? (
-                <img
+                <Image
                   src={guild.iconUrl}
                   alt=""
+                  width={40}
+                  height={40}
                   className="h-10 w-10 rounded-full border border-border"
                 />
               ) : (

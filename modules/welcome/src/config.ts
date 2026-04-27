@@ -214,7 +214,6 @@ const MODULE_ID = 'welcome';
  */
 export function resolveConfig(raw: unknown): WelcomeConfig {
   const asObj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation
   const modules = asObj['modules'];
   const moduleConfig =
     modules !== undefined && modules !== null && typeof modules === 'object'

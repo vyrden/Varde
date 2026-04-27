@@ -435,8 +435,15 @@ export function registerOnboardingRoutes<D extends DbDriver>(
   // session à l'invocation (audit / rejeu).
   if (options.ai !== undefined) {
     const aiOptions = options.ai;
+    // Plafond serré sur les routes IA : ces endpoints appellent un
+    // provider LLM externe (Ollama / OpenAI-compat) qui coûte des
+    // tokens et peut être lent. 10 req/min/IP suffit pour un admin
+    // qui itère son preset sans laisser un client cassé hammerer
+    // l'endpoint.
+    const aiRateLimit = { max: 10, timeWindow: '1 minute' };
     app.post<{ Params: { guildId: string }; Body: unknown }>(
       '/guilds/:guildId/onboarding/ai/generate-preset',
+      { config: { rateLimit: aiRateLimit } },
       async (request) => {
         const { guildId } = request.params;
         const session = await requireGuildAdmin(app, request, guildId, discord);
@@ -499,6 +506,7 @@ export function registerOnboardingRoutes<D extends DbDriver>(
     // suggestions ne mutent jamais l'état elles-mêmes, ADR 0007 R1).
     app.post<{ Params: { guildId: string }; Body: unknown }>(
       '/guilds/:guildId/onboarding/ai/suggest-completion',
+      { config: { rateLimit: aiRateLimit } },
       async (request) => {
         const { guildId } = request.params;
         const session = await requireGuildAdmin(app, request, guildId, discord);

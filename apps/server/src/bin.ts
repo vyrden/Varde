@@ -117,7 +117,6 @@ const readOptionalRaw = (name: string): string | null => {
  * si la valeur manque.
  */
 const readKeystoreMasterKey = (): Buffer => {
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on process.env
   const raw = process.env['VARDE_KEYSTORE_MASTER_KEY'];
   if (typeof raw !== 'string' || raw.length === 0) {
     return die(

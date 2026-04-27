@@ -268,7 +268,6 @@ export function EmojiPicker({ catalog, onPick, onClose }: EmojiPickerProps) {
   // Liste des sections présentes dans la sidebar, dans l'ordre de
   // rendu. La sidebar masque la section vide pour ne pas leurrer.
   const iconFor = (id: string): ReactElement => {
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature
     return CATEGORY_ICON[id] ?? CATEGORY_ICON['smileys'] ?? <span />;
   };
 
@@ -324,7 +323,6 @@ export function EmojiPicker({ catalog, onPick, onClose }: EmojiPickerProps) {
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         const first = visible[0];
         if (first) {
-          // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature exige l'accès bracket sur dataset
           const id = (first.target as HTMLElement).dataset['sectionId'];
           if (id) setActiveCategory(id);
         }
