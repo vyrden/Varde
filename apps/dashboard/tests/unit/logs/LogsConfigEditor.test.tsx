@@ -20,9 +20,7 @@ vi.mock('../../../lib/logs-actions', async () => {
   };
 });
 
-import { LogsAdvancedMode } from '../../../components/logs/LogsAdvancedMode';
 import { LogsConfigEditor } from '../../../components/logs/LogsConfigEditor';
-import { LogsSimpleMode } from '../../../components/logs/LogsSimpleMode';
 
 const emptyConfig = {
   version: 1 as const,
@@ -30,10 +28,22 @@ const emptyConfig = {
   exclusions: { userIds: [], roleIds: [], channelIds: [], excludeBots: true },
 };
 
-afterEach(cleanup);
+const STATUS_CARD = <div data-testid="status-card">status</div>;
 
-describe('LogsConfigEditor', () => {
-  it('affiche le mode simple par défaut', () => {
+afterEach(() => {
+  cleanup();
+  routerReplace.mockReset();
+  routerRefresh.mockReset();
+  replayBrokenRouteMock.mockReset();
+  try {
+    window.localStorage.clear();
+  } catch {
+    /* happy-dom */
+  }
+});
+
+describe('LogsConfigEditor — shell unifié', () => {
+  it('rend les sections principales (destination, événements, options) sur config vide', () => {
     render(
       <LogsConfigEditor
         guildId="g1"
@@ -41,12 +51,59 @@ describe('LogsConfigEditor', () => {
         brokenRoutes={[]}
         channels={[{ id: 'c1', name: 'general' }]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    expect(screen.getByText(/événements à surveiller/i)).toBeDefined();
+    // Cible les titres de Card via leur role (la grand-mère `<div>`
+    // CardTitle n'a pas de role par défaut, donc on filtre par classe).
+    expect(screen.getByLabelText(/^Salon de destination$/i)).toBeDefined();
+    expect(screen.getByText(/^Événements à surveiller$/i)).toBeDefined();
+    expect(screen.getByText(/^Options$/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Configuration avancée/i })).toBeDefined();
+    expect(screen.getByTestId('status-card')).toBeDefined();
   });
 
-  it('affiche les routes cassées avec banner quand brokenRoutes non vide', () => {
+  it("affiche l'onboarding hint sur config vierge (aucun salon, aucun event)", () => {
+    render(
+      <LogsConfigEditor
+        guildId="g1"
+        initialConfig={emptyConfig}
+        brokenRoutes={[]}
+        channels={[{ id: 'c1', name: 'general' }]}
+        roles={[]}
+        statusCard={STATUS_CARD}
+      />,
+    );
+    expect(screen.getByText(/Pour commencer/)).toBeDefined();
+  });
+
+  it("masque l'onboarding hint quand un salon est sélectionné", () => {
+    render(
+      <LogsConfigEditor
+        guildId="g1"
+        initialConfig={{
+          version: 1,
+          routes: [
+            {
+              id: '00000000-0000-4000-8000-000000000001',
+              label: 'Logs',
+              events: ['guild.memberJoin'],
+              channelId: 'c1',
+              verbosity: 'detailed',
+            },
+          ],
+          exclusions: emptyConfig.exclusions,
+        }}
+        brokenRoutes={[]}
+        channels={[{ id: 'c1', name: 'general' }]}
+        roles={[]}
+        statusCard={STATUS_CARD}
+      />,
+    );
+    expect(screen.queryByText(/Pour commencer/)).toBeNull();
+  });
+
+  it('affiche le banner routes cassées en haut quand brokenRoutes non vide', () => {
     render(
       <LogsConfigEditor
         guildId="g1"
@@ -63,13 +120,15 @@ describe('LogsConfigEditor', () => {
         ]}
         channels={[]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
     expect(screen.getByRole('alert')).toBeDefined();
     expect(screen.getByText(/1 route cassée/i)).toBeDefined();
   });
 
-  it('affiche le pluriel pour plusieurs routes cassées', () => {
+  it('rejouer une route cassée appelle replayBrokenRoute(guildId, routeId) et rafraîchit', async () => {
+    replayBrokenRouteMock.mockResolvedValueOnce({ ok: true, replayed: 12, failed: 0 });
     render(
       <LogsConfigEditor
         guildId="g1"
@@ -78,151 +137,27 @@ describe('LogsConfigEditor', () => {
           {
             routeId: 'r1',
             channelId: 'c1',
-            droppedCount: 1,
-            bufferedCount: 0,
-            markedAt: null,
-            reason: 'deleted',
-          },
-          {
-            routeId: 'r2',
-            channelId: 'c2',
-            droppedCount: 3,
-            bufferedCount: 2,
-            markedAt: null,
-            reason: 'no-perms',
-          },
-        ]}
-        channels={[]}
-        roles={[]}
-      />,
-    );
-    expect(screen.getByText(/2 routes cassées/i)).toBeDefined();
-  });
-
-  it('affiche un bouton "Rejouer" par route cassée', () => {
-    render(
-      <LogsConfigEditor
-        guildId="g1"
-        initialConfig={emptyConfig}
-        brokenRoutes={[
-          {
-            routeId: 'r1',
-            channelId: 'c-dead-1',
             droppedCount: 0,
-            bufferedCount: 3,
-            markedAt: null,
-            reason: 'channel-not-found',
-          },
-          {
-            routeId: 'r2',
-            channelId: 'c-dead-2',
-            droppedCount: 0,
-            bufferedCount: 5,
-            markedAt: null,
-            reason: 'unknown',
-          },
-        ]}
-        channels={[]}
-        roles={[]}
-      />,
-    );
-    const buttons = screen.getAllByRole('button', { name: /rejouer/i });
-    expect(buttons).toHaveLength(2);
-  });
-
-  it('clic sur "Rejouer" appelle replayBrokenRoute avec (guildId, routeId) et rafraîchit la page', async () => {
-    replayBrokenRouteMock.mockResolvedValueOnce({ ok: true, replayed: 3, failed: 0 });
-    render(
-      <LogsConfigEditor
-        guildId="guild-42"
-        initialConfig={emptyConfig}
-        brokenRoutes={[
-          {
-            routeId: 'route-1',
-            channelId: 'c-dead',
-            droppedCount: 0,
-            bufferedCount: 3,
-            markedAt: null,
+            bufferedCount: 12,
+            markedAt: '2026-04-23T14:00:00.000Z',
             reason: 'channel-not-found',
           },
         ]}
         channels={[]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
-    await waitFor(() => expect(replayBrokenRouteMock).toHaveBeenCalledWith('guild-42', 'route-1'));
-    await waitFor(() => expect(screen.getByText(/3 events rejoués/i)).toBeDefined());
-    expect(routerRefresh).toHaveBeenCalled();
-  });
-
-  it('affiche le message partiel quand replay retourne failed > 0', async () => {
-    replayBrokenRouteMock.mockResolvedValueOnce({
-      ok: true,
-      replayed: 1,
-      failed: 2,
-      firstError: { reason: 'channel-not-found' },
+    fireEvent.click(screen.getByRole('button', { name: /Rejouer/i }));
+    await waitFor(() => {
+      expect(replayBrokenRouteMock).toHaveBeenCalledWith('g1', 'r1');
     });
-    render(
-      <LogsConfigEditor
-        guildId="g"
-        initialConfig={emptyConfig}
-        brokenRoutes={[
-          {
-            routeId: 'r1',
-            channelId: 'c1',
-            droppedCount: 0,
-            bufferedCount: 3,
-            markedAt: null,
-            reason: 'channel-not-found',
-          },
-        ]}
-        channels={[]}
-        roles={[]}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
-    await waitFor(() => expect(screen.getByText(/1 rejoué.*2 encore en échec/i)).toBeDefined());
+    await waitFor(() => {
+      expect(routerRefresh).toHaveBeenCalled();
+    });
   });
 
-  it('affiche une erreur quand replay retourne ok:false', async () => {
-    replayBrokenRouteMock.mockResolvedValueOnce({ ok: false, reason: 'service-unavailable' });
-    render(
-      <LogsConfigEditor
-        guildId="g"
-        initialConfig={emptyConfig}
-        brokenRoutes={[
-          {
-            routeId: 'r1',
-            channelId: 'c1',
-            droppedCount: 0,
-            bufferedCount: 3,
-            markedAt: null,
-            reason: 'channel-not-found',
-          },
-        ]}
-        channels={[]}
-        roles={[]}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /rejouer/i }));
-    await waitFor(() => expect(screen.getByText(/service indisponible/i)).toBeDefined());
-  });
-
-  it("n'affiche pas le banner quand brokenRoutes est vide", () => {
-    render(
-      <LogsConfigEditor
-        guildId="g1"
-        initialConfig={emptyConfig}
-        brokenRoutes={[]}
-        channels={[]}
-        roles={[]}
-      />,
-    );
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('navigue en mode avancé au clic sur l\'onglet "Mode avancé"', () => {
+  it("la sticky bar Save est désactivée quand aucun salon n'est sélectionné", () => {
     render(
       <LogsConfigEditor
         guildId="g1"
@@ -230,192 +165,67 @@ describe('LogsConfigEditor', () => {
         brokenRoutes={[]}
         channels={[{ id: 'c1', name: 'general' }]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    fireEvent.click(screen.getByRole('tab', { name: /mode avancé/i }));
-    expect(routerReplace).toHaveBeenCalledWith('?mode=advanced');
+    const save = screen.getByRole('button', { name: 'Enregistrer' });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
   });
-});
 
-describe('LogsAdvancedMode', () => {
-  const baseConfig = {
-    version: 1 as const,
-    routes: [],
-    exclusions: { userIds: [], roleIds: [], channelIds: [], excludeBots: false },
-  };
-
-  const channels = [
-    { id: 'c1', name: 'logs-mod' },
-    { id: 'c2', name: 'logs-general' },
-  ];
-
-  it('affiche le bouton "+ Nouvelle route"', () => {
+  it("le bouton Tester est désactivé quand aucun salon n'est sélectionné", () => {
     render(
-      <LogsAdvancedMode
+      <LogsConfigEditor
         guildId="g1"
-        config={baseConfig}
-        setConfig={() => undefined}
-        channels={channels}
+        initialConfig={emptyConfig}
+        brokenRoutes={[]}
+        channels={[{ id: 'c1', name: 'general' }]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    expect(screen.getByRole('button', { name: /nouvelle route/i })).toBeDefined();
+    const test = screen.getByRole('button', { name: /Tester l'envoi/i });
+    expect((test as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('affiche le formulaire d\'ajout au clic sur "+ Nouvelle route"', () => {
+  it('auto-ouvre la section avancée quand des routes additionnelles existent', () => {
     render(
-      <LogsAdvancedMode
+      <LogsConfigEditor
         guildId="g1"
-        config={baseConfig}
-        setConfig={() => undefined}
-        channels={channels}
+        initialConfig={{
+          version: 1,
+          routes: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              label: 'Modération',
+              events: ['guild.messageDelete'],
+              channelId: 'c1',
+              verbosity: 'detailed',
+            },
+          ],
+          exclusions: emptyConfig.exclusions,
+        }}
+        brokenRoutes={[]}
+        channels={[{ id: 'c1', name: 'general' }]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
-    expect(screen.getByRole('form', { name: /formulaire d'ajout de route/i })).toBeDefined();
+    const advancedToggle = screen.getByRole('button', { name: /Configuration avancée/i });
+    expect(advancedToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('bouton Ajouter désactivé tant que le formulaire est invalide', () => {
+  it('garde la section avancée fermée par défaut sur config simple', () => {
     render(
-      <LogsAdvancedMode
+      <LogsConfigEditor
         guildId="g1"
-        config={baseConfig}
-        setConfig={() => undefined}
-        channels={channels}
+        initialConfig={emptyConfig}
+        brokenRoutes={[]}
+        channels={[{ id: 'c1', name: 'general' }]}
         roles={[]}
+        statusCard={STATUS_CARD}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
-    const addBtn = screen.getByRole('button', { name: /^ajouter$/i });
-    expect((addBtn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('ajoute une route après avoir rempli le formulaire', () => {
-    const setConfig = vi.fn();
-    render(
-      <LogsAdvancedMode
-        guildId="g1"
-        config={baseConfig}
-        setConfig={setConfig}
-        channels={channels}
-        roles={[]}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /nouvelle route/i }));
-
-    fireEvent.change(screen.getByLabelText(/label de la nouvelle route/i), {
-      target: { value: 'Modération' },
-    });
-    /* Coche un événement */
-    fireEvent.click(screen.getByLabelText('Arrivée membre'));
-    /* Sélectionne un salon */
-    fireEvent.change(screen.getByLabelText(/salon de destination de la route/i), {
-      target: { value: 'c1' },
-    });
-
-    const addBtn = screen.getByRole('button', { name: /^ajouter$/i });
-    expect((addBtn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(addBtn);
-
-    expect(setConfig).toHaveBeenCalledOnce();
-    const called = setConfig.mock.calls[0]?.[0] as typeof baseConfig & { routes: unknown[] };
-    expect(called.routes).toHaveLength(1);
-  });
-
-  it('affiche le bouton "Éditer" sur les routes existantes', () => {
-    const configWithRoute = {
-      ...baseConfig,
-      routes: [
-        {
-          id: 'r1',
-          label: 'Test route',
-          events: ['guild.memberJoin'],
-          channelId: 'c1',
-          verbosity: 'detailed' as const,
-        },
-      ],
-    };
-    render(
-      <LogsAdvancedMode
-        guildId="g1"
-        config={configWithRoute}
-        setConfig={() => undefined}
-        channels={channels}
-        roles={[]}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /éditer la route test route/i })).toBeDefined();
-  });
-
-  it('passe la ligne en mode édition au clic sur "Éditer"', () => {
-    const configWithRoute = {
-      ...baseConfig,
-      routes: [
-        {
-          id: 'r1',
-          label: 'Test route',
-          events: ['guild.memberJoin'],
-          channelId: 'c1',
-          verbosity: 'detailed' as const,
-        },
-      ],
-    };
-    render(
-      <LogsAdvancedMode
-        guildId="g1"
-        config={configWithRoute}
-        setConfig={() => undefined}
-        channels={channels}
-        roles={[]}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /éditer la route test route/i }));
-    expect(screen.getByRole('button', { name: /valider les modifications/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /annuler les modifications/i })).toBeDefined();
-  });
-});
-
-describe('LogsSimpleMode', () => {
-  it('rend le sélecteur de salon', () => {
-    render(
-      <LogsSimpleMode
-        guildId="g1"
-        config={emptyConfig}
-        setConfig={() => undefined}
-        channels={[{ id: 'c1', name: 'logs' }]}
-      />,
-    );
-    expect(screen.getByRole('combobox', { name: /salon de destination/i })).toBeDefined();
-    expect(screen.getByText('#logs')).toBeDefined();
-  });
-
-  it('bouton Enregistrer désactivé sans salon sélectionné', () => {
-    render(
-      <LogsSimpleMode
-        guildId="g1"
-        config={emptyConfig}
-        setConfig={() => undefined}
-        channels={[]}
-      />,
-    );
-    const btn = screen.getByRole('button', { name: /enregistrer/i });
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('bouton Enregistrer activé une fois un salon et un event sélectionnés', () => {
-    render(
-      <LogsSimpleMode
-        guildId="g1"
-        config={emptyConfig}
-        setConfig={() => undefined}
-        channels={[{ id: 'c1', name: 'logs' }]}
-      />,
-    );
-    const select = screen.getByRole('combobox', { name: /salon de destination/i });
-    fireEvent.change(select, { target: { value: 'c1' } });
-    fireEvent.click(screen.getByLabelText(/arrivée membre/i));
-    const btn = screen.getByRole('button', { name: /enregistrer/i });
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
+    const advancedToggle = screen.getByRole('button', { name: /Configuration avancée/i });
+    expect(advancedToggle.getAttribute('aria-expanded')).toBe('false');
   });
 });

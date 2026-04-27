@@ -3,6 +3,7 @@
 import { Select } from '@varde/ui';
 
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
+import { EntityMultiPicker } from '../shared/EntityMultiPicker';
 
 interface RoleOption {
   readonly id: string;
@@ -13,6 +14,7 @@ export interface AutoroleSectionProps {
   readonly value: WelcomeConfigClient['autorole'];
   readonly onChange: (next: WelcomeConfigClient['autorole']) => void;
   readonly roles: readonly RoleOption[];
+  readonly pending?: boolean;
 }
 
 const DELAY_OPTIONS = [
@@ -23,57 +25,36 @@ const DELAY_OPTIONS = [
   { value: 86_400, label: '24 heures' },
 ];
 
-export function AutoroleSection({ value, onChange, roles }: AutoroleSectionProps) {
-  const toggleRole = (roleId: string) => {
-    const set = new Set(value.roleIds);
-    if (set.has(roleId)) set.delete(roleId);
-    else set.add(roleId);
-    onChange({ ...value, roleIds: Array.from(set) });
-  };
+const MAX_ROLES = 10;
 
-  // Le parent (ExpandablePanel) gère l'activation : on n'affiche le
-  // contenu que si activé, le toggle visuel est en haut du panneau.
-  if (!value.enabled) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Active l'auto-rôle pour configurer les rôles attribués à l'arrivée.
-      </p>
-    );
-  }
+/**
+ * Contenu de la sous-section Auto-rôle. L'activation est pilotée par
+ * la card parente (AdvancedConfigSection) ; on suppose ici que le
+ * composant n'est rendu que lorsque `value.enabled === true`.
+ */
+export function AutoroleSection({ value, onChange, roles, pending = false }: AutoroleSectionProps) {
+  const atLimit = value.roleIds.length >= MAX_ROLES;
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Rôles à attribuer (max 10)</p>
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Rôles à attribuer (max {MAX_ROLES})</p>
         {roles.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             Aucun rôle disponible. Crée des rôles dans Discord puis recharge la page.
           </p>
         ) : (
-          <div className="flex flex-wrap gap-1">
-            {roles.map((r) => {
-              const selected = value.roleIds.includes(r.id);
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => toggleRole(r.id)}
-                  disabled={!selected && value.roleIds.length >= 10}
-                  className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                    selected
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted hover:bg-muted-foreground/20'
-                  } disabled:opacity-40`}
-                >
-                  {selected ? '✓ ' : ''}
-                  {r.name}
-                </button>
-              );
-            })}
-          </div>
+          <EntityMultiPicker
+            entityKind="role"
+            entities={roles}
+            selectedIds={value.roleIds}
+            pending={pending || atLimit}
+            onChange={(roleIds) => onChange({ ...value, roleIds: roleIds.slice(0, MAX_ROLES) })}
+            addLabel={atLimit ? 'Limite atteinte' : '+ Ajouter un rôle'}
+          />
         )}
         <p className="text-xs text-muted-foreground">
-          {value.roleIds.length}/10 sélectionné{value.roleIds.length > 1 ? 's' : ''}
+          {value.roleIds.length}/{MAX_ROLES} sélectionné{value.roleIds.length > 1 ? 's' : ''}
         </p>
       </div>
 

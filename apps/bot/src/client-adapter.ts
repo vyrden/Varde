@@ -90,6 +90,16 @@ const messageCreateInput = (message: Message): DiscordEventInput | null => {
   // posts — ce filtre tue toute boucle accidentelle (auto-modération
   // d'un message d'audit) et économise le coût de dispatcher.
   if (message.author.bot) return null;
+  // Snapshot des attachements — utilisé par les règles automod
+  // `restricted-channels` (modes images/videos) et tout consommateur
+  // futur. Discord peut ne pas avoir encore déterminé `contentType`
+  // pour les CDN frais ; on le passe tel quel, le caller fail-open.
+  const attachments = Array.from(message.attachments.values()).map((a) => ({
+    id: a.id,
+    url: a.url,
+    ...(a.name ? { filename: a.name } : {}),
+    ...(a.contentType !== undefined ? { contentType: a.contentType } : {}),
+  }));
   return {
     kind: 'messageCreate',
     guildId: message.guildId,
@@ -98,6 +108,7 @@ const messageCreateInput = (message: Message): DiscordEventInput | null => {
     authorId: message.author.id,
     content: message.content,
     createdAt: message.createdTimestamp,
+    attachments,
   };
 };
 

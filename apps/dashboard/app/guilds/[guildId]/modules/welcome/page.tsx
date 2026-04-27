@@ -1,4 +1,12 @@
-import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Separator,
+  UnboundPermissionsBanner,
+} from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -225,7 +233,7 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
         </p>
       </header>
       <Separator />
-      <div className="mx-auto w-full max-w-7xl space-y-5 px-6 py-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
         <UnboundPermissionsBanner
           permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
           configureHref={`/guilds/${guildId}/settings/permissions?focus=welcome`}
@@ -257,8 +265,32 @@ export default async function WelcomePage({ params }: WelcomePageProps): Promise
             channels={channels}
             roles={roles}
             availableFonts={fonts.length > 0 ? fonts : ['sans-serif', 'serif', 'monospace']}
-            moduleVersion={welcomeModule.version}
-            isModuleEnabled={isEnabled}
+            statusCard={
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Statut du module</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Version</span>
+                    <span className="font-mono text-foreground">v{welcomeModule.version}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Activation</span>
+                    <ModuleEnabledToggle
+                      guildId={guildId}
+                      moduleId={welcomeModule.id}
+                      moduleName={welcomeModule.name}
+                      initialEnabled={isEnabled}
+                    />
+                  </div>
+                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                    Message d'accueil et de départ avec carte d'avatar, auto-rôle et filtre comptes
+                    neufs.
+                  </p>
+                </CardContent>
+              </Card>
+            }
           />
         )}
       </div>

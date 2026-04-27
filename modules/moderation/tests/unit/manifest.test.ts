@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { manifest } from '../../src/manifest.js';
 
 describe('manifest moderation', () => {
-  it('id = moderation, version 1.1.0', () => {
+  it('id = moderation, version 1.2.0', () => {
     expect(manifest.id).toBe('moderation');
-    expect(manifest.version).toBe('1.1.0');
+    expect(manifest.version).toBe('1.2.0');
   });
 
   it('déclare 8 permissions granulaires (6 actions + cases.read + automod.manage)', () => {

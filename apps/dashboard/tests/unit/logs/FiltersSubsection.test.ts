@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseUserIdInput, parseUserIdList } from '../../../components/logs/LogsAdvancedMode';
+import {
+  activeFilterCount,
+  parseUserIdInput,
+  parseUserIdList,
+} from '../../../components/logs/FiltersSubsection';
 
 describe('parseUserIdInput', () => {
   it('accepte une mention standard <@123456789012345678>', () => {
@@ -62,5 +66,30 @@ describe('parseUserIdList', () => {
   it('ignore les espaces autour des virgules', () => {
     const result = parseUserIdList('  123456789012345678  ,  98765432109876543  ');
     expect(result.ok).toEqual(['123456789012345678', '98765432109876543']);
+  });
+});
+
+describe('activeFilterCount', () => {
+  it('retourne 0 pour une config vide', () => {
+    expect(
+      activeFilterCount({ userIds: [], roleIds: [], channelIds: [], excludeBots: false }),
+    ).toBe(0);
+  });
+
+  it('compte excludeBots=true', () => {
+    expect(activeFilterCount({ userIds: [], roleIds: [], channelIds: [], excludeBots: true })).toBe(
+      1,
+    );
+  });
+
+  it('compte chaque liste non-vide comme 1 filtre', () => {
+    expect(
+      activeFilterCount({
+        userIds: ['1', '2'],
+        roleIds: ['3'],
+        channelIds: ['4', '5', '6'],
+        excludeBots: true,
+      }),
+    ).toBe(4);
   });
 });

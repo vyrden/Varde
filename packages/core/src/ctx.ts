@@ -333,6 +333,8 @@ export function createCtxFactory<D extends DbDriver>(
     return instance;
   };
 
+  const aiFor = (gid: GuildId): AIService | null => (aiFactory ? aiFactory(gid) : ai);
+
   const factory: CtxFactory = (ref: ModuleRef, guildId) => {
     const moduleId = ref.id;
     return Object.freeze<ModuleContext>({
@@ -349,6 +351,7 @@ export function createCtxFactory<D extends DbDriver>(
       modules,
       keystore: keystoreFor(moduleId),
       ai: guildId !== undefined && aiFactory ? aiFactory(guildId) : ai,
+      aiFor,
       ui,
       onboarding,
       interactions: interactions.serviceFor(moduleId),

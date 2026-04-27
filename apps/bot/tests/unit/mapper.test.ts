@@ -93,6 +93,7 @@ describe('mapDiscordEvent — messages', () => {
       authorId: '42',
       content: 'salut',
       createdAt: AT,
+      attachments: [],
     });
   });
 

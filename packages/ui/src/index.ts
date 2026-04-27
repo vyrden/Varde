@@ -12,6 +12,21 @@ export {
   CardHeader,
   CardTitle,
 } from './components/Card.js';
+export {
+  CollapsibleSection,
+  type CollapsibleSectionProps,
+} from './components/CollapsibleSection.js';
+export {
+  type DiscordButtonStyle,
+  DiscordMessagePreview,
+  type DiscordMessagePreviewProps,
+  type DiscordPreviewAttachment,
+  type DiscordPreviewButton,
+  type DiscordPreviewEmbed,
+  type DiscordPreviewReaction,
+  renderDiscordMarkdown,
+  substituteVariables,
+} from './components/DiscordMessagePreview.js';
 export { Drawer, type DrawerProps } from './components/Drawer.js';
 export { EmptyState, type EmptyStateProps } from './components/EmptyState.js';
 export {
@@ -40,7 +55,20 @@ export {
   type SidebarProps,
 } from './components/Sidebar.js';
 export { Skeleton } from './components/Skeleton.js';
-export { Tab, type TabProps, TabsList, type TabsListProps } from './components/Tabs.js';
+export {
+  StickyActionBar,
+  type StickyActionBarProps,
+} from './components/StickyActionBar.js';
+export {
+  Tabs,
+  TabsContent,
+  type TabsContentProps,
+  TabsList,
+  type TabsListProps,
+  type TabsProps,
+  TabsTrigger,
+  type TabsTriggerProps,
+} from './components/Tabs.js';
 export { Textarea, type TextareaProps } from './components/Textarea.js';
 export {
   Toaster,

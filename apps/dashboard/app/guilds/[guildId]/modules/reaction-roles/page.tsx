@@ -1,4 +1,12 @@
-import { Badge, Separator, UnboundPermissionsBanner } from '@varde/ui';
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Separator,
+  UnboundPermissionsBanner,
+} from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
@@ -225,8 +233,31 @@ export default async function ReactionRolesPage({
             channels={channels}
             roles={roles}
             emojis={emojis}
-            moduleVersion={rrModule.version}
-            isEnabled={isEnabled}
+            statusCard={
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Statut du module</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Version</span>
+                    <span className="font-mono text-foreground">v{rrModule.version}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Activation</span>
+                    <ModuleEnabledToggle
+                      guildId={guildId}
+                      moduleId={rrModule.id}
+                      moduleName={rrModule.name}
+                      initialEnabled={isEnabled}
+                    />
+                  </div>
+                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                    Permets à tes membres de s'auto-attribuer des rôles en cliquant sur des emojis.
+                  </p>
+                </CardContent>
+              </Card>
+            }
           />
         )}
       </div>

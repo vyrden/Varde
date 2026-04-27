@@ -23,10 +23,10 @@ import type { ManifestStatic, ModuleId, PermissionId } from '@varde/contracts';
 export const manifest: ManifestStatic = {
   id: 'moderation' as ModuleId,
   name: 'Moderation',
-  version: '1.1.0',
+  version: '1.2.0',
   coreVersion: '^1.0.0',
   description:
-    'Commandes manuelles de sanction (warn, kick, ban, tempban, mute, tempmute, clear, slowmode) avec historique consultable, et automod configurable : règles blacklist / regex / rate-limit / classification IA, actions delete | warn | mute, rôles bypass.',
+    "Commandes de modération (warn, kick, ban, tempban, unban, mute, tempmute, unmute, clear, slowmode, role-info, server-info, user-info) avec historique d'infractions consultable, et automod configurable : règles blacklist (substring), regex, rate-limit (sliding window), classification IA. Chaque règle peut combiner librement les actions delete / warn / mute (multi-sélection), avec rôles bypass et DM consolidé optionnel.",
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

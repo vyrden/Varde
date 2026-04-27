@@ -84,8 +84,45 @@ describe('guildMessageCreateSchema', () => {
       authorId: SNOWFLAKE_D,
       content: 'Bonjour',
       createdAt: 1_700_000_000_000,
+      attachments: [],
     };
     expect(guildMessageCreateSchema.parse(input)).toEqual(input);
+  });
+
+  it('accepte des attachments avec MIME et filename optionnels', () => {
+    const result = guildMessageCreateSchema.safeParse({
+      type: 'guild.messageCreate',
+      guildId: SNOWFLAKE_A,
+      channelId: SNOWFLAKE_B,
+      messageId: SNOWFLAKE_C,
+      authorId: SNOWFLAKE_D,
+      content: 'photo',
+      createdAt: 1,
+      attachments: [
+        { id: '1', url: 'https://cdn/x.png', filename: 'x.png', contentType: 'image/png' },
+        { id: '2', url: 'https://cdn/y.mp4', contentType: null },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attachments).toHaveLength(2);
+    }
+  });
+
+  it('attachments par défaut = [] si absent', () => {
+    const result = guildMessageCreateSchema.safeParse({
+      type: 'guild.messageCreate',
+      guildId: SNOWFLAKE_A,
+      channelId: SNOWFLAKE_B,
+      messageId: SNOWFLAKE_C,
+      authorId: SNOWFLAKE_D,
+      content: 'no attachments',
+      createdAt: 1,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attachments).toEqual([]);
+    }
   });
 
   it('accepte un contenu vide', () => {

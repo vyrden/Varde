@@ -1,7 +1,7 @@
 {
   "name": "@varde/module-moderation",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Module officiel : commandes manuelles de modération (warn, kick, ban, mute, purge, slowmode) + cases lookup. Cases stockés dans audit_log.",
   "license": "Apache-2.0",
   "type": "module",

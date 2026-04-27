@@ -10,6 +10,7 @@ describe('moderation config', () => {
       mutedRoleId: null,
       dmOnSanction: true,
       automod: { rules: [], bypassRoleIds: [] },
+      restrictedChannels: [],
     });
   });
 
@@ -40,6 +41,7 @@ describe('resolveConfig', () => {
       mutedRoleId: null,
       dmOnSanction: true,
       automod: { rules: [], bypassRoleIds: [] },
+      restrictedChannels: [],
     });
   });
 
@@ -49,6 +51,7 @@ describe('resolveConfig', () => {
       mutedRoleId: null,
       dmOnSanction: true,
       automod: { rules: [], bypassRoleIds: [] },
+      restrictedChannels: [],
     });
   });
 
@@ -63,6 +66,7 @@ describe('resolveConfig', () => {
       mutedRoleId: '987654321098765432',
       dmOnSanction: false,
       automod: { rules: [], bypassRoleIds: [] },
+      restrictedChannels: [],
     });
   });
 

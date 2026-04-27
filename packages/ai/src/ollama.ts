@@ -179,19 +179,26 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
 
   const chat = async (
     messages: readonly OllamaMessage[],
+    opts: { readonly jsonFormat?: boolean } = {},
   ): Promise<{ readonly content: string }> => {
+    // `jsonFormat=true` par défaut : `generatePreset` / `suggestCompletion`
+    // attendent du JSON. `classify` doit pouvoir désactiver pour récupérer
+    // un simple label brut — sans contraindre le modèle à un wrapper JSON.
+    const jsonFormat = opts.jsonFormat ?? true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      const body: Record<string, unknown> = {
+        model,
+        messages,
+        stream: false,
+      };
+      // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
+      if (jsonFormat) body['format'] = 'json';
       const response = await fetchImpl(`${endpoint}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: false,
-          format: 'json',
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -268,32 +275,26 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
     },
 
     async classify(text, labels) {
-      // Prompt simple : on demande un seul label parmi le pool. La
-      // réponse hors-pool est traitée comme « safe » côté caller
-      // (cf. `classifyAgainst` dans `automod`).
+      // Prompt simple : on demande un seul label brut parmi le pool.
+      // `jsonFormat: false` — on ne veut pas que le modèle enveloppe
+      // sa sortie. Erreur du provider remontée au caller (automod
+      // logge + retombe sur `null` côté `classifyAgainst`).
       const labelList = labels.join(', ');
       const messages: OllamaMessage[] = [
         {
           role: 'system',
-          content: `Tu es un classifier de contenu Discord. On te donne un message et une liste de catégories. Réponds avec UN SEUL des labels listés, exactement, sans guillemets, sans explication. Catégories possibles : ${labelList}.`,
+          content: `Tu es un classifier de contenu Discord. Le message peut être dans n'importe quelle langue (français, anglais, espagnol, etc.). On te donne un message et une liste de catégories. Réponds avec UN SEUL des labels listés, exactement, en minuscules, sans guillemets, sans explication, sans ponctuation. Catégories possibles : ${labelList}.`,
         },
         { role: 'user', content: text.slice(0, 2000) },
       ];
-      try {
-        const { content } = await chat(messages);
-        const trimmed = content.trim().toLowerCase();
-        // Le JSON-mode d'Ollama peut envelopper la réponse — on essaye
-        // de tirer le label le plus simple qui matche.
-        for (const label of labels) {
-          if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
-            return label;
-          }
+      const { content } = await chat(messages, { jsonFormat: false });
+      const trimmed = content.trim().toLowerCase();
+      for (const label of labels) {
+        if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+          return label;
         }
-        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
-      } catch {
-        // Erreur réseau / timeout : fail-open vers `safe`.
-        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
       }
+      return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
     },
 
     async testConnection(): Promise<ProviderInfo> {

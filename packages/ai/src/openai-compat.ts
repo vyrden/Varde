@@ -240,7 +240,16 @@ export function createOpenAICompatibleProvider(
     ...extraHeaders,
   });
 
-  const chat = async (messages: readonly ChatMessage[]): Promise<{ readonly content: string }> => {
+  const chat = async (
+    messages: readonly ChatMessage[],
+    opts: { readonly jsonMode?: boolean } = {},
+  ): Promise<{ readonly content: string }> => {
+    // `jsonMode` est par défaut le `useJsonMode` du constructeur (true).
+    // Permet à `classify` de désactiver le mode JSON par-call : OpenAI
+    // refuse une requête `response_format=json_object` si le prompt ne
+    // contient pas le mot "JSON", ce qui faisait silencieusement
+    // échouer la classification automod.
+    const jsonMode = opts.jsonMode ?? useJsonMode;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -248,7 +257,8 @@ export function createOpenAICompatibleProvider(
         model,
         messages,
       };
-      if (useJsonMode) {
+      if (jsonMode) {
+        // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
         body['response_format'] = { type: 'json_object' };
       }
       const response = await fetchImpl(`${baseUrl}/chat/completions`, {
@@ -334,29 +344,26 @@ export function createOpenAICompatibleProvider(
     },
 
     async classify(text, labels) {
-      // Prompt simple en text mode (pas JSON) pour minimiser la
-      // latence — on attend juste un label brut. Hors-pool ⇒ caller
-      // fail-open vers `safe`.
+      // Prompt simple : on attend un label brut hors JSON. JSON mode
+      // explicitement désactivé — OpenAI 400 sur `response_format=json_object`
+      // si le prompt ne mentionne pas "JSON". Erreurs du provider remontées
+      // au caller (automod logge + retombe sur `null` côté `classifyAgainst`).
       const labelList = labels.join(', ');
       const messages: ChatMessage[] = [
         {
           role: 'system',
-          content: `You are a Discord content classifier. You receive a message and a list of categories. Reply with EXACTLY ONE of the listed labels, no quotes, no explanation. Allowed categories: ${labelList}.`,
+          content: `You are a Discord content classifier. The user message may be in any language (French, English, Spanish, etc.). You receive a message and a list of categories. Reply with EXACTLY ONE of the listed labels, lowercase, no quotes, no explanation, no punctuation. Allowed categories: ${labelList}.`,
         },
         { role: 'user', content: text.slice(0, 2000) },
       ];
-      try {
-        const { content } = await chat(messages);
-        const trimmed = content.trim().toLowerCase();
-        for (const label of labels) {
-          if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
-            return label;
-          }
+      const { content } = await chat(messages, { jsonMode: false });
+      const trimmed = content.trim().toLowerCase();
+      for (const label of labels) {
+        if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+          return label;
         }
-        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
-      } catch {
-        return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
       }
+      return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
     },
 
     async testConnection(): Promise<ProviderInfo> {

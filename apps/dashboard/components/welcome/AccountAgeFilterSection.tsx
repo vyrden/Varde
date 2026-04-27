@@ -15,16 +15,12 @@ export interface AccountAgeFilterSectionProps {
   readonly roles: readonly RoleOption[];
 }
 
+/**
+ * Contenu de la sous-section Filtre comptes neufs. L'activation est
+ * pilotée par la card parente (AdvancedConfigSection) ; on suppose
+ * ici que le composant n'est rendu que lorsque `value.enabled === true`.
+ */
 export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFilterSectionProps) {
-  // Activation gérée par le parent ExpandablePanel.
-  if (!value.enabled) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Active le filtre pour configurer le seuil et l'action appliquée aux comptes trop neufs.
-      </p>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="space-y-1">

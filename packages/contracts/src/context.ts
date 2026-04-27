@@ -627,6 +627,19 @@ export interface ModuleContext {
   readonly modules: ModulesService;
   readonly keystore: KeystoreService;
   readonly ai: AIService | null;
+  /**
+   * Résout l'`AIService` configuré pour une guild donnée. À utiliser
+   * depuis un handler d'event (`guild.messageCreate`, etc.) pour
+   * retomber sur la config IA de la guild courante — `ctx.ai` est
+   * fixé à l'instant du `onLoad` (sans guildId connu) et vaut donc
+   * `null` pour les modules qui n'ont pas de scope guild au load.
+   *
+   * Retourne `null` si aucun provider IA n'est configuré pour cette
+   * guild. Le coût d'un appel est négligeable (cache mémoïsé côté
+   * runtime), mais le résultat n'est valable que jusqu'au prochain
+   * `config.changed` de la guild — le runtime invalide alors le cache.
+   */
+  readonly aiFor: (guildId: GuildId) => AIService | null;
   readonly ui: UIService;
   readonly onboarding: OnboardingService;
   /**

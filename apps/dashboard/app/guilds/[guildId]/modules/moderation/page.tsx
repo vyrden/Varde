@@ -11,12 +11,14 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { AuditView } from '../../../../../components/audit/AuditView';
 import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
 import {
   type AiCategoryClient,
   type AutomodRuleClient,
+  type KeywordListLanguageClient,
   ModerationConfigForm,
+  type RestrictedChannelClient,
+  type RestrictedChannelModeClient,
 } from '../../../../../components/moderation/ModerationConfigForm';
 import { moduleIcon } from '../../../../../components/shell/module-icons';
 import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
@@ -25,6 +27,7 @@ import {
   fetchAdminGuilds,
   fetchAudit,
   fetchGuildRoles,
+  fetchGuildTextChannels,
   fetchModuleConfig,
   fetchModules,
   fetchUnboundPermissions,
@@ -39,6 +42,17 @@ interface ModerationPageProps {
  * Format `{ mutedRoleId, dmOnSanction, automod: { rules, bypassRoleIds }}`.
  * Tout champ absent ou mal typé tombe sur le défaut.
  */
+const isAiCategory = (c: unknown): c is AiCategoryClient =>
+  c === 'toxicity' ||
+  c === 'harassment' ||
+  c === 'hate' ||
+  c === 'sexual' ||
+  c === 'self-harm' ||
+  c === 'spam';
+
+const isRestrictedMode = (m: unknown): m is RestrictedChannelModeClient =>
+  m === 'commands' || m === 'images' || m === 'videos';
+
 const normalizeConfig = (
   raw: unknown,
 ): {
@@ -48,11 +62,13 @@ const normalizeConfig = (
     rules: readonly AutomodRuleClient[];
     bypassRoleIds: readonly string[];
   };
+  restrictedChannels: readonly RestrictedChannelClient[];
 } => {
   const fallback = {
     mutedRoleId: null,
     dmOnSanction: true,
     automod: { rules: [], bypassRoleIds: [] },
+    restrictedChannels: [],
   } as const;
   if (typeof raw !== 'object' || raw === null) return fallback;
   const obj = raw as Record<string, unknown>;
@@ -73,19 +89,28 @@ const normalizeConfig = (
     const rule = r as Record<string, unknown>;
     const id = rule['id'];
     const label = rule['label'];
-    const action = rule['action'];
     const kind = rule['kind'];
-    if (
-      typeof id !== 'string' ||
-      typeof label !== 'string' ||
-      (action !== 'delete' && action !== 'warn' && action !== 'mute')
-    ) {
-      return [];
-    }
+    if (typeof id !== 'string' || typeof label !== 'string') return [];
+
+    // Hydrate `actions[]` depuis le format multi-actions ou retombe
+    // sur le format legacy `action` (single). Filtre les valeurs
+    // inconnues et déduplique. Au moins une action requise.
+    const isAction = (v: unknown): v is 'delete' | 'warn' | 'mute' =>
+      v === 'delete' || v === 'warn' || v === 'mute';
+    const actionsRaw = rule['actions'];
+    const legacyAction = rule['action'];
+    const actionsParsed: ('delete' | 'warn' | 'mute')[] = Array.isArray(actionsRaw)
+      ? (actionsRaw as unknown[]).filter(isAction)
+      : isAction(legacyAction)
+        ? [legacyAction]
+        : [];
+    const actions = Array.from(new Set(actionsParsed));
+    if (actions.length === 0) return [];
+
     const base = {
       id,
       label,
-      action: action as 'delete' | 'warn' | 'mute',
+      actions,
       durationMs: typeof rule['durationMs'] === 'number' ? (rule['durationMs'] as number) : null,
       enabled: typeof rule['enabled'] === 'boolean' ? rule['enabled'] : true,
     };
@@ -109,15 +134,7 @@ const normalizeConfig = (
       ];
     }
     if (kind === 'ai-classify' && Array.isArray(rule['categories'])) {
-      const categories = (rule['categories'] as unknown[]).filter(
-        (c): c is AiCategoryClient =>
-          c === 'toxicity' ||
-          c === 'harassment' ||
-          c === 'hate' ||
-          c === 'sexual' ||
-          c === 'self-harm' ||
-          c === 'spam',
-      );
+      const categories = (rule['categories'] as unknown[]).filter(isAiCategory);
       if (categories.length === 0) return [];
       const maxContentLength =
         typeof rule['maxContentLength'] === 'number'
@@ -132,16 +149,84 @@ const normalizeConfig = (
         },
       ];
     }
+    if (kind === 'invites') {
+      const allowOwnGuild =
+        typeof rule['allowOwnGuild'] === 'boolean' ? rule['allowOwnGuild'] : true;
+      return [{ ...base, kind: 'invites', allowOwnGuild }];
+    }
+    if (kind === 'links') {
+      const mode = rule['mode'] === 'whitelist' ? 'whitelist' : 'block-all';
+      const whitelist = Array.isArray(rule['whitelist'])
+        ? (rule['whitelist'] as unknown[]).filter((w): w is string => typeof w === 'string')
+        : [];
+      return [{ ...base, kind: 'links', mode, whitelist }];
+    }
+    if (kind === 'caps') {
+      const minLength =
+        typeof rule['minLength'] === 'number'
+          ? Math.min(200, Math.max(4, rule['minLength'] as number))
+          : 8;
+      const ratio =
+        typeof rule['ratio'] === 'number'
+          ? Math.min(1, Math.max(0.3, rule['ratio'] as number))
+          : 0.7;
+      return [{ ...base, kind: 'caps', minLength, ratio }];
+    }
+    if (kind === 'emojis' && typeof rule['maxCount'] === 'number') {
+      const maxCount = Math.min(50, Math.max(2, rule['maxCount'] as number));
+      return [{ ...base, kind: 'emojis', maxCount }];
+    }
+    if (kind === 'spoilers' && typeof rule['maxCount'] === 'number') {
+      const maxCount = Math.min(20, Math.max(2, rule['maxCount'] as number));
+      return [{ ...base, kind: 'spoilers', maxCount }];
+    }
+    if (kind === 'mentions' && typeof rule['maxCount'] === 'number') {
+      const maxCount = Math.min(50, Math.max(2, rule['maxCount'] as number));
+      const includeRoles = typeof rule['includeRoles'] === 'boolean' ? rule['includeRoles'] : true;
+      return [{ ...base, kind: 'mentions', maxCount, includeRoles }];
+    }
+    if (kind === 'zalgo') {
+      const ratio =
+        typeof rule['ratio'] === 'number'
+          ? Math.min(1, Math.max(0.1, rule['ratio'] as number))
+          : 0.3;
+      return [{ ...base, kind: 'zalgo', ratio }];
+    }
+    if (kind === 'keyword-list' && Array.isArray(rule['categories'])) {
+      const categories = (rule['categories'] as unknown[]).filter(isAiCategory);
+      if (categories.length === 0) return [];
+      const language: KeywordListLanguageClient =
+        rule['language'] === 'fr' || rule['language'] === 'en' || rule['language'] === 'all'
+          ? rule['language']
+          : 'all';
+      const customWords = Array.isArray(rule['customWords'])
+        ? (rule['customWords'] as unknown[]).filter((w): w is string => typeof w === 'string')
+        : [];
+      return [{ ...base, kind: 'keyword-list', language, categories, customWords }];
+    }
     return [];
   });
   const bypassRoleIds = Array.isArray(automod['bypassRoleIds'])
     ? (automod['bypassRoleIds'] as unknown[]).filter((s): s is string => typeof s === 'string')
     : [];
 
+  const restrictedRaw = Array.isArray(obj['restrictedChannels'])
+    ? (obj['restrictedChannels'] as unknown[])
+    : [];
+  const restrictedChannels = restrictedRaw.flatMap((rc): RestrictedChannelClient[] => {
+    if (typeof rc !== 'object' || rc === null) return [];
+    const r = rc as Record<string, unknown>;
+    if (typeof r['channelId'] !== 'string' || !Array.isArray(r['modes'])) return [];
+    const modes = (r['modes'] as unknown[]).filter(isRestrictedMode);
+    if (modes.length === 0) return [];
+    return [{ channelId: r['channelId'] as string, modes }];
+  });
+
   return {
     mutedRoleId,
     dmOnSanction,
     automod: { rules, bypassRoleIds },
+    restrictedChannels,
   };
 };
 
@@ -171,15 +256,17 @@ export default async function ModerationPage({
   let moduleConfig: Awaited<ReturnType<typeof fetchModuleConfig>>;
   let unbound: Awaited<ReturnType<typeof fetchUnboundPermissions>>;
   let roles: Awaited<ReturnType<typeof fetchGuildRoles>>;
+  let channels: Awaited<ReturnType<typeof fetchGuildTextChannels>>;
   let auditPage: Awaited<ReturnType<typeof fetchAudit>>;
 
   try {
-    [guilds, modules, moduleConfig, unbound, roles, auditPage] = await Promise.all([
+    [guilds, modules, moduleConfig, unbound, roles, channels, auditPage] = await Promise.all([
       fetchAdminGuilds(),
       fetchModules(guildId),
       fetchModuleConfig(guildId, 'moderation'),
       fetchUnboundPermissions(guildId, 'moderation'),
       fetchGuildRoles(guildId),
+      fetchGuildTextChannels(guildId),
       fetchAudit(guildId, { moduleId: 'moderation', limit: 50 }),
     ]);
   } catch (error) {
@@ -251,31 +338,18 @@ export default async function ModerationPage({
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="flex flex-col gap-4 lg:col-span-2">
-              <ModerationConfigForm guildId={guildId} initial={config} roles={roles} />
-
+          <ModerationConfigForm
+            guildId={guildId}
+            initial={config}
+            roles={roles}
+            channels={channels}
+            auditInitialItems={auditPage.items}
+            auditInitialNextCursor={auditPage.nextCursor}
+            knownActions={knownActions}
+            statusCard={
               <Card>
                 <CardHeader>
-                  <CardTitle>Historique des sanctions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <AuditView
-                    guildId={guildId}
-                    initialItems={auditPage.items}
-                    initialNextCursor={auditPage.nextCursor}
-                    initialFilters={{}}
-                    knownActions={knownActions}
-                    lockedFilters={{ moduleId: 'moderation' }}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-
-            <aside className="flex flex-col gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">À propos</CardTitle>
+                  <CardTitle className="text-base">Statut du module</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex items-center justify-between">
@@ -283,7 +357,7 @@ export default async function ModerationPage({
                     <span className="font-mono text-foreground">v{modModule.version}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Statut</span>
+                    <span className="text-muted-foreground">Activation</span>
                     <ModuleEnabledToggle
                       guildId={guildId}
                       moduleId={modModule.id}
@@ -291,18 +365,17 @@ export default async function ModerationPage({
                       initialEnabled={isEnabled}
                     />
                   </div>
-                  <p className="pt-1 text-xs text-muted-foreground">
+                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
                     12 commandes :{' '}
                     <code>
                       /warn /kick /ban /tempban /unban /mute /tempmute /unmute /clear /slowmode
                       /infractions /case
                     </code>
-                    .
                   </p>
                 </CardContent>
               </Card>
-            </aside>
-          </div>
+            }
+          />
         )}
       </div>
     </>

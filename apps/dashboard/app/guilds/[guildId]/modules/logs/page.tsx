@@ -111,10 +111,7 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
     <>
       <header className="bg-surface px-6 pt-5 pb-4">
         <PageBreadcrumb
-          items={[
-            { label: 'Modules', href: `/guilds/${guildId}` },
-            { label: logsModule.name },
-          ]}
+          items={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: logsModule.name }]}
         />
         <div className="flex items-center gap-3">
           <div
@@ -124,7 +121,9 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
           >
             {moduleIcon('logs', 20)}
           </div>
-          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">{logsModule.name}</h1>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            {logsModule.name}
+          </h1>
           <Badge variant={isEnabled ? 'active' : 'inactive'}>
             {isEnabled ? 'Actif' : 'Inactif'}
           </Badge>
@@ -136,63 +135,65 @@ export default async function LogsPage({ params }: LogsPageProps): Promise<React
         </p>
       </header>
       <Separator />
-      <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <UnboundPermissionsBanner
-              permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
-              configureHref={`/guilds/${guildId}/settings/permissions?focus=logs`}
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-6">
+        <UnboundPermissionsBanner
+          permissions={unbound.map((p) => ({ id: p.id, description: p.description }))}
+          configureHref={`/guilds/${guildId}/settings/permissions?focus=logs`}
+        />
+
+        {!isEnabled ? (
+          <div
+            role="status"
+            className="flex items-start justify-between gap-4 rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
+          >
+            <div>
+              <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tant qu'il reste désactivé, aucun événement ne sera capturé ni envoyé vers un
+                salon. Active-le pour reprendre la capture.
+              </p>
+            </div>
+            <ModuleEnabledToggle
+              guildId={guildId}
+              moduleId={logsModule.id}
+              moduleName={logsModule.name}
+              initialEnabled={isEnabled}
             />
-
-            {!isEnabled ? (
-              <div
-                role="status"
-                className="rounded-lg border border-info/40 bg-info/10 p-5 text-foreground"
-              >
-                <p className="font-semibold">Le module n'est pas activé sur cette guild.</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Tant qu'il reste désactivé, aucun événement ne sera capturé ni envoyé vers un
-                  salon. Activez-le via le toggle dans la sidebar « À propos » pour reprendre la
-                  capture.
-                </p>
-              </div>
-            ) : (
-              <LogsConfigEditor
-                guildId={guildId}
-                initialConfig={normalizeLogsConfig(moduleConfig.config)}
-                brokenRoutes={brokenRoutes}
-                channels={channels}
-                roles={roles}
-              />
-            )}
           </div>
-
-          <aside className="flex flex-col gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>À propos</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Version</span>
-                  <span className="font-mono text-foreground">v{logsModule.version}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Statut</span>
-                  <ModuleEnabledToggle
-                    guildId={guildId}
-                    moduleId={logsModule.id}
-                    moduleName={logsModule.name}
-                    initialEnabled={isEnabled}
-                  />
-                </div>
-                <p className="pt-1 text-xs text-muted-foreground">
-                  Les logs sont envoyés en temps réel dans le salon sélectionné.
-                </p>
-              </CardContent>
-            </Card>
-          </aside>
-        </div>
+        ) : (
+          <LogsConfigEditor
+            guildId={guildId}
+            initialConfig={normalizeLogsConfig(moduleConfig.config)}
+            brokenRoutes={brokenRoutes}
+            channels={channels}
+            roles={roles}
+            statusCard={
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Statut du module</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Version</span>
+                    <span className="font-mono text-foreground">v{logsModule.version}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Activation</span>
+                    <ModuleEnabledToggle
+                      guildId={guildId}
+                      moduleId={logsModule.id}
+                      moduleName={logsModule.name}
+                      initialEnabled={isEnabled}
+                    />
+                  </div>
+                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                    Les logs sont envoyés en temps réel dans le salon sélectionné.
+                  </p>
+                </CardContent>
+              </Card>
+            }
+          />
+        )}
       </div>
     </>
   );

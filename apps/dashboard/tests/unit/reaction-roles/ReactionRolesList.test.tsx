@@ -24,20 +24,22 @@ const msg = {
   ],
 };
 
+const STATUS_CARD = <div data-testid="status-card">status</div>;
+
 const baseProps = {
-  guildId: 'g1',
   channelNameById: {},
-  version: '1.0.0',
-  isEnabled: true,
   onAddNew: vi.fn(),
   onEdit: vi.fn(),
   onDelete: vi.fn(),
+  statusCard: STATUS_CARD,
 };
 
 describe('ReactionRolesList', () => {
-  it("affiche un état vide quand aucun message n'est configuré", () => {
+  it("affiche un état vide pédagogique quand aucun message n'est configuré", () => {
     render(<ReactionRolesList {...baseProps} messages={[]} />);
-    expect(screen.getByText(/Aucun reaction-role configuré/i)).toBeDefined();
+    expect(
+      screen.getByText(/Crée des messages où tes membres cliquent pour obtenir un rôle/i),
+    ).toBeDefined();
   });
 
   it('affiche les messages avec label + mode', () => {
@@ -49,9 +51,16 @@ describe('ReactionRolesList', () => {
     expect(screen.getByText('Unique')).toBeDefined();
   });
 
-  it('clic + Nouveau appelle onAddNew', () => {
+  it('clic + Créer un reaction-role (état vide) appelle onAddNew', () => {
     const onAddNew = vi.fn();
     render(<ReactionRolesList {...baseProps} messages={[]} onAddNew={onAddNew} />);
+    fireEvent.click(screen.getByRole('button', { name: /Créer un reaction-role/i }));
+    expect(onAddNew).toHaveBeenCalled();
+  });
+
+  it('clic + Nouveau reaction-role (liste rempli) appelle onAddNew', () => {
+    const onAddNew = vi.fn();
+    render(<ReactionRolesList {...baseProps} messages={[msg]} onAddNew={onAddNew} />);
     fireEvent.click(screen.getByRole('button', { name: /Nouveau reaction-role/i }));
     expect(onAddNew).toHaveBeenCalled();
   });
@@ -67,13 +76,18 @@ describe('ReactionRolesList', () => {
     const onDelete = vi.fn();
     render(<ReactionRolesList {...baseProps} messages={[msg]} onDelete={onDelete} />);
     fireEvent.click(screen.getByRole('button', { name: /Supprimer Continents/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Confirmer$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Supprimer$/i }));
     expect(onDelete).toHaveBeenCalledWith(msg.id);
   });
 
-  it('affiche le nombre correct de messages publiés', () => {
+  it('affiche le nombre correct de messages configurés', () => {
     const msg2 = { ...msg, id: 'aaaa', label: 'Couleurs', messageId: '555' };
     render(<ReactionRolesList {...baseProps} messages={[msg, msg2]} />);
-    expect(screen.getByText(/2 messages publiés/i)).toBeDefined();
+    expect(screen.getByText(/2 messages? configurés?/i)).toBeDefined();
+  });
+
+  it('rend le statusCard injecté', () => {
+    render(<ReactionRolesList {...baseProps} messages={[]} />);
+    expect(screen.getByTestId('status-card')).toBeDefined();
   });
 });

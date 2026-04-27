@@ -81,6 +81,20 @@ export type GuildMemberUpdateEvent = z.infer<typeof guildMemberUpdateSchema>;
 
 // --- Événements Discord : messages ---
 
+/**
+ * Attachement Discord normalisé pour les events. Le `contentType`
+ * est le MIME ; certains messages historiques l'ont à `null` (Discord
+ * peut ne pas l'avoir encore détecté côté CDN). Les modules consommateurs
+ * doivent fail-open (traiter `null` comme « inconnu ») plutôt que rejeter.
+ */
+export const messageAttachmentSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  filename: z.string().optional(),
+  contentType: z.string().nullable().optional(),
+});
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
 export const guildMessageCreateSchema = z.object({
   type: z.literal('guild.messageCreate'),
   guildId: guildIdSchema,
@@ -89,6 +103,12 @@ export const guildMessageCreateSchema = z.object({
   authorId: userIdSchema,
   content: z.string(),
   createdAt: timestampSchema,
+  /**
+   * Attachements liés au message. Vide si aucun. Optionnel pour la
+   * rétro-compat avec les modules qui ne le lisent pas — les modules
+   * qui l'attendent lisent `attachments ?? []`.
+   */
+  attachments: z.array(messageAttachmentSchema).readonly().default([]),
 });
 export type GuildMessageCreateEvent = z.infer<typeof guildMessageCreateSchema>;
 

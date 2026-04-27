@@ -75,6 +75,12 @@ interface MessageCreateInput {
   readonly authorId: string;
   readonly content: string;
   readonly createdAt: number;
+  readonly attachments?: ReadonlyArray<{
+    readonly id: string;
+    readonly url: string;
+    readonly filename?: string;
+    readonly contentType?: string | null;
+  }>;
 }
 
 interface MessageUpdateInput {
@@ -249,6 +255,7 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         authorId: input.authorId as UserId,
         content: input.content,
         createdAt: input.createdAt,
+        attachments: input.attachments ?? [],
       };
     case 'messageUpdate':
       return {
