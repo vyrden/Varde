@@ -82,10 +82,154 @@ Le projet applique les pratiques suivantes :
 - Revue des PR obligatoire pour le code critique (core, permissions,
   audit, sécurité).
 - Scan de dépendances automatisé à chaque PR et planifié.
-- Scan de secrets en CI.
+- Scan de secrets en CI (gitleaks, voir
+  `.github/workflows/secrets-scan.yml`).
 - Dépendances de sécurité haute ou critique mises à jour sous 7 jours.
 - Builds reproductibles documentés.
+- Headers de sécurité posés sur 100 % des réponses HTTP : CSP, HSTS,
+  X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+  Permissions-Policy. Côté API via `@fastify/helmet`, côté dashboard
+  via `next.config.mjs#headers()`.
+- Rate limiting global sur l'API (300 req/min/IP par défaut), plafond
+  serré sur les routes IA (10 req/min/IP) qui appellent un provider
+  LLM externe.
+- Stockage des secrets tiers chiffré au repos en AES-256-GCM via le
+  keystore (voir ADR 0001 `keystore`).
 - Images Docker signées (à terme, avec cosign ou équivalent).
+
+## Modèle de menaces (V1)
+
+Cette section liste explicitement les attaques considérées et celles
+hors-scope, pour cadrer les attentes côté reporter et côté
+mainteneur.
+
+### Considérées
+
+- **Compromission d'un compte admin Discord** : un attaquant qui
+  obtient les identifiants Discord d'un admin avec MANAGE_GUILD peut
+  reconfigurer ses serveurs via le dashboard. Mitigation : pas de
+  privilège dashboard au-delà de ce que Discord OAuth2 + MANAGE_GUILD
+  autorisent déjà. L'audit log centralisé trace toute action.
+- **Vol du token bot Discord** : un attaquant qui exfiltre
+  `VARDE_DISCORD_TOKEN` peut piloter le bot sur tous les serveurs où
+  il est invité. Mitigation : token env-only, jamais persisté en DB,
+  jamais logué. Procédure de révocation documentée plus bas.
+- **Injection SQL** : surface réduite par Drizzle paramétré partout,
+  validation Zod aux frontières d'API.
+- **XSS dashboard** : React échappe par défaut, le rendu Markdown
+  Discord (`renderDiscordMarkdown`) échappe explicitement
+  `<` `>` `&` avant insertion. CSP en complément.
+- **CSRF** : routes mutantes côté API exigent une session JWT signée
+  HS256 (cookie HttpOnly + SameSite). Auth.js gère côté Next.
+- **Rejeu de session** : le JWT est court-vécu (rotation au refresh
+  OAuth Discord).
+- **Abus de routes coûteuses (LLM)** : rate limiting strict sur
+  `/onboarding/ai/*` (10 req/min/IP).
+- **Fuite de secrets via logs** : aucune entrée logger n'embarque
+  token / clé / password — vérifié par grep automatique au build.
+
+### Hors scope
+
+- **Compromission de l'OS hôte** : si l'attaquant a un shell sur la
+  machine, il a accès aux variables d'environnement et à la DB. La
+  responsabilité revient à l'opérateur (durcissement OS, isolation
+  réseau).
+- **Compromission de l'API Discord elle-même** : pas de défense
+  côté projet contre une faille Discord upstream.
+- **Modules tiers malveillants** : un opérateur qui installe un
+  module non audité s'expose. Le contrat module donne accès à
+  `ctx.keystore`, `ctx.config`, `ctx.discord` — un module hostile
+  peut exfiltrer ce que ces APIs lui exposent. Recommandation :
+  n'installer que des modules audités. Isolation worker thread
+  prévue en V1.2.
+
+## Procédures opérationnelles
+
+Ces procédures s'adressent à l'**administrateur de l'instance**
+auto-hébergée. Elles supposent un accès shell au serveur et aux
+variables d'environnement.
+
+### Rotation de la master key (chiffrement keystore)
+
+Le keystore chiffre les secrets tiers (clés API IA, etc.) avec
+AES-256-GCM. La master key vit en variable d'environnement, jamais
+en base. Pour la roter sans interruption :
+
+1. Générer une nouvelle clé 32 octets :
+
+   ```sh
+   openssl rand -base64 32
+   ```
+
+2. Sur le process en cours :
+   - Déclarer la nouvelle clé en `VARDE_KEYSTORE_MASTER_KEY`.
+   - Déclarer **l'ancienne** clé en
+     `VARDE_KEYSTORE_PREVIOUS_MASTER_KEY`.
+3. Redémarrer `apps/server`. Au démarrage, le keystore continue à
+   lire les enregistrements existants chiffrés sous l'ancienne clé
+   (fallback `previousMasterKey`), et chaque écriture utilise la
+   nouvelle clé.
+4. La ré-encryption se fait **paresseusement** : un secret n'est
+   ré-écrit qu'au prochain `put`. Pour forcer la ré-encryption
+   complète, utiliser la méthode `rekey()` du `KeystoreService` (à
+   exposer via une commande administrateur — issue trackée pour le
+   jalon 6).
+5. Une fois la ré-encryption complète, retirer
+   `VARDE_KEYSTORE_PREVIOUS_MASTER_KEY` et redémarrer.
+
+**Critères de réussite** : aucun `get` ne retombe sur l'ancienne
+clé, les `ai_invocations` continuent à fonctionner sans erreur de
+déchiffrement.
+
+### Révocation d'un token bot Discord compromis
+
+Si tu soupçonnes que `VARDE_DISCORD_TOKEN` a fuité :
+
+1. **Immédiatement** : aller sur
+   <https://discord.com/developers/applications/{APP_ID}/bot>,
+   cliquer « Reset Token ». L'ancien token est invalidé
+   instantanément côté Discord.
+2. Mettre à jour `VARDE_DISCORD_TOKEN` dans le secret manager du
+   serveur (ou `.env.local` en dev) avec le nouveau token.
+3. Redémarrer `apps/server`. Le bot reconnecte avec le nouveau
+   token.
+4. Auditer le journal du bot (`pino` JSON logs) entre la fuite
+   estimée et la rotation pour repérer toute action anormale.
+5. Si un audit révèle des actions hostiles, utiliser l'audit log
+   centralisé (`/guilds/:id/audit` côté dashboard) pour reconstituer
+   l'impact serveur par serveur.
+
+### Révocation d'une clé API IA fuitée
+
+1. Révoquer la clé chez le provider (OpenAI dashboard, OpenRouter,
+   Groq, etc. — chaque provider a un bouton de révocation).
+2. Aller sur `/guilds/:id/settings/ai` côté dashboard, saisir la
+   nouvelle clé. L'ancienne est écrasée dans le keystore (chiffrée
+   au repos).
+3. Vérifier dans `ai_invocations` qu'il n'y a pas eu d'appels
+   non-attendus avec la clé compromise.
+
+### Audit ponctuel de l'instance (checklist opérateur)
+
+À faire à chaque mise en production majeure ou tous les 3 mois :
+
+- [ ] `pnpm audit` ne signale aucune vulnérabilité HIGH ou CRITICAL.
+- [ ] Le scan gitleaks de la dernière build CI est passé.
+- [ ] Les variables d'environnement sensibles
+      (`VARDE_DISCORD_TOKEN`, `VARDE_KEYSTORE_MASTER_KEY`,
+      `VARDE_DATABASE_URL`, `AUTH_SECRET`) ne sont pas dans les logs
+      Pino du serveur — `grep -i "VARDE_\|MASTER_KEY\|DISCORD_TOKEN"`
+      sur la sortie JSON doit retourner 0 ligne.
+- [ ] Le user PostgreSQL utilisé n'est pas superuser et n'a accès
+      qu'au schéma de l'app.
+- [ ] Headers de sécurité présents sur les réponses du dashboard :
+      `curl -sI https://dashboard.example/ | grep -iE
+      "content-security-policy|strict-transport|x-frame"` retourne
+      au moins ces 3 lignes.
+- [ ] Backups DB testés : un `pg_restore` a réussi sur une instance
+      jetable dans le mois écoulé.
+- [ ] `VARDE_KEYSTORE_MASTER_KEY` rotée dans les 12 derniers mois,
+      ou rotation planifiée et tracée dans le calendrier opérateur.
 
 ## Safe harbor
 
