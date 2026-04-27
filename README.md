@@ -6,7 +6,7 @@ copilote de l'admin.
 
 ## Statut
 
-Projet en conception avancée — jalon 4 livré, jalon 5 (polish V1)
+Projet en conception avancée — jalon 5 livré, jalon 6 (polish V1)
 restant avant V1.0.0.
 
 - Jalon 1 (core minimum viable) terminé (2026-04-21) : le noyau sait
@@ -43,6 +43,28 @@ restant avant V1.0.0.
   pages module avec primitives partagées (`StickyActionBar`,
   `CollapsibleSection`, `EntityMultiPicker`, `DiscordMessagePreview`,
   `useDirtyExitGuard`).
+- Jalon 5 (sécurité béton + polish technique) terminé (2026-04-27) :
+  surface d'attaque auditée et fermée, debt visible adressée,
+  performances mesurées, robustesse vérifiée. Concrètement —
+  `pnpm audit` clean (zéro CRITICAL/HIGH, audit bloquant en CI),
+  headers de sécurité (CSP, HSTS, X-Frame-Options, etc.) posés sur
+  100 % des réponses HTTP côté API (`@fastify/helmet`) et dashboard
+  (`next.config.mjs#headers()`), rate limiting global API
+  (300 req/min/IP) avec plafond serré sur `/onboarding/ai/*`
+  (10 req/min/IP), magic bytes check sur les uploads d'image, test
+  statique qui empêche toute future route mutante d'oublier
+  `requireGuildAdmin`, observabilité gateway Discord (listeners
+  error / shardError / shardDisconnect / shardReconnecting /
+  shardReady / shardResume / warn), résilience DB validée
+  (graceful 5xx, pas de crash process), audit du flow Auth.js v5
+  avec redaction `accessToken` sur `/me`, rotation master key
+  testée bout-en-bout, couverture tests core/api > 75 % avec
+  plancher anti-régression en CI, bundle dashboard sous plafond
+  (~355 KB gzipped) avec check CI. `SECURITY.md` enrichi : modèle
+  de menaces V1 explicite et procédures opérateur (rotation
+  `VARDE_KEYSTORE_MASTER_KEY`, rotation `VARDE_AUTH_SECRET`,
+  révocation token bot, révocation clé API IA, bench p95,
+  validation 24 h pré-release).
 
 Paquets livrés à ce jour :
 
@@ -106,21 +128,19 @@ Paquets livrés à ce jour :
 
 Reste à livrer avant V1.0.0 :
 
-- **Jalon 5 — sécurité béton + polish technique** : audit auth /
-  autorisation / secrets, headers HTTP (CSP, HSTS, X-Frame-Options),
-  rate limiting API, validation aux frontières, supply chain
-  (`pnpm audit`, `gitleaks` en CI), hygiène code (zéro warning
-  évitable, audit `any`, dead code), performance (bundle dashboard,
-  bot stable 24 h), robustesse pannes (DB / Redis / Discord),
-  couverture tests > 75 %, doc procédure (rotation master key,
-  révocation token bot compromis).
 - **Jalon 6 — polish V1** : internationalisation FR/EN du dashboard,
   documentation utilisateur, guide création de module tiers,
   compose production, tests Playwright sur parcours critiques,
   changelog. Critère de sortie : V1.0.0 publiable.
 
-Tag `v0.4.0` publié pour la fin du jalon 4 ; pas encore de release
-V1.0.0.
+Le jalon 5 (sécurité béton + polish technique) est par ailleurs
+**récurrent** : sa checklist complète est rejouée tous les 4-5
+jalons de développement pour empêcher la dette de s'accumuler
+(audit dépendances, hygiène code, couverture, headers,
+robustesse, doc procédures opérateur).
+
+Tags publiés : `v0.4.0` (fin jalon 4), `v0.5.0` (fin jalon 5).
+Pas encore de release V1.0.0.
 
 ## Pourquoi un bot de plus
 
