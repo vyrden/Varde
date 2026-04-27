@@ -77,7 +77,6 @@ const MODULE_ID = 'logs' as ModuleId;
  */
 export function resolveConfig(raw: unknown): LogsConfig {
   const asObj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess impose l'accès par clé sur Record<string, unknown>
   const modules = (asObj['modules'] ?? {}) as Record<string, unknown>;
   const own = modules[MODULE_ID] ?? {};
   return logsConfigSchema.parse(own);

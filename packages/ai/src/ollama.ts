@@ -193,7 +193,6 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
         messages,
         stream: false,
       };
-      // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
       if (jsonFormat) body['format'] = 'json';
       const response = await fetchImpl(`${endpoint}/api/chat`, {
         method: 'POST',

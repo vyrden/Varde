@@ -199,7 +199,6 @@ const MODULE_ID = 'reaction-roles';
  */
 export function resolveConfig(raw: unknown): ReactionRolesConfig {
   const asObj = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  // biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for index signatures
   const modules = asObj['modules'];
   const moduleConfig =
     modules !== undefined && modules !== null && typeof modules === 'object'

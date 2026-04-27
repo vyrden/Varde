@@ -21,14 +21,12 @@ import { resolveConfig } from '../config.js';
 
 /** Lit une option string non vide ; renvoie null si absente. */
 export const readStringOption = (input: CommandInteractionInput, name: string): string | null => {
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
   const raw = input.options[name];
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 };
 
 /** Lit une option number ; renvoie null si absente / NaN. */
 export const readNumberOption = (input: CommandInteractionInput, name: string): number | null => {
-  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation
   const raw = input.options[name];
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
 };

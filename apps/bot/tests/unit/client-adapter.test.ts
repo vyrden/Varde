@@ -401,7 +401,6 @@ describe('attachDiscordClient — interactionCreate (resolved)', () => {
     const input = dispatchCommand.mock.calls[0]?.[0] as {
       resolved: { roles: Record<string, { id: string; name: string; position: number }> };
     };
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature
     expect(input.resolved.roles['r1']).toEqual({ id: 'r1', name: 'Modo', position: 12 });
   });
 
@@ -426,7 +425,6 @@ describe('attachDiscordClient — interactionCreate (resolved)', () => {
     const input = dispatchCommand.mock.calls[0]?.[0] as {
       resolved: { channels: Record<string, { id: string; name: string; type: number }> };
     };
-    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature
     expect(input.resolved.channels['c1']).toEqual({ id: 'c1', name: 'général', type: 0 });
   });
 

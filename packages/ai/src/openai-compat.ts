@@ -258,7 +258,6 @@ export function createOpenAICompatibleProvider(
         messages,
       };
       if (jsonMode) {
-        // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
         body['response_format'] = { type: 'json_object' };
       }
       const response = await fetchImpl(`${baseUrl}/chat/completions`, {

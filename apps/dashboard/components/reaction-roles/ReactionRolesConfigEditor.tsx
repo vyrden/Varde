@@ -44,7 +44,9 @@ type View =
  * passe à la landing uniquement (pas affiché en éditeur — focus sur
  * la tâche d'édition).
  */
-export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps): ReactElement {
+export function ReactionRolesConfigEditor(
+  props: ReactionRolesConfigEditorProps,
+): ReactElement | null {
   const [messages, setMessages] = useState<readonly ReactionRoleMessageClient[]>(
     props.initialMessages,
   );
@@ -109,7 +111,7 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
   const current = messages.find((m) => m.id === view.messageId);
   if (!current) {
     setView({ kind: 'list' });
-    return <></>;
+    return null;
   }
   return (
     <ReactionRoleEditor

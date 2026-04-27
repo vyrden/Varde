@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 
-// biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for process.env
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 const SESSION_COOKIE = 'varde.session';
 
