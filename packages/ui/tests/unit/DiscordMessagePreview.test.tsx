@@ -59,6 +59,36 @@ describe('renderDiscordMarkdown', () => {
     expect(out).toContain('<li>bravo</li>');
   });
 
+  it('listes : exige un whitespace après le marker (-foo n est pas une liste)', () => {
+    const out = renderDiscordMarkdown('-foo\n*bar\n1.baz');
+    expect(out).not.toContain('<ul');
+    expect(out).not.toContain('<ol');
+    expect(out).toContain('<p>-foo</p>');
+    expect(out).toContain('<p>*bar</p>');
+    expect(out).toContain('<p>1.baz</p>');
+  });
+
+  it('listes : tolère plusieurs whitespaces après le marker', () => {
+    const longSpaces = `-${' '.repeat(1000)}item`;
+    const out = renderDiscordMarkdown(longSpaces);
+    expect(out).toContain('<ul');
+    expect(out).toContain('<li>item</li>');
+  });
+
+  it('listes ordonnées : borne sur le nombre de chiffres (>9 chiffres → paragraphe)', () => {
+    const out = renderDiscordMarkdown('1234567890. trop de chiffres');
+    expect(out).not.toContain('<ol');
+    expect(out).toContain('<p>1234567890. trop de chiffres</p>');
+  });
+
+  it('listes : aucun ReDoS exploitable même sur ligne très longue (sanity O(n))', () => {
+    const longLine = `-${'a'.repeat(100_000)}`;
+    const start = Date.now();
+    renderDiscordMarkdown(longLine);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   it('rend > en blockquote', () => {
     const out = renderDiscordMarkdown('> citation discrète');
     expect(out).toContain('<blockquote');
