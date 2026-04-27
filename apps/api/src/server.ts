@@ -1,6 +1,7 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import type { Logger } from '@varde/contracts';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
@@ -41,6 +42,14 @@ export interface CreateApiServerOptions {
   readonly corsOrigin?: string | false;
   /** Exposer `/health` publiquement (défaut : `true`). */
   readonly exposeHealth?: boolean;
+  /**
+   * Plafond global de requêtes par IP par minute. Défaut : `300`
+   * (5/s en moyenne, large). Mettre `false` pour désactiver le
+   * rate limiting (utile pour les benchmarks de tests).
+   */
+  readonly rateLimitMax?: number | false;
+  /** Fenêtre de comptage. Défaut : `'1 minute'`. */
+  readonly rateLimitTimeWindow?: string;
 }
 
 /**
@@ -49,7 +58,15 @@ export interface CreateApiServerOptions {
  * fonctions aux PR 2.4–2.6.
  */
 export async function createApiServer(options: CreateApiServerOptions): Promise<FastifyInstance> {
-  const { authenticator, corsOrigin = false, exposeHealth = true, logger, version } = options;
+  const {
+    authenticator,
+    corsOrigin = false,
+    exposeHealth = true,
+    logger,
+    version,
+    rateLimitMax = 300,
+    rateLimitTimeWindow = '1 minute',
+  } = options;
 
   // Fastify a son propre logger Pino interne ; on se contente d'un
   // relai via le logger injecté pour les quelques messages posés
@@ -84,6 +101,24 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
 
   if (corsOrigin !== false) {
     await app.register(cors, { origin: corsOrigin, credentials: true });
+  }
+
+  // Rate limiting global (jalon 5). Posé avant les routes pour que
+  // le pre-handler check tous les endpoints, même `/health`. Les
+  // routes coûteuses (LLM via `/onboarding/ai/*`) imposent un
+  // plafond plus strict via `config.rateLimit` au niveau route.
+  // `skipOnError: true` (défaut) : si le store interne plante, on
+  // laisse passer plutôt que de DoS soi-même.
+  if (rateLimitMax !== false) {
+    await app.register(rateLimit, {
+      max: rateLimitMax,
+      timeWindow: rateLimitTimeWindow,
+      // Identifie l'appelant par IP. En prod derrière un reverse-
+      // proxy (Caddy/Traefik), Fastify lit `X-Forwarded-For` si la
+      // chaîne `trustProxy` est posée — pas nécessaire en V1
+      // tant qu'on est en single-host. Doc à compléter au jalon 6.
+      keyGenerator: (request) => request.ip,
+    });
   }
 
   const ensureSession = async (request: FastifyRequest): Promise<SessionData> => {

@@ -149,6 +149,54 @@ describe('createApiServer — security headers', () => {
   });
 });
 
+describe('createApiServer — rate limiting', () => {
+  it('renvoie 429 quand le plafond global est dépassé', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+      // Plafond minimal pour tester la limite sans flooder le test.
+      rateLimitMax: 3,
+      rateLimitTimeWindow: '1 minute',
+    });
+    try {
+      // 3 réponses 200 puis 429 sur la 4e.
+      const r1 = await app.inject({ method: 'GET', url: '/health' });
+      const r2 = await app.inject({ method: 'GET', url: '/health' });
+      const r3 = await app.inject({ method: 'GET', url: '/health' });
+      const r4 = await app.inject({ method: 'GET', url: '/health' });
+      expect(r1.statusCode).toBe(200);
+      expect(r2.statusCode).toBe(200);
+      expect(r3.statusCode).toBe(200);
+      expect(r4.statusCode).toBe(429);
+      // Headers informatifs posés par le plugin.
+      expect(r1.headers['x-ratelimit-limit']).toBeDefined();
+      expect(r1.headers['x-ratelimit-remaining']).toBeDefined();
+      expect(r4.headers['retry-after']).toBeDefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rateLimitMax=false désactive le plafond', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+      rateLimitMax: false,
+    });
+    try {
+      // 10 requêtes consécutives sans 429.
+      for (let i = 0; i < 10; i += 1) {
+        const r = await app.inject({ method: 'GET', url: '/health' });
+        expect(r.statusCode).toBe(200);
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe('createApiServer — CORS', () => {
   it('expose les headers CORS quand corsOrigin est défini', async () => {
     const app = await createApiServer({
