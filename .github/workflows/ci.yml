@@ -39,6 +39,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Audit supply chain (jalon 5 PR 5.5). Bloque la CI si une
+      # dépendance directe ou transitive a une vulnérabilité connue
+      # de niveau HIGH ou CRITICAL. Les MODERATE et LOW remontent
+      # mais ne fail pas — laissés à la décision du mainteneur via
+      # `pnpm audit` local. Les overrides du root `package.json`
+      # forcent les versions patchées sur les transitives qu'on ne
+      # contrôle pas directement (next>postcss, testcontainers>uuid).
+      - name: Audit dependencies
+        run: pnpm audit --audit-level high
+
       - name: Cache Turborepo
         uses: actions/cache@v4
         with:
