@@ -328,6 +328,48 @@ export function attachDiscordClient(
     dispatch(reactionInput(reaction as MessageReaction, user as User, 'messageReactionRemove')),
   );
 
+  // Gateway lifecycle (jalon 5 PR 5.9). Discord.js v14 auto-reconnecte
+  // les shards et tolère silencieusement les erreurs WS internes —
+  // sans ces listeners on n'aurait aucune trace d'un incident gateway
+  // (déconnexion, error d'un shard, warning de la lib). On les expose
+  // au logger pour que l'opérateur ait une vue claire de la santé de
+  // la connexion.
+  on('error', (rawError) => {
+    const error = rawError instanceof Error ? rawError : new Error(String(rawError));
+    log.error('discord client error', error);
+  });
+  on('warn', (rawMessage) => {
+    log.warn('discord client warn', { message: String(rawMessage) });
+  });
+  on('shardError', (rawError, shardId) => {
+    const error = rawError instanceof Error ? rawError : new Error(String(rawError));
+    log.error('discord shard error', error, { shardId: Number(shardId) });
+  });
+  on('shardDisconnect', (closeEvent, shardId) => {
+    const event = closeEvent as { code?: unknown; reason?: unknown } | null;
+    log.warn('discord shard disconnect', {
+      shardId: Number(shardId),
+      code: typeof event?.code === 'number' ? event.code : null,
+      reason: typeof event?.reason === 'string' ? event.reason : null,
+    });
+  });
+  on('shardReconnecting', (shardId) => {
+    log.info('discord shard reconnecting', { shardId: Number(shardId) });
+  });
+  on('shardReady', (shardId) => {
+    log.info('discord shard ready', { shardId: Number(shardId) });
+  });
+  on('shardResume', (shardId, replayedEvents) => {
+    // `shardResume` signale que le shard a repris une session
+    // existante au lieu de tout redécouvrir : moins coûteux qu'un
+    // shardReady après reconnect "froid". Le compteur d'événements
+    // rejoués mesure l'écart pendant la déconnexion.
+    log.info('discord shard resume', {
+      shardId: Number(shardId),
+      replayedEvents: typeof replayedEvents === 'number' ? replayedEvents : 0,
+    });
+  });
+
   // Interaction routing.
   const handleChatInputCommand = async (
     interaction: ChatInputCommandInteraction,

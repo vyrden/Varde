@@ -550,5 +550,164 @@ describe('attachDiscordClient — interactionCreate (options)', () => {
   });
 });
 
+describe('attachDiscordClient — gateway lifecycle (jalon 5 PR 5.9)', () => {
+  /**
+   * Capture les appels logger pour vérifier que les listeners gateway
+   * remontent les incidents avec les bons niveaux et metadata. Sans
+   * ces listeners, les erreurs gateway et les disconnects de shard
+   * étaient silencieusement avalés par discord.js, sans trace côté
+   * audit.
+   */
+  interface LogCall {
+    readonly level: 'info' | 'warn' | 'error';
+    readonly message: string;
+    readonly error?: Error;
+    readonly meta?: Record<string, unknown>;
+  }
+
+  const makeRecordingLogger = (calls: LogCall[]): import('@varde/contracts').Logger => {
+    const noop = () => {};
+    const logger: import('@varde/contracts').Logger = {
+      trace: noop,
+      debug: noop,
+      info: (message, meta) => calls.push({ level: 'info', message, ...(meta ? { meta } : {}) }),
+      warn: (message, meta) => calls.push({ level: 'warn', message, ...(meta ? { meta } : {}) }),
+      error: (message, error, meta) =>
+        calls.push({
+          level: 'error',
+          message,
+          ...(error ? { error } : {}),
+          ...(meta ? { meta } : {}),
+        }),
+      fatal: noop,
+      child: () => logger,
+    };
+    return logger;
+  };
+
+  it("loggue 'discord client error' en niveau error sur l'event error", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    const cause = new Error('WS handshake failed');
+    fake.trigger('error', cause);
+
+    const entry = calls.find((c) => c.message === 'discord client error');
+    expect(entry).toBeDefined();
+    expect(entry?.level).toBe('error');
+    expect(entry?.error).toBe(cause);
+  });
+
+  it("loggue 'discord client warn' en niveau warn avec le message lib", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('warn', 'Heartbeat ack arrived late');
+
+    const entry = calls.find((c) => c.message === 'discord client warn');
+    expect(entry?.level).toBe('warn');
+    expect(entry?.meta?.['message']).toBe('Heartbeat ack arrived late');
+  });
+
+  it("loggue 'discord shard error' avec le shardId en metadata", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    const cause = new Error('Shard 0 connection refused');
+    fake.trigger('shardError', cause, 0);
+
+    const entry = calls.find((c) => c.message === 'discord shard error');
+    expect(entry?.level).toBe('error');
+    expect(entry?.error).toBe(cause);
+    expect(entry?.meta?.['shardId']).toBe(0);
+  });
+
+  it("loggue 'discord shard disconnect' avec code+reason+shardId en metadata", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardDisconnect', { code: 4004, reason: 'Authentication failed' }, 0);
+
+    const entry = calls.find((c) => c.message === 'discord shard disconnect');
+    expect(entry?.level).toBe('warn');
+    expect(entry?.meta?.['shardId']).toBe(0);
+    expect(entry?.meta?.['code']).toBe(4004);
+    expect(entry?.meta?.['reason']).toBe('Authentication failed');
+  });
+
+  it('shardDisconnect sans code/reason structurés met null', () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardDisconnect', null, 0);
+
+    const entry = calls.find((c) => c.message === 'discord shard disconnect');
+    expect(entry?.meta?.['code']).toBeNull();
+    expect(entry?.meta?.['reason']).toBeNull();
+  });
+
+  it("loggue 'discord shard reconnecting' en info", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardReconnecting', 1);
+
+    const entry = calls.find((c) => c.message === 'discord shard reconnecting');
+    expect(entry?.level).toBe('info');
+    expect(entry?.meta?.['shardId']).toBe(1);
+  });
+
+  it("loggue 'discord shard ready' en info à la (re)connexion", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardReady', 0);
+
+    const entry = calls.find((c) => c.message === 'discord shard ready');
+    expect(entry?.level).toBe('info');
+    expect(entry?.meta?.['shardId']).toBe(0);
+  });
+
+  it("loggue 'discord shard resume' avec replayedEvents", () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardResume', 0, 42);
+
+    const entry = calls.find((c) => c.message === 'discord shard resume');
+    expect(entry?.level).toBe('info');
+    expect(entry?.meta?.['shardId']).toBe(0);
+    expect(entry?.meta?.['replayedEvents']).toBe(42);
+  });
+
+  it('shardResume sans replayedEvents numérique met 0 par défaut', () => {
+    const fake = makeFakeClient();
+    const dispatcher = makeFakeDispatcher();
+    const calls: LogCall[] = [];
+    attachDiscordClient(fake.client, dispatcher, makeRecordingLogger(calls));
+
+    fake.trigger('shardResume', 0, undefined);
+
+    const entry = calls.find((c) => c.message === 'discord shard resume');
+    expect(entry?.meta?.['replayedEvents']).toBe(0);
+  });
+});
+
 // Empêche le linter de se plaindre de vi non utilisé si aucun mock inline.
 void vi;
