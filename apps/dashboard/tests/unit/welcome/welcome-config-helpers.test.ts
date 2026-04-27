@@ -7,6 +7,7 @@ import type {
 } from '../../../components/welcome/types';
 import {
   evaluateWelcomeValidity,
+  findOrphanRoleIds,
   formatTestReason,
   isAdvancedConfig,
   isGoodbyeIncomplete,
@@ -180,6 +181,33 @@ describe('formatTestReason', () => {
 
   it('garde les codes inconnus avec préfixe Erreur', () => {
     expect(formatTestReason('mystery-fail')).toBe('Erreur : mystery-fail');
+  });
+});
+
+describe('findOrphanRoleIds', () => {
+  const ROLES = [
+    { id: '1', name: 'Member' },
+    { id: '2', name: 'VIP' },
+  ];
+
+  it('retourne vide si tous les ids configurés existent', () => {
+    expect(findOrphanRoleIds(['1', '2'], ROLES)).toEqual([]);
+  });
+
+  it('retourne les ids absents du catalogue', () => {
+    expect(findOrphanRoleIds(['1', '999'], ROLES)).toEqual(['999']);
+  });
+
+  it('retourne tous les ids si le catalogue est vide', () => {
+    expect(findOrphanRoleIds(['1', '2'], [])).toEqual(['1', '2']);
+  });
+
+  it('retourne vide pour une liste configurée vide', () => {
+    expect(findOrphanRoleIds([], ROLES)).toEqual([]);
+  });
+
+  it("préserve l'ordre des ids configurés", () => {
+    expect(findOrphanRoleIds(['999', '1', '888'], ROLES)).toEqual(['999', '888']);
   });
 });
 

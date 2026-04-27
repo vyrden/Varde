@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@varde/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Progress } from '@varde/ui';
 import { useRouter } from 'next/navigation';
 import { type ReactElement, useEffect, useMemo, useState, useTransition } from 'react';
 import { rollbackOnboarding } from '../../lib/onboarding-actions';
@@ -76,7 +76,12 @@ export function AppliedStep({ session }: AppliedStepProps): ReactElement {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Appliqué</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Appliqué</h2>
+          <Badge variant={expired ? 'inactive' : 'active'}>
+            {expired ? 'Fenêtre close' : 'Rollback dispo'}
+          </Badge>
+        </div>
         <p className="text-sm text-muted-foreground">
           Le preset a été appliqué sur votre serveur. Vous pouvez défaire dans les 30 min suivant
           l'application ; au-delà, les créations sont gelées et doivent être gérées manuellement.

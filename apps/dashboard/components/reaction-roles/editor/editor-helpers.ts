@@ -1,6 +1,11 @@
 import type { PublishReactionRolePairInput } from '../../../lib/reaction-roles-actions';
 import type { ReactionRoleTemplate } from '../templates';
-import type { ReactionRoleMessageClient, ReactionRolePairClient } from '../types';
+import type {
+  EmojiCatalog,
+  ReactionRoleMessageClient,
+  ReactionRolePairClient,
+  RoleOption,
+} from '../types';
 import type { PairDraft } from './editor-types';
 
 /**
@@ -133,6 +138,39 @@ export interface EditorValidationState {
   readonly hasButton: boolean;
   readonly ephemeralWithoutButton: boolean;
   readonly isValid: boolean;
+}
+
+/**
+ * Indique si un emoji custom (référencé par un pair) est encore
+ * accessible au bot — c'est-à-dire présent soit dans le catalogue
+ * `current` (serveur de la guild en cours), soit dans `external`
+ * (serveurs où le bot est aussi présent, équivalent Nitro).
+ *
+ * Pour les emojis Unicode et les chaînes vides, retourne toujours
+ * `true` (rien à invalider). Pour les emojis custom dont le serveur
+ * d'origine n'est plus accessible, retourne `false` — l'admin doit
+ * être averti que Discord rendra `?` côté message live.
+ */
+export function isEmojiAvailable(rawOrSerialized: string, catalog: EmojiCatalog): boolean {
+  const parsed = parseEmoji(rawOrSerialized);
+  if (parsed === null) return true;
+  if (parsed.type === 'unicode') return true;
+  const id = parsed.id;
+  return catalog.current.some((e) => e.id === id) || catalog.external.some((e) => e.id === id);
+}
+
+/**
+ * Indique si un `roleId` référencé par une pair est encore présent
+ * dans la liste des rôles Discord remontée par l'API. Sert à signaler
+ * un rôle supprimé manuellement côté Discord — la config dashboard
+ * conserve l'ID mais le rôle n'est plus attribuable.
+ *
+ * En mode `create` (rôle pas encore créé) ou pour un `roleId` vide,
+ * retourne toujours `true` (pas de référence à un rôle existant).
+ */
+export function isRoleAvailable(roleId: string, roles: ReadonlyArray<RoleOption>): boolean {
+  if (roleId.length === 0) return true;
+  return roles.some((r) => r.id === roleId);
 }
 
 export function evaluateEditorValidity(args: {

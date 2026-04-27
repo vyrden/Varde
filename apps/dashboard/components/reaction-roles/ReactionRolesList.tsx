@@ -5,11 +5,13 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { LandingEmptyState } from './LandingEmptyState';
 import { ReactionRoleCard } from './ReactionRoleCard';
-import type { ReactionRoleMessageClient } from './types';
+import type { EmojiCatalog, ReactionRoleMessageClient, RoleOption } from './types';
 
 export interface ReactionRolesListProps {
   readonly messages: readonly ReactionRoleMessageClient[];
   readonly channelNameById: Readonly<Record<string, string>>;
+  readonly roles: readonly RoleOption[];
+  readonly emojis: EmojiCatalog;
   readonly onAddNew: () => void;
   readonly onEdit: (id: string) => void;
   readonly onDelete: (id: string) => void;
@@ -27,6 +29,8 @@ export interface ReactionRolesListProps {
 export function ReactionRolesList({
   messages,
   channelNameById,
+  roles,
+  emojis,
   onAddNew,
   onEdit,
   onDelete,
@@ -59,6 +63,8 @@ export function ReactionRolesList({
                 key={m.id}
                 message={m}
                 channelName={channelNameById[m.channelId] ?? m.channelId}
+                roles={roles}
+                emojis={emojis}
                 onEdit={() => onEdit(m.id)}
                 onDelete={() => onDelete(m.id)}
               />

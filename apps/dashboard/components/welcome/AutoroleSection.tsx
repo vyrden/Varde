@@ -1,9 +1,10 @@
 'use client';
 
-import { Select } from '@varde/ui';
+import { Button, Select } from '@varde/ui';
 
 import type { WelcomeConfigClient } from '../../lib/welcome-actions';
 import { EntityMultiPicker } from '../shared/EntityMultiPicker';
+import { findOrphanRoleIds } from './welcome-config-helpers';
 
 interface RoleOption {
   readonly id: string;
@@ -34,6 +35,18 @@ const MAX_ROLES = 10;
  */
 export function AutoroleSection({ value, onChange, roles, pending = false }: AutoroleSectionProps) {
   const atLimit = value.roleIds.length >= MAX_ROLES;
+  // Rôles enregistrés mais introuvables côté Discord (supprimés ou
+  // permissions changées) — `EntityMultiPicker` les masque en
+  // affichage parce qu'il filtre sur `entities`. Sans signal, l'admin
+  // ne sait pas qu'ils existent encore en config.
+  const orphanRoleIds = findOrphanRoleIds(value.roleIds, roles);
+  const orphanSet = new Set(orphanRoleIds);
+  const handlePurgeOrphans = (): void => {
+    onChange({
+      ...value,
+      roleIds: value.roleIds.filter((id) => !orphanSet.has(id)),
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -56,6 +69,25 @@ export function AutoroleSection({ value, onChange, roles, pending = false }: Aut
         <p className="text-xs text-muted-foreground">
           {value.roleIds.length}/{MAX_ROLES} sélectionné{value.roleIds.length > 1 ? 's' : ''}
         </p>
+
+        {orphanRoleIds.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            <span className="flex-1">
+              ⚠ {orphanRoleIds.length} rôle{orphanRoleIds.length > 1 ? 's' : ''} introuvable
+              {orphanRoleIds.length > 1 ? 's' : ''} côté Discord (supprimé ou inaccessible). Le bot
+              ne pourra pas l'attribuer — nettoie la liste.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handlePurgeOrphans}
+              disabled={pending}
+            >
+              Nettoyer ({orphanRoleIds.length})
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-1">

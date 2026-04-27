@@ -3,7 +3,13 @@
 import { Badge, Button, Card, CardContent, InlineConfirm } from '@varde/ui';
 import { type ReactElement, useState } from 'react';
 
-import type { ReactionRoleMessageClient } from './types';
+import { isEmojiAvailable, isRoleAvailable } from './editor/editor-helpers';
+import type {
+  EmojiCatalog,
+  ReactionRoleMessageClient,
+  ReactionRolePairClient,
+  RoleOption,
+} from './types';
 
 const MODE_VARIANT: Record<
   ReactionRoleMessageClient['mode'],
@@ -47,9 +53,18 @@ function TrashIcon(): ReactElement {
 export interface ReactionRoleCardProps {
   readonly message: ReactionRoleMessageClient;
   readonly channelName: string;
+  readonly roles: readonly RoleOption[];
+  readonly emojis: EmojiCatalog;
   readonly onEdit: () => void;
   readonly onDelete: () => void;
 }
+
+/** Sérialise une emoji structurée en texte brut accepté par les helpers. */
+const serializePairEmoji = (emoji: ReactionRolePairClient['emoji']): string => {
+  if (emoji.type === 'unicode') return emoji.value;
+  const prefix = emoji.animated ? '<a:' : '<:';
+  return `${prefix}${emoji.name}:${emoji.id}>`;
+};
 
 /**
  * Card unitaire pour un message reaction-role dans la landing.
@@ -62,6 +77,8 @@ export interface ReactionRoleCardProps {
 export function ReactionRoleCard({
   message,
   channelName,
+  roles,
+  emojis,
   onEdit,
   onDelete,
 }: ReactionRoleCardProps): ReactElement {
@@ -72,6 +89,11 @@ export function ReactionRoleCard({
   const modeMeta = MODE_VARIANT[message.mode];
   const reactionCount = message.pairs.filter((p) => p.kind === 'reaction').length;
   const buttonCount = message.pairs.filter((p) => p.kind === 'button').length;
+  const orphanEmojiCount = message.pairs.filter(
+    (p) => !isEmojiAvailable(serializePairEmoji(p.emoji), emojis),
+  ).length;
+  const missingRoleCount = message.pairs.filter((p) => !isRoleAvailable(p.roleId, roles)).length;
+  const hasIssues = orphanEmojiCount > 0 || missingRoleCount > 0;
 
   return (
     <Card>
@@ -126,16 +148,28 @@ export function ReactionRoleCard({
 
         {visiblePairs.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            {visiblePairs.map((p, idx) => (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: emojis can repeat, position is the stable key here
-                key={`${message.id}-${idx}`}
-                className="text-base leading-none"
-                title={p.emoji.type === 'unicode' ? p.emoji.value : `:${p.emoji.name}:`}
-              >
-                {p.emoji.type === 'unicode' ? p.emoji.value : `:${p.emoji.name}:`}
-              </span>
-            ))}
+            {visiblePairs.map((p, idx) => {
+              const orphan = !isEmojiAvailable(serializePairEmoji(p.emoji), emojis);
+              const display = p.emoji.type === 'unicode' ? p.emoji.value : `:${p.emoji.name}:`;
+              return (
+                <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: emojis can repeat, position is the stable key here
+                  key={`${message.id}-${idx}`}
+                  className={`text-base leading-none ${
+                    orphan
+                      ? 'rounded-sm bg-amber-100 px-1 outline-1 outline-amber-300 dark:bg-amber-950 dark:outline-amber-700'
+                      : ''
+                  }`}
+                  title={
+                    orphan
+                      ? `${display} — emoji indisponible (serveur d'origine inaccessible)`
+                      : display
+                  }
+                >
+                  {display}
+                </span>
+              );
+            })}
             {overflow > 0 ? (
               <Badge variant="inactive" className="font-normal">
                 +{overflow}
@@ -143,6 +177,30 @@ export function ReactionRoleCard({
             ) : null}
           </div>
         ) : null}
+
+        {hasIssues
+          ? (() => {
+              const parts: string[] = [];
+              if (orphanEmojiCount > 0) {
+                parts.push(
+                  `${orphanEmojiCount} emoji${orphanEmojiCount > 1 ? 's' : ''} indisponible${orphanEmojiCount > 1 ? 's' : ''}`,
+                );
+              }
+              if (missingRoleCount > 0) {
+                parts.push(
+                  `${missingRoleCount} rôle${missingRoleCount > 1 ? 's' : ''} introuvable${missingRoleCount > 1 ? 's' : ''}`,
+                );
+              }
+              return (
+                <p
+                  role="status"
+                  className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+                >
+                  {`⚠ ${parts.join(' · ')}. Édite ce reaction-role pour corriger.`}
+                </p>
+              );
+            })()
+          : null}
 
         {pendingDelete ? (
           <InlineConfirm

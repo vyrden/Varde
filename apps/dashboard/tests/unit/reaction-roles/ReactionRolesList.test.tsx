@@ -26,8 +26,13 @@ const msg = {
 
 const STATUS_CARD = <div data-testid="status-card">status</div>;
 
+const ROLES = [{ id: '333', name: 'Europe' }];
+const EMOJIS = { current: [], external: [] } as const;
+
 const baseProps = {
   channelNameById: {},
+  roles: ROLES,
+  emojis: EMOJIS,
   onAddNew: vi.fn(),
   onEdit: vi.fn(),
   onDelete: vi.fn(),
@@ -89,5 +94,44 @@ describe('ReactionRolesList', () => {
   it('rend le statusCard injecté', () => {
     render(<ReactionRolesList {...baseProps} messages={[]} />);
     expect(screen.getByTestId('status-card')).toBeDefined();
+  });
+
+  it('signale les emojis indisponibles dans la card de message', () => {
+    const orphanMsg = {
+      ...msg,
+      pairs: [
+        {
+          kind: 'reaction' as const,
+          emoji: {
+            type: 'custom' as const,
+            id: '999999999999999999',
+            name: 'ghost',
+            animated: false,
+          },
+          roleId: '333',
+          label: '',
+          style: 'secondary' as const,
+        },
+      ],
+    };
+    render(<ReactionRolesList {...baseProps} messages={[orphanMsg]} />);
+    expect(screen.getByText(/emoji.*indisponible/i)).toBeDefined();
+  });
+
+  it('signale les rôles introuvables dans la card de message', () => {
+    const missingRoleMsg = {
+      ...msg,
+      pairs: [
+        {
+          kind: 'reaction' as const,
+          emoji: { type: 'unicode' as const, value: '🇪🇺' },
+          roleId: '999', // pas dans ROLES
+          label: '',
+          style: 'secondary' as const,
+        },
+      ],
+    };
+    render(<ReactionRolesList {...baseProps} messages={[missingRoleMsg]} />);
+    expect(screen.getByText(/rôle.*introuvable/i)).toBeDefined();
   });
 });

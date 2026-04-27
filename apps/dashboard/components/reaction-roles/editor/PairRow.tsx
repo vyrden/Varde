@@ -5,7 +5,7 @@ import { type ReactElement, type ReactNode, useState } from 'react';
 
 import { EmojiPicker } from '../EmojiPicker';
 import type { EmojiCatalog, ReactionRoleButtonStyleClient, RoleOption } from '../types';
-import { isPairValid, parseEmoji } from './editor-helpers';
+import { isEmojiAvailable, isPairValid, isRoleAvailable, parseEmoji } from './editor-helpers';
 import type { PairDraft } from './editor-types';
 
 const STYLE_OPTIONS: ReadonlyArray<{
@@ -110,6 +110,11 @@ export function PairRow({
   const roleInvalid =
     (pair.roleMode === 'existing' && pair.roleId.length === 0) ||
     (pair.roleMode === 'create' && pair.roleName.trim().length === 0);
+  // Emoji custom dont le serveur d'origine n'est plus accessible au bot.
+  const emojiOrphan = !emojiInvalid && !isEmojiAvailable(pair.emoji, emojis);
+  // Rôle existant sélectionné mais introuvable côté Discord (supprimé).
+  const roleMissing =
+    pair.roleMode === 'existing' && pair.roleId.length > 0 && !isRoleAvailable(pair.roleId, roles);
 
   const baseRingClass = !isValid
     ? 'ring-2 ring-destructive/40 bg-destructive/[0.03]'
@@ -296,6 +301,27 @@ export function PairRow({
             : emojiInvalid
               ? 'Emoji manquant.'
               : 'Rôle requis (sélectionne un existant ou nomme-en un à créer).'}
+        </p>
+      ) : null}
+
+      {emojiOrphan ? (
+        <p
+          role="status"
+          className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+          title="Le serveur d'origine de cet emoji n'est plus accessible au bot — Discord rendra ?"
+        >
+          ⚠ Emoji indisponible : son serveur d'origine n'est plus accessible au bot. Choisis-en un
+          autre, sinon Discord affichera <span className="font-mono">?</span>.
+        </p>
+      ) : null}
+
+      {roleMissing ? (
+        <p
+          role="status"
+          className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+        >
+          ⚠ Rôle introuvable côté Discord (peut-être supprimé). Choisis-en un autre ou crée-en un
+          nouveau.
         </p>
       ) : null}
     </div>

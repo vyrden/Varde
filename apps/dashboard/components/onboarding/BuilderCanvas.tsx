@@ -1,6 +1,14 @@
 'use client';
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@varde/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CollapsibleSection,
+} from '@varde/ui';
 import { type ReactElement, useState, useTransition } from 'react';
 import { previewOnboarding } from '../../lib/onboarding-actions';
 import type { OnboardingSessionDto } from '../../lib/onboarding-client';
@@ -47,6 +55,10 @@ export function BuilderCanvas({ session }: BuilderCanvasProps): ReactElement {
 
   const { draft } = session;
   const categoriesByLocalId = new Map(draft.categories.map((c) => [c.localId, c]));
+  const totalChannelsAndCategories = draft.categories.length + draft.channels.length;
+  // Auto-replier la grosse card structure quand le draft est gros pour
+  // garder le scroll utile. Seuil : 8 items combinés.
+  const channelsCardOpenByDefault = totalChannelsAndCategories <= 8;
 
   return (
     <div className="space-y-4">
@@ -120,7 +132,7 @@ export function BuilderCanvas({ session }: BuilderCanvasProps): ReactElement {
                 {draft.modules.map((mod) => (
                   <li key={mod.moduleId} className="flex items-center justify-between gap-2">
                     <span className="font-mono">{mod.moduleId}</span>
-                    <Badge variant={mod.enabled ? 'default' : 'secondary'}>
+                    <Badge variant={mod.enabled ? 'active' : 'inactive'}>
                       {mod.enabled ? 'Activé' : 'Désactivé'}
                     </Badge>
                   </li>
@@ -131,13 +143,11 @@ export function BuilderCanvas({ session }: BuilderCanvasProps): ReactElement {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Catégories et salons ({draft.categories.length} cat., {draft.channels.length} salons)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleSection
+        title={`Catégories et salons (${draft.categories.length} cat., ${draft.channels.length} salons)`}
+        defaultOpen={channelsCardOpenByDefault}
+      >
+        <div className="space-y-4">
           {draft.categories.length === 0 && draft.channels.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aucun salon défini.</p>
           ) : (
@@ -196,13 +206,13 @@ export function BuilderCanvas({ session }: BuilderCanvasProps): ReactElement {
               </div>
             );
           })()}
-          <p className="text-xs text-muted-foreground">
-            Note V1 : les salons sont créés à plat côté Discord (sans parent de catégorie). L'admin
-            réorganise manuellement après apply. La résolution automatique des catégories arrive
-            dans une prochaine version.
+          <p className="rounded-md border border-info/40 bg-info/10 px-3 py-2 text-xs text-muted-foreground">
+            <strong className="text-foreground">Note V1</strong> : les salons sont créés à plat côté
+            Discord (sans parent de catégorie). L'admin réorganise manuellement après apply. La
+            résolution automatique des catégories arrive dans une prochaine version.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }

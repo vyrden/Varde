@@ -8,6 +8,7 @@ import type {
 } from '@varde/contracts';
 import {
   CORE_ACTIONS,
+  createAuditService,
   createConfigService,
   createKeystoreService,
   createLogger,
@@ -120,6 +121,7 @@ describe('routes /guilds/:guildId/onboarding', () => {
       mockDiscord?: MockDiscord;
       withAi?: boolean;
       withScheduler?: boolean;
+      withAudit?: boolean;
       rollbackWindowMs?: number;
       now?: () => Date;
     } = {},
@@ -174,6 +176,8 @@ describe('routes /guilds/:guildId/onboarding', () => {
       });
     }
 
+    const audit = opts.withAudit ? createAuditService({ client }) : undefined;
+
     registerOnboardingRoutes(app, {
       client,
       discord,
@@ -182,6 +186,7 @@ describe('routes /guilds/:guildId/onboarding', () => {
       rollbackWindowMs: opts.rollbackWindowMs ?? 30 * 60 * 1000,
       ...(aiOption ? { ai: aiOption } : {}),
       ...(scheduler ? { scheduler, schedulerLogger: logger } : {}),
+      ...(audit ? { audit } : {}),
       actionContextFactory: ({ guildId, actorId }): OnboardingActionContext => ({
         guildId,
         actorId,
@@ -201,7 +206,7 @@ describe('routes /guilds/:guildId/onboarding', () => {
         },
       }),
     });
-    return { app, config, mock, executor, scheduler, logger };
+    return { app, config, mock, executor, scheduler, logger, audit };
   };
 
   // ─── Authentication / authorization ───────────────────────────────
@@ -1068,6 +1073,116 @@ describe('routes /guilds/:guildId/onboarding', () => {
         .where(eq(sqliteSchema.onboardingSessions.id, sessionId))
         .all();
       expect(row?.status).toBe('expired');
+    } finally {
+      await app.close();
+    }
+  });
+
+  // ─── Audit log writes ─────────────────────────────────────────────
+
+  it('POST /onboarding écrit une entrée onboarding.session.created dans l audit log', async () => {
+    const { app } = await build({ withAudit: true });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: authHeader,
+        payload: { source: 'preset', presetId: communityTechSmall.id },
+      });
+      expect(res.statusCode).toBe(201);
+      const session = res.json() as { id: string };
+
+      const entries = await client.db
+        .select()
+        .from(sqliteSchema.auditLog)
+        .where(eq(sqliteSchema.auditLog.action, 'onboarding.session.created'))
+        .all();
+      expect(entries).toHaveLength(1);
+      const entry = entries[0];
+      expect(entry?.guildId).toBe(GUILD);
+      expect(entry?.actorType).toBe('user');
+      expect(entry?.actorId).toBe(USER);
+      expect(entry?.severity).toBe('info');
+      expect(entry?.metadata).toMatchObject({
+        sessionId: session.id,
+        presetSource: 'preset',
+        presetId: communityTechSmall.id,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /apply réussi écrit onboarding.session.applied', async () => {
+    const { app } = await build({ withAudit: true });
+    try {
+      const create = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: authHeader,
+        payload: { source: 'preset', presetId: communityTechSmall.id },
+      });
+      const sessionId = (create.json() as { id: string }).id;
+
+      const apply = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/apply`,
+        headers: authHeader,
+      });
+      expect(apply.statusCode).toBe(200);
+      const body = apply.json() as { ok: boolean; appliedCount: number };
+      expect(body.ok).toBe(true);
+
+      const entries = await client.db
+        .select()
+        .from(sqliteSchema.auditLog)
+        .where(eq(sqliteSchema.auditLog.action, 'onboarding.session.applied'))
+        .all();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.actorType).toBe('user');
+      expect(entries[0]?.severity).toBe('info');
+      expect(entries[0]?.metadata).toMatchObject({
+        sessionId,
+        appliedCount: body.appliedCount,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /rollback réussi écrit onboarding.session.rolled_back', async () => {
+    const { app } = await build({ withAudit: true });
+    try {
+      const create = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding`,
+        headers: authHeader,
+        payload: { source: 'preset', presetId: communityTechSmall.id },
+      });
+      const sessionId = (create.json() as { id: string }).id;
+
+      await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/apply`,
+        headers: authHeader,
+      });
+      const rollback = await app.inject({
+        method: 'POST',
+        url: `/guilds/${GUILD}/onboarding/${sessionId}/rollback`,
+        headers: authHeader,
+      });
+      expect(rollback.statusCode).toBe(200);
+      expect((rollback.json() as { ok: boolean }).ok).toBe(true);
+
+      const entries = await client.db
+        .select()
+        .from(sqliteSchema.auditLog)
+        .where(eq(sqliteSchema.auditLog.action, 'onboarding.session.rolled_back'))
+        .all();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.actorType).toBe('user');
+      expect(entries[0]?.severity).toBe('info');
+      expect(entries[0]?.metadata).toMatchObject({ sessionId });
     } finally {
       await app.close();
     }

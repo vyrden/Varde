@@ -115,6 +115,16 @@ export function AccountAgeFilterSection({ value, onChange, roles }: AccountAgeFi
               </option>
             ))}
           </Select>
+          {value.quarantineRoleId !== null &&
+          !roles.some((r) => r.id === value.quarantineRoleId) ? (
+            <p
+              role="status"
+              className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+            >
+              ⚠ Le rôle de quarantaine actuellement enregistré est introuvable côté Discord
+              (supprimé ?). Sélectionne-en un autre, sinon le filtre échouera silencieusement.
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Crée un rôle « Quarantaine » sans permissions et configure-le ici. L'auto-rôle normal
             n'est pas appliqué quand un membre est quarantiné.

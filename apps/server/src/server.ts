@@ -649,12 +649,14 @@ export async function createServer<D extends DbDriver>(
     ai: { config, keystore: aiKeystore, logger },
     scheduler: onboardingScheduler,
     schedulerLogger,
+    audit,
   });
 
   await reconcileOnboardingSessions({
     client,
     scheduler: onboardingScheduler,
     logger: schedulerLogger,
+    audit,
   });
 
   const start = async (): Promise<{ readonly address: string }> => {

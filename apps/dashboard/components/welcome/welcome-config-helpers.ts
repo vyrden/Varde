@@ -90,6 +90,20 @@ export function formatTestReason(reason: string): string {
  * membre qui rejoint. Cohérent avec ce qu'utilise le module welcome
  * côté runtime quand il rend la carte.
  */
+/**
+ * Liste les rôles enregistrés (autorole) qui ne sont plus présents
+ * dans le catalogue Discord remonté par l'API. Sert à signaler un
+ * rôle supprimé ou inaccessible — la config conserve l'ID mais le
+ * bot ne peut plus l'attribuer.
+ */
+export function findOrphanRoleIds(
+  configuredIds: ReadonlyArray<string>,
+  availableRoles: ReadonlyArray<{ readonly id: string }>,
+): readonly string[] {
+  const known = new Set(availableRoles.map((r) => r.id));
+  return configuredIds.filter((id) => !known.has(id));
+}
+
 export const SAMPLE_PREVIEW_VARIABLES: Readonly<Record<string, string | number>> = {
   user: 'Alice',
   'user.mention': '<@123456789012345678>',

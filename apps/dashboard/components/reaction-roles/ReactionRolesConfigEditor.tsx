@@ -69,6 +69,8 @@ export function ReactionRolesConfigEditor(props: ReactionRolesConfigEditorProps)
       <ReactionRolesList
         messages={messages}
         channelNameById={channelNameById}
+        roles={props.roles}
+        emojis={props.emojis}
         onAddNew={() => setView({ kind: 'picker' })}
         onEdit={(id) => setView({ kind: 'editor-edit', messageId: id })}
         onDelete={handleDelete}
