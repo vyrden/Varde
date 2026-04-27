@@ -64,7 +64,13 @@ export function AppliedStep({ session }: AppliedStepProps): ReactElement {
     startTransition(async () => {
       const result = await rollbackOnboarding(session.guildId, session.id);
       if (!result.ok) {
-        setError(result.message ?? `Erreur ${result.status ?? ''} (${result.code ?? ''})`);
+        // Sur un échec de rollback, l'API laisse délibérément la
+        // session en `applied` (cf. routes/onboarding.ts §rollback) :
+        // l'admin peut retenter en cliquant à nouveau sur Défaire.
+        // On rend ça explicite dans le message — sans cette mention,
+        // l'admin pourrait croire que la session est gelée.
+        const base = result.message ?? `Erreur ${result.status ?? ''} (${result.code ?? ''})`;
+        setError(`${base} La session reste défaisable — tu peux relancer Défaire.`);
       }
     });
   };
