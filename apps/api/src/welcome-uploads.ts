@@ -34,6 +34,7 @@ export class WelcomeUploadError extends Error {
     | 'invalid-target'
     | 'invalid-mime'
     | 'invalid-base64'
+    | 'invalid-image-content'
     | 'too-large'
     | 'fs-error';
   constructor(reason: WelcomeUploadError['reason'], message: string) {
@@ -41,6 +42,58 @@ export class WelcomeUploadError extends Error {
     this.reason = reason;
   }
 }
+
+/**
+ * Vérifie que les premiers octets du buffer correspondent à la
+ * signature ("magic bytes") du MIME annoncé. Le `Content-Type` du
+ * dataURL est trivialement falsifiable côté client : sans cette
+ * vérif, un attaquant pourrait poster un binaire arbitraire (HTML,
+ * JS, fichier exécutable, polyglyphe SVG/JS) habillé d'un
+ * `data:image/png;base64,...` et le serveur l'écrirait sur disque.
+ *
+ * On contrôle les 4 formats que l'on accepte, dans l'ordre de
+ * vérification :
+ * - PNG  : `89 50 4E 47 0D 0A 1A 0A` (8 octets, signature canonique).
+ * - JPEG : `FF D8 FF` (3 octets, marqueur SOI suivi d'un APP*).
+ * - WebP : `52 49 46 46 ?? ?? ?? ?? 57 45 42 50` (`RIFF....WEBP`,
+ *   les octets 4-7 portent la taille du fichier qu'on n'inspecte pas).
+ *
+ * Retourne `true` si la signature matche le MIME, `false` sinon.
+ */
+const verifyImageMagicBytes = (mime: string, bytes: Buffer): boolean => {
+  if (mime === 'image/png') {
+    if (bytes.length < 8) return false;
+    return (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
+    );
+  }
+  if (mime === 'image/jpeg') {
+    if (bytes.length < 3) return false;
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mime === 'image/webp') {
+    if (bytes.length < 12) return false;
+    // "RIFF" en octets 0-3, "WEBP" en octets 8-11.
+    return (
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    );
+  }
+  return false;
+};
 
 export interface WelcomeUploadsService {
   /**
@@ -96,6 +149,12 @@ const decodeDataUrl = (dataUrl: string): { bytes: Buffer; mime: string } => {
   }
   if (bytes.length > MAX_BYTES) {
     throw new WelcomeUploadError('too-large', `Image trop lourde (${bytes.length} > ${MAX_BYTES})`);
+  }
+  if (!verifyImageMagicBytes(mime, bytes)) {
+    throw new WelcomeUploadError(
+      'invalid-image-content',
+      `Le contenu ne correspond pas au type ${mime} annoncé (signature invalide).`,
+    );
   }
   return { bytes, mime };
 };
