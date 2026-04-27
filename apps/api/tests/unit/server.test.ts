@@ -108,6 +108,47 @@ describe('createApiServer — /me', () => {
   });
 });
 
+describe('createApiServer — security headers', () => {
+  it('pose les headers de sécurité par défaut (helmet)', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+    });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/health' });
+      // Helmet pose ces headers d'office sur toutes les réponses.
+      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(response.headers['referrer-policy']).toBe('no-referrer');
+      expect(response.headers['x-dns-prefetch-control']).toBe('off');
+      expect(response.headers['x-download-options']).toBe('noopen');
+      expect(response.headers['x-permitted-cross-domain-policies']).toBe('none');
+      // CSP par défaut helmet : `default-src 'self'` + sous-directives
+      // restrictives. On vérifie sa présence sans figer la valeur
+      // exacte (helmet l'enrichit selon les versions).
+      expect(typeof response.headers['content-security-policy']).toBe('string');
+      expect(response.headers['content-security-policy']).toContain("default-src 'self'");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('cache la version Fastify (x-powered-by absent)', async () => {
+    const app = await createApiServer({
+      logger: silentLogger(),
+      version: 'x',
+      authenticator: headerAuthenticator,
+    });
+    try {
+      const response = await app.inject({ method: 'GET', url: '/health' });
+      expect(response.headers['x-powered-by']).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe('createApiServer — CORS', () => {
   it('expose les headers CORS quand corsOrigin est défini', async () => {
     const app = await createApiServer({

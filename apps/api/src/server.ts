@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import type { Logger } from '@varde/contracts';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
@@ -65,6 +66,21 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
   // systématiquement : coût négligeable, API cohérente pour tous les
   // modes de déploiement.
   await app.register(cookie);
+
+  // Headers de sécurité (jalon 5). L'API ne sert que du JSON donc la
+  // CSP par défaut de helmet est sans effet pratique côté navigateur,
+  // mais la pose des headers reste utile au cas où une réponse HTML
+  // d'erreur passerait, et signale aux scanners de sécurité que la
+  // surface est durcie. HSTS s'active uniquement quand le client est
+  // en HTTPS — en dev (HTTP) Fastify ne l'envoie pas.
+  await app.register(helmet, {
+    // L'API n'embarque pas de page HTML : on laisse les défauts
+    // helmet (CSP `default-src 'self'`, X-Frame-Options DENY, etc.).
+    // L'option `crossOriginResourcePolicy: 'same-site'` autoriserait
+    // un futur dashboard sous-domaine à fetch ; aujourd'hui on est en
+    // single-origin via reverse-proxy donc le défaut `same-origin`
+    // est plus strict et conforme.
+  });
 
   if (corsOrigin !== false) {
     await app.register(cors, { origin: corsOrigin, credentials: true });
