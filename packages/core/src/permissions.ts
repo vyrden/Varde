@@ -8,7 +8,7 @@ import type {
   UserId,
 } from '@varde/contracts';
 import { type DbClient, type DbDriver, pgSchema, sqliteSchema } from '@varde/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 /**
  * PermissionService : résolution d'autorisations applicatives.
@@ -78,6 +78,27 @@ export interface CorePermissionService {
   ) => Promise<boolean>;
   readonly invalidate: (guildId: GuildId) => void;
   readonly registerPermissions: (entries: readonly PermissionRegistryRecord[]) => Promise<void>;
+  /**
+   * Lie une permission à un rôle Discord sur une guild. Insert
+   * idempotent : si la ligne existe déjà, no-op. Invalide le cache
+   * de la guild concernée pour que la résolution suivante lise la
+   * nouvelle valeur.
+   */
+  readonly bind: (guildId: GuildId, permissionId: PermissionId, roleId: RoleId) => Promise<void>;
+  /**
+   * Supprime uniquement la ligne `(guildId, permissionId, roleId)`.
+   * No-op si la ligne n'existe pas. Invalide le cache.
+   */
+  readonly unbind: (guildId: GuildId, permissionId: PermissionId, roleId: RoleId) => Promise<void>;
+  /**
+   * Retourne tous les bindings posés pour une guild donnée. Chaque
+   * entrée associe un `permissionId` à un `roleId`. Utilisé par la
+   * route `/guilds/:id/modules/:moduleId/unbound-permissions` pour
+   * calculer la différence avec les permissions déclarées par un module.
+   */
+  readonly listBindings: (
+    guildId: GuildId,
+  ) => Promise<readonly { readonly permissionId: PermissionId; readonly roleId: RoleId }[]>;
 }
 
 type PermissionIndex = ReadonlyMap<PermissionId, ReadonlySet<RoleId>>;
@@ -259,6 +280,107 @@ export function createPermissionService<D extends DbDriver>(
 
     async registerPermissions(entries) {
       await upsertPermissions(client, entries);
+    },
+
+    async bind(guildId, permissionId, roleId) {
+      if (client.driver === 'pg') {
+        const { permissionBindings } = pgSchema;
+        const pg = client as DbClient<'pg'>;
+        await pg.db
+          .insert(permissionBindings)
+          .values({
+            guildId,
+            permissionId,
+            roleId,
+            createdAt: new Date(),
+          })
+          .onConflictDoNothing({
+            target: [
+              permissionBindings.guildId,
+              permissionBindings.permissionId,
+              permissionBindings.roleId,
+            ],
+          });
+      } else {
+        const { permissionBindings } = sqliteSchema;
+        const sqlite = client as DbClient<'sqlite'>;
+        await sqlite.db
+          .insert(permissionBindings)
+          .values({
+            guildId,
+            permissionId,
+            roleId,
+          })
+          .onConflictDoNothing({
+            target: [
+              permissionBindings.guildId,
+              permissionBindings.permissionId,
+              permissionBindings.roleId,
+            ],
+          });
+      }
+      cache.delete(guildId);
+    },
+
+    async unbind(guildId, permissionId, roleId) {
+      if (client.driver === 'pg') {
+        const { permissionBindings } = pgSchema;
+        const pg = client as DbClient<'pg'>;
+        await pg.db
+          .delete(permissionBindings)
+          .where(
+            and(
+              eq(permissionBindings.guildId, guildId),
+              eq(permissionBindings.permissionId, permissionId),
+              eq(permissionBindings.roleId, roleId),
+            ),
+          );
+      } else {
+        const { permissionBindings } = sqliteSchema;
+        const sqlite = client as DbClient<'sqlite'>;
+        await sqlite.db
+          .delete(permissionBindings)
+          .where(
+            and(
+              eq(permissionBindings.guildId, guildId),
+              eq(permissionBindings.permissionId, permissionId),
+              eq(permissionBindings.roleId, roleId),
+            ),
+          );
+      }
+      cache.delete(guildId);
+    },
+
+    async listBindings(guildId) {
+      if (client.driver === 'pg') {
+        const { permissionBindings } = pgSchema;
+        const pg = client as DbClient<'pg'>;
+        const rows = await pg.db
+          .select({
+            permissionId: permissionBindings.permissionId,
+            roleId: permissionBindings.roleId,
+          })
+          .from(permissionBindings)
+          .where(eq(permissionBindings.guildId, guildId));
+        return rows.map((r) => ({
+          permissionId: r.permissionId as PermissionId,
+          roleId: r.roleId as RoleId,
+        }));
+      }
+      const { permissionBindings } = sqliteSchema;
+      const sqlite = client as DbClient<'sqlite'>;
+      const rows = sqlite.db
+        .select({
+          permissionId: permissionBindings.permissionId,
+          roleId: permissionBindings.roleId,
+        })
+        .from(permissionBindings)
+        .where(eq(permissionBindings.guildId, guildId))
+        .all();
+      return rows.map((r) => ({
+        permissionId: r.permissionId as PermissionId,
+        roleId: r.roleId as RoleId,
+      }));
     },
   };
 }

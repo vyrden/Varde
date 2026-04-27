@@ -2,6 +2,7 @@ import type {
   AIService,
   DiscordService,
   EventBus,
+  GuildId,
   I18nService,
   Logger,
   ModuleContext,
@@ -15,6 +16,7 @@ import type { DbClient, DbDriver } from '@varde/db';
 import { type CoreAuditService, createAuditService } from './audit.js';
 import type { CoreConfigService } from './config.js';
 import { createI18n, type I18nMessages } from './i18n.js';
+import { type CoreInteractionsRegistry, createInteractionsRegistry } from './interactions.js';
 import { createKeystoreService } from './keystore.js';
 import type { CtxFactory, ModuleRef } from './loader.js';
 import type { CorePermissionService } from './permissions.js';
@@ -52,8 +54,23 @@ export interface CreateCtxFactoryOptions<D extends DbDriver> {
   readonly discord?: DiscordService;
   /** Service inter-modules. Stub si omis. */
   readonly modules?: ModulesService;
-  /** Service IA. `null` en V1 si aucun provider configuré. */
+  /**
+   * Service IA. `null` si aucun provider configuré globalement.
+   * Pour un service IA résolu par-guild (cas usuel quand chaque guild
+   * a son propre provider configuré via `/settings/ai`), utiliser
+   * plutôt `aiFactory` ; le ctx factory privilégie `aiFactory` quand
+   * `guildId` est passé.
+   */
   readonly ai?: AIService | null;
+  /**
+   * Factory d'AIService par-guild. Si fournie ET que `factory(ref, guildId)`
+   * est appelé avec un `guildId`, l'AIService retourné est utilisé
+   * en place du `ai` global. Permet à chaque guild d'avoir sa propre
+   * config IA (provider, clé) sans partager d'instance entre guilds.
+   * Retourne `null` pour signifier « pas d'IA configurée pour cette
+   * guild » (équivalent à `ctx.ai === null`).
+   */
+  readonly aiFactory?: (guildId: GuildId) => AIService | null;
   /**
    * Point d'extension onboarding pour les modules (PR 3.13). Permet
    * de `registerAction` (ajoute une action custom au registre de
@@ -65,6 +82,16 @@ export interface CreateCtxFactoryOptions<D extends DbDriver> {
   readonly onboarding?: OnboardingService;
   readonly defaultLocale?: string;
   readonly locales?: Readonly<Record<string, I18nMessages>>;
+  /**
+   * Résout la locale effective d'une guild de manière synchrone (lue
+   * d'un cache maintenu par l'host). Retourne `null` si la guild n'a
+   * pas (encore) de locale connue → `defaultLocale` est utilisé.
+   *
+   * Le getter est appelé à chaque `ctx.i18n.t()` ; ça permet à un
+   * changement de `core.bot-settings.language` côté dashboard d'être
+   * visible immédiatement par les modules sans recréer leur ctx.
+   */
+  readonly getGuildLocale?: (guildId: GuildId) => string | null;
   readonly schedulerTickMs?: number;
   /** Horloge injectable partagée par tous les schedulers instanciés (tests). */
   readonly schedulerNow?: () => Date;
@@ -74,6 +101,13 @@ export interface CtxBundle {
   readonly factory: CtxFactory;
   /** Arrête les services scopés (schedulers). Idempotent. */
   readonly shutdown: () => Promise<void>;
+  /**
+   * Registre d'interactions partagé (boutons Discord). Exposé pour
+   * que l'host (apps/bot) puisse y dispatcher les `interactionCreate`
+   * de type bouton — chaque module y a déjà accès en écriture via
+   * `ctx.interactions` au runtime.
+   */
+  readonly interactions: CoreInteractionsRegistry;
 }
 
 const scopedDbStub: ScopedDatabase = Object.freeze({ __scoped: true });
@@ -82,6 +116,96 @@ const discordStub: DiscordService = Object.freeze({
   sendMessage: async () => {
     throw new Error('DiscordService non câblé (arrivée prévue PR 1.6)');
   },
+  sendEmbed: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.sendEmbed` nécessite un host (apps/bot).',
+    );
+  },
+  addReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.addReaction` nécessite un host (apps/bot).',
+    );
+  },
+  removeUserReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeUserReaction` nécessite un host (apps/bot).',
+    );
+  },
+  removeOwnReaction: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeOwnReaction` nécessite un host (apps/bot).',
+    );
+  },
+  addMemberRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.addMemberRole` nécessite un host (apps/bot).',
+    );
+  },
+  removeMemberRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.removeMemberRole` nécessite un host (apps/bot).',
+    );
+  },
+  memberHasRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.memberHasRole` nécessite un host (apps/bot).',
+    );
+  },
+  postMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.postMessage` nécessite un host (apps/bot).',
+    );
+  },
+  createRole: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.createRole` nécessite un host (apps/bot).',
+    );
+  },
+  sendDirectMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.sendDirectMessage` nécessite un host (apps/bot).',
+    );
+  },
+  deleteMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.deleteMessage` nécessite un host (apps/bot).',
+    );
+  },
+  editMessage: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.editMessage` nécessite un host (apps/bot).',
+    );
+  },
+  kickMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.kickMember` nécessite un host (apps/bot).',
+    );
+  },
+  banMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.banMember` nécessite un host (apps/bot).',
+    );
+  },
+  unbanMember: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.unbanMember` nécessite un host (apps/bot).',
+    );
+  },
+  bulkDeleteMessages: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.bulkDeleteMessages` nécessite un host (apps/bot).',
+    );
+  },
+  setChannelSlowmode: async () => {
+    throw new Error(
+      'DiscordService non câblé : `ctx.discord.setChannelSlowmode` nécessite un host (apps/bot).',
+    );
+  },
+  canModerate: async () => ({ ok: false as const, reason: 'unknown' as const }),
+  getMemberCount: () => null,
+  getUserDisplayInfo: async () => null,
+  getGuildName: () => null,
+  getRoleName: () => null,
 });
 
 const modulesStub: ModulesService = Object.freeze({
@@ -118,18 +242,24 @@ export function createCtxFactory<D extends DbDriver>(
     discord = discordStub,
     modules = modulesStub,
     ai = null,
+    aiFactory,
     onboarding = onboardingStub,
     defaultLocale = 'en',
     locales = {},
+    getGuildLocale,
     schedulerTickMs,
     schedulerNow,
   } = options;
 
   const ui = createUIService();
+  const interactions = createInteractionsRegistry();
   const schedulers = new Map<ModuleId, CoreSchedulerService>();
   const audits = new Map<ModuleId, CoreAuditService>();
   const loggers = new Map<ModuleId, Logger>();
-  const i18ns = new Map<ModuleId, I18nService>();
+  // Cache d'instances i18n indexées par couple `(moduleId, guildId)`
+  // sérialisé en chaîne (cf. `i18nKey`) — une instance « globale »
+  // (sans guildId) coexiste avec les instances par-guild.
+  const i18ns = new Map<string, I18nService>();
   const keystores = new Map<ModuleId, ReturnType<typeof createKeystoreService>>();
 
   const loggerFor = (moduleId: ModuleId): Logger => {
@@ -178,19 +308,34 @@ export function createCtxFactory<D extends DbDriver>(
     return instance;
   };
 
-  const i18nFor = (moduleId: ModuleId): I18nService => {
-    const existing = i18ns.get(moduleId);
+  // Cache i18n par couple `(moduleId, guildId | '<global>')`. Les
+  // instances « guildées » utilisent un getter qui résout la locale au
+  // moment de chaque `t()` — un changement de `core.bot-settings.language`
+  // est ainsi pris en compte sans recycler les contextes des modules.
+  const i18nKey = (moduleId: ModuleId, guildId: GuildId | undefined): string =>
+    guildId === undefined ? `${moduleId}::<global>` : `${moduleId}::${guildId}`;
+
+  const i18nFor = (moduleId: ModuleId, guildId: GuildId | undefined): I18nService => {
+    const key = i18nKey(moduleId, guildId);
+    const existing = i18ns.get(key);
     if (existing) return existing;
+    const moduleMessages = locales[moduleId] ?? {};
+    const localeSource: string | (() => string) =
+      guildId !== undefined && getGuildLocale
+        ? () => getGuildLocale(guildId) ?? defaultLocale
+        : defaultLocale;
     const instance = createI18n({
-      messages: locales[moduleId] ?? {},
-      locale: defaultLocale,
+      messages: moduleMessages,
+      locale: localeSource,
       fallbackLocale: 'en',
     });
-    i18ns.set(moduleId, instance);
+    i18ns.set(key, instance);
     return instance;
   };
 
-  const factory: CtxFactory = (ref: ModuleRef, _guildId) => {
+  const aiFor = (gid: GuildId): AIService | null => (aiFactory ? aiFactory(gid) : ai);
+
+  const factory: CtxFactory = (ref: ModuleRef, guildId) => {
     const moduleId = ref.id;
     return Object.freeze<ModuleContext>({
       module: { id: moduleId, version: ref.version },
@@ -202,12 +347,14 @@ export function createCtxFactory<D extends DbDriver>(
       permissions,
       discord,
       scheduler: schedulerFor(moduleId),
-      i18n: i18nFor(moduleId),
+      i18n: i18nFor(moduleId, guildId),
       modules,
       keystore: keystoreFor(moduleId),
-      ai,
+      ai: guildId !== undefined && aiFactory ? aiFactory(guildId) : ai,
+      aiFor,
       ui,
       onboarding,
+      interactions: interactions.serviceFor(moduleId),
     });
   };
 
@@ -222,5 +369,5 @@ export function createCtxFactory<D extends DbDriver>(
     keystores.clear();
   };
 
-  return { factory, shutdown };
+  return { factory, shutdown, interactions };
 }

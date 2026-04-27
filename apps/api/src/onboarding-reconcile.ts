@@ -1,4 +1,11 @@
-import type { Logger, SchedulerService, Ulid } from '@varde/contracts';
+import type {
+  ActionId,
+  AuditService,
+  GuildId,
+  Logger,
+  SchedulerService,
+  Ulid,
+} from '@varde/contracts';
 import { type DbClient, type DbDriver, pgSchema, sqliteSchema } from '@varde/db';
 import { eq } from 'drizzle-orm';
 import { updateSession } from './onboarding-repo.js';
@@ -27,9 +34,11 @@ export async function reconcileOnboardingSessions<D extends DbDriver>(options: {
   readonly client: DbClient<D>;
   readonly scheduler: SchedulerService;
   readonly logger: Logger;
+  /** AuditService optionnel pour tracer les expirations rattrapées au boot. */
+  readonly audit?: AuditService;
   readonly now?: () => Date;
 }): Promise<{ readonly reenqueued: number; readonly expired: number }> {
-  const { client, scheduler, logger } = options;
+  const { client, scheduler, logger, audit } = options;
   const now = options.now ?? (() => new Date());
   const tickAt = now();
 
@@ -45,9 +54,22 @@ export async function reconcileOnboardingSessions<D extends DbDriver>(options: {
       await updateSession(client, row.id, { status: 'expired' });
       expired += 1;
       logger.info('reconcile: session applied expirée au boot', { sessionId: row.id });
+      if (audit) {
+        await audit.log({
+          guildId: row.guildId,
+          action: 'onboarding.session.expired' as ActionId,
+          actor: { type: 'system' },
+          severity: 'info',
+          metadata: {
+            sessionId: row.id,
+            expiresAt: expiresAt.toISOString(),
+            reason: 'boot-reconcile',
+          },
+        });
+      }
       continue;
     }
-    const handler = buildAutoExpireHandler(client, row.id, logger);
+    const handler = buildAutoExpireHandler(client, row.id, logger, audit);
     await scheduler.at(expiresAt, autoExpireJobKey(row.id), handler);
     reenqueued += 1;
   }
@@ -60,6 +82,7 @@ export async function reconcileOnboardingSessions<D extends DbDriver>(options: {
 
 interface AppliedRow {
   readonly id: Ulid;
+  readonly guildId: GuildId;
   readonly expiresAt: Date | null;
 }
 
@@ -76,17 +99,33 @@ const selectAppliedSessions = async <D extends DbDriver>(
     const { onboardingSessions } = pgSchema;
     const pg = client as DbClient<'pg'>;
     const rows = await pg.db
-      .select({ id: onboardingSessions.id, expiresAt: onboardingSessions.expiresAt })
+      .select({
+        id: onboardingSessions.id,
+        guildId: onboardingSessions.guildId,
+        expiresAt: onboardingSessions.expiresAt,
+      })
       .from(onboardingSessions)
       .where(eq(onboardingSessions.status, 'applied'));
-    return rows.map((r) => ({ id: r.id as Ulid, expiresAt: r.expiresAt }));
+    return rows.map((r) => ({
+      id: r.id as Ulid,
+      guildId: r.guildId as GuildId,
+      expiresAt: r.expiresAt,
+    }));
   }
   const { onboardingSessions } = sqliteSchema;
   const sqlite = client as DbClient<'sqlite'>;
   const rows = sqlite.db
-    .select({ id: onboardingSessions.id, expiresAt: onboardingSessions.expiresAt })
+    .select({
+      id: onboardingSessions.id,
+      guildId: onboardingSessions.guildId,
+      expiresAt: onboardingSessions.expiresAt,
+    })
     .from(onboardingSessions)
     .where(eq(onboardingSessions.status, 'applied'))
     .all();
-  return rows.map((r) => ({ id: r.id as Ulid, expiresAt: parseSqliteDate(r.expiresAt) }));
+  return rows.map((r) => ({
+    id: r.id as Ulid,
+    guildId: r.guildId as GuildId,
+    expiresAt: parseSqliteDate(r.expiresAt),
+  }));
 };

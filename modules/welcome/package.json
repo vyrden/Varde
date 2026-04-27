@@ -1,0 +1,31 @@
+{
+  "name": "@varde/module-welcome",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Module officiel : message d'accueil/départ avec carte d'avatar, auto-rôle et filtre comptes neufs.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "dev": "tsc --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.79",
+    "@varde/contracts": "workspace:*",
+    "@varde/core": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "@varde/testing": "workspace:*",
+    "typescript": "6.0.3",
+    "vitest": "4.1.4"
+  }
+}

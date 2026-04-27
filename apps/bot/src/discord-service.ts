@@ -1,34 +1,37 @@
 import {
   type ChannelId,
   DependencyFailureError,
+  DiscordSendError,
+  type DiscordSendErrorReason,
   type DiscordService,
+  type Emoji,
+  type GuildId,
   type Logger,
+  type MessageId,
   type ModuleId,
+  type RoleId,
+  type UIMessage,
+  type UserId,
 } from '@varde/contracts';
+import type { Client } from 'discord.js';
 
 /**
  * Implémentation concrète du `DiscordService` : un wrapper minimal
  * autour d'un port `ChannelSender` qui abstrait discord.js. Le bot
- * (PR 1.6.d) injecte le vrai sender relié au client discord.js ; les
- * tests injectent un sender fake.
+ * injecte le vrai sender relié au client discord.js ; les tests
+ * injectent un sender fake.
  *
  * Rate limiting V1 : fenêtre glissante (sliding window) par instance
- * du service. Chaque appel consomme un crédit ; si la fenêtre est
- * pleine, `sendMessage` lève `DependencyFailureError` sans appeler
- * le sender. L'idée est que le ctx factory produit un service par
- * module, chacun avec sa propre fenêtre — c'est ce qui donne la
- * granularité "par module" demandée par le plan. L'ajout d'une
- * dimension "par guild" dans la clé viendra avec la première
- * régression (V1 assume une poignée de guilds actives par module).
- *
- * Le respect des 429 Discord (retry-after) est prévu post-V1 via un
- * middleware dans discord.js (REST#handleRatelimit). V1 propage les
- * échecs du sender tels quels en DependencyFailureError.
+ * du service, partagée entre `sendMessage` et `sendEmbed` (le coût
+ * Discord d'un envoi est le même qu'on attache un embed ou non). Le
+ * ctx factory produit un service par module — c'est ce qui donne la
+ * granularité "par module" demandée par le plan.
  */
 
-/** Port minimal vers discord.js. Production : `client.channels.send(...)`. */
+/** Port minimal vers discord.js. Production : `channel.send(...)`. */
 export interface ChannelSender {
   readonly sendMessage: (channelId: ChannelId, content: string) => Promise<void>;
+  readonly sendEmbed: (channelId: ChannelId, message: UIMessage) => Promise<void>;
 }
 
 /** Paramètres du rate limiter interne. Omission = pas de limitation. */
@@ -45,6 +48,13 @@ export interface CreateDiscordServiceOptions {
   readonly rateLimit?: RateLimitConfig;
   /** Horloge injectable (tests). Défaut : `Date.now`. */
   readonly now?: () => number;
+  /**
+   * Client discord.js. Requis pour les méthodes qui accèdent
+   * directement aux messages/réactions (addReaction, removeUserReaction,
+   * removeOwnReaction). Optionnel pour rester rétrocompatible avec les
+   * tests qui ne couvrent que sendMessage/sendEmbed.
+   */
+  readonly client?: Client;
 }
 
 interface SlidingWindow {
@@ -74,12 +84,161 @@ const consume = (window: SlidingWindow, nowMs: number): boolean => {
 };
 
 /**
+ * Codes d'erreur Discord (REST API v10) mappés sur nos raisons typées.
+ * - 10003 = Unknown Channel
+ * - 10008 = Unknown Message
+ * - 10014 = Unknown Emoji
+ * - 20028 = Slow Mode
+ * - 50001 = Missing Access
+ * - 50013 = Missing Permissions
+ * - 429  = Rate Limited (HTTP)
+ */
+const DISCORD_CODE_TO_REASON: Readonly<Record<number, DiscordSendErrorReason>> = Object.freeze({
+  10003: 'channel-not-found',
+  10008: 'message-not-found',
+  10014: 'emoji-not-found',
+  20028: 'rate-limit-exhausted',
+  50001: 'missing-permission',
+  50013: 'missing-permission',
+  429: 'rate-limit-exhausted',
+});
+
+const classifyError = (error: unknown): DiscordSendErrorReason => {
+  if (typeof error === 'object' && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'number' && code in DISCORD_CODE_TO_REASON) {
+      return DISCORD_CODE_TO_REASON[code] ?? 'unknown';
+    }
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') {
+      if (/unknown channel/i.test(message)) return 'channel-not-found';
+      if (/missing permissions?/i.test(message)) return 'missing-permission';
+    }
+  }
+  return 'unknown';
+};
+
+/** Forme minimale d'une réaction discord.js dont on a besoin. */
+interface ReactionLike {
+  readonly emoji: { readonly id: string | null; readonly name: string | null };
+  readonly users: { remove: (userId: string) => Promise<unknown> };
+}
+
+/** Forme minimale d'un Message discord.js dont on a besoin. */
+interface MessageLike {
+  readonly react: (emoji: string) => Promise<unknown>;
+  readonly reactions: {
+    readonly cache: Map<string, ReactionLike>;
+  };
+}
+
+/** Forme minimale d'un salon texte discord.js pour fetch de messages. */
+interface TextChannelLike {
+  readonly messages: {
+    readonly fetch: (id: string) => Promise<MessageLike>;
+    readonly delete: (id: string) => Promise<unknown>;
+    readonly edit: (id: string, options: { readonly content: string }) => Promise<unknown>;
+  };
+  /** `send` est disponible sur les salons textuels ; retourne un Message. */
+  readonly send?: (payload: SendPayload) => Promise<{ readonly id: string }>;
+  /**
+   * `bulkDelete(count)` accepte un nombre [1,100] et retourne la
+   * `Collection` des messages réellement supprimés (Discord exclut
+   * silencieusement les messages > 14 jours).
+   */
+  readonly bulkDelete?: (count: number) => Promise<{ readonly size: number }>;
+  /** `setRateLimitPerUser(seconds)` configure le slowmode du salon. */
+  readonly setRateLimitPerUser?: (seconds: number, reason?: string) => Promise<unknown>;
+}
+
+/** Forme minimale d'un GuildMember discord.js dont on a besoin. */
+interface GuildMemberLike {
+  readonly roles: {
+    readonly cache: { has: (roleId: string) => boolean };
+    readonly add: (roleId: string) => Promise<unknown>;
+    readonly remove: (roleId: string) => Promise<unknown>;
+    /** Rôle le plus haut du membre — exposé par discord.js v14 sur `roles.highest`. */
+    readonly highest?: { readonly position: number };
+  };
+  readonly kick?: (reason?: string) => Promise<unknown>;
+}
+
+/** Forme minimale d'une Guild discord.js pour la gestion des membres. */
+interface GuildLike {
+  readonly name: string;
+  readonly memberCount?: number;
+  /** Snowflake du propriétaire de la guild. */
+  readonly ownerId?: string;
+  /**
+   * Membre représentant le bot lui-même. `null` si pas (encore) en
+   * cache — on retombe sur `members.fetchMe()` côté impl V2 si besoin.
+   */
+  readonly members: {
+    readonly fetch: (userId: string) => Promise<GuildMemberLike>;
+    readonly me?: GuildMemberLike | null;
+    /**
+     * `members.ban(userId, { deleteMessageSeconds, reason })` — discord.js
+     * v14 : `deleteMessageDays` est déprécié au profit de `deleteMessageSeconds`.
+     */
+    readonly ban: (
+      userId: string,
+      options?: { readonly deleteMessageSeconds?: number; readonly reason?: string },
+    ) => Promise<unknown>;
+  };
+  readonly bans: {
+    /** `bans.remove(userId, reason?)` lève le bannissement. */
+    readonly remove: (userId: string, reason?: string) => Promise<unknown>;
+  };
+  readonly roles: {
+    readonly cache: { get: (roleId: string) => { name: string } | undefined };
+    readonly create: (options: {
+      readonly name: string;
+      readonly mentionable?: boolean;
+      readonly hoist?: boolean;
+      /** discord.js v14.26+ : couleurs via `colors.primaryColor`. */
+      readonly colors?: { readonly primaryColor?: number };
+    }) => Promise<{ readonly id: string }>;
+  };
+}
+
+/**
+ * Payload accepté par discord.js pour `channel.send()` / `user.send()`.
+ * Note : la pièce jointe utilise la clé `attachment` (pas `data`) — c'est
+ * la forme attendue par MessagePayload.resolveBody dans discord.js v14.
+ */
+type SendPayload =
+  | string
+  | {
+      readonly content: string;
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly attachment: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+      readonly components?: ReadonlyArray<unknown>;
+    };
+
+/** Forme minimale d'un User discord.js pour les DMs. */
+interface UserLike {
+  readonly send: (payload: SendPayload) => Promise<unknown>;
+  /** Snowflake → timestamp Unix en ms (epoch ≥ Discord epoch 2015-01-01). */
+  readonly createdTimestamp?: number;
+  readonly username?: string;
+  readonly tag?: string;
+  readonly globalName?: string | null;
+  readonly displayAvatarURL?: (options?: { size?: number }) => string;
+}
+
+/** Forme minimale d'un UserManager discord.js pour `users.fetch`. */
+interface UsersManagerLike {
+  readonly fetch: (userId: string) => Promise<UserLike>;
+  readonly cache: { get: (userId: string) => UserLike | undefined };
+}
+
+/**
  * Construit un `DiscordService`. Chaque instance a son propre état de
  * rate limiting ; produire un service par module donne l'isolation
  * demandée par le plan.
  */
 export function createDiscordService(options: CreateDiscordServiceOptions): DiscordService {
-  const { sender, moduleId } = options;
+  const { sender, moduleId, client } = options;
   const logger = options.logger.child({
     component: 'discord-service',
     ...(moduleId ? { moduleId } : {}),
@@ -111,6 +270,565 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
           },
         });
       }
+    },
+
+    async sendEmbed(channelId, message) {
+      if (message.kind !== 'embed') {
+        throw new TypeError(
+          `DiscordService.sendEmbed : UIMessage attendu de kind='embed', reçu kind='${message.kind}'.`,
+        );
+      }
+      if (window && !consume(window, clock())) {
+        throw new DiscordSendError(
+          'rate-limit-exhausted',
+          'DiscordService : rate limit applicatif atteint',
+          {
+            metadata: {
+              ...(moduleId ? { moduleId } : {}),
+              limit: window.limit,
+              windowMs: window.windowMs,
+            },
+          },
+        );
+      }
+      try {
+        await sender.sendEmbed(channelId, message);
+      } catch (error) {
+        const cause = error instanceof Error ? error : new Error(String(error));
+        const reason = classifyError(error);
+        logger.warn('sendEmbed a échoué', { channelId, reason, error: cause.message });
+        throw new DiscordSendError(reason, `DiscordService.sendEmbed : ${cause.message}`, {
+          cause,
+          metadata: {
+            ...(moduleId ? { moduleId } : {}),
+            channelId,
+          },
+        });
+      }
+    },
+
+    async addReaction(channelId: ChannelId, messageId: MessageId, emoji: Emoji): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.addReaction : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      let message: MessageLike;
+      try {
+        message = await textChannel.messages.fetch(messageId);
+      } catch {
+        throw new DiscordSendError(
+          'message-not-found',
+          'DiscordService.addReaction : message introuvable',
+        );
+      }
+      const emojiApiId = emoji.type === 'unicode' ? emoji.value : `${emoji.name}:${emoji.id}`;
+      try {
+        await message.react(emojiApiId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.addReaction : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeUserReaction(
+      channelId: ChannelId,
+      messageId: MessageId,
+      userId: UserId,
+      emoji: Emoji,
+    ): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.removeUserReaction : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      let message: MessageLike;
+      try {
+        message = await textChannel.messages.fetch(messageId);
+      } catch {
+        throw new DiscordSendError(
+          'message-not-found',
+          'DiscordService.removeUserReaction : message introuvable',
+        );
+      }
+      const reaction = [...message.reactions.cache.values()].find((r) => {
+        if (emoji.type === 'unicode') return r.emoji.name === emoji.value;
+        return r.emoji.id === emoji.id;
+      });
+      if (!reaction) return;
+      try {
+        await reaction.users.remove(userId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.removeUserReaction : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeOwnReaction(
+      channelId: ChannelId,
+      messageId: MessageId,
+      emoji: Emoji,
+    ): Promise<void> {
+      const botUserId = client?.user?.id;
+      if (!botUserId) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeOwnReaction : client non connecté',
+        );
+      }
+      await this.removeUserReaction(channelId, messageId, botUserId as UserId, emoji);
+    },
+
+    async addMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.addMemberRole : guild introuvable');
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        throw new DiscordSendError('unknown', 'DiscordService.addMemberRole : membre introuvable');
+      }
+      try {
+        await member.roles.add(roleId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.addMemberRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async removeMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeMemberRole : guild introuvable',
+        );
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.removeMemberRole : membre introuvable',
+        );
+      }
+      try {
+        await member.roles.remove(roleId);
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.removeMemberRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async memberHasRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<boolean> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) return false;
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch {
+        return false;
+      }
+      return member.roles.cache.has(roleId);
+    },
+
+    async postMessage(
+      channelId: ChannelId,
+      content: string,
+      options?: {
+        readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+        readonly embeds?: ReadonlyArray<unknown>;
+        readonly components?: ReadonlyArray<unknown>;
+      },
+    ): Promise<{ readonly id: MessageId }> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.postMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.send) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.postMessage : le salon ne supporte pas send()',
+        );
+      }
+      try {
+        const hasOptions =
+          options !== undefined &&
+          (options.files !== undefined ||
+            options.embeds !== undefined ||
+            options.components !== undefined);
+        const payload: SendPayload = hasOptions
+          ? {
+              content,
+              // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
+              ...(options?.files !== undefined
+                ? {
+                    files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
+                  }
+                : {}),
+              ...(options?.embeds !== undefined ? { embeds: options.embeds } : {}),
+              ...(options?.components !== undefined ? { components: options.components } : {}),
+            }
+          : content;
+        const message = await textChannel.send(payload);
+        return { id: message.id as MessageId };
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.postMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async createRole(
+      guildId: GuildId,
+      params: {
+        readonly name: string;
+        readonly mentionable?: boolean;
+        readonly hoist?: boolean;
+        readonly color?: number;
+      },
+    ): Promise<{ readonly id: RoleId }> {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.createRole : guild introuvable');
+      }
+      try {
+        const role = await guild.roles.create({
+          name: params.name,
+          mentionable: params.mentionable ?? false,
+          hoist: params.hoist ?? false,
+          ...(params.color !== undefined ? { colors: { primaryColor: params.color } } : {}),
+        });
+        return { id: role.id as RoleId };
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.createRole : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async editMessage(
+      channelId: ChannelId,
+      messageId: MessageId,
+      content: string,
+      options?: {
+        readonly components?: ReadonlyArray<unknown>;
+      },
+    ): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.editMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      try {
+        await textChannel.messages.edit(messageId, {
+          content,
+          ...(options?.components !== undefined ? { components: options.components } : {}),
+        });
+      } catch (err) {
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.editMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async deleteMessage(channelId: ChannelId, messageId: MessageId): Promise<void> {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.deleteMessage : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      try {
+        await textChannel.messages.delete(messageId);
+      } catch (err) {
+        const reason = classifyError(err);
+        // Code 10008 = Unknown Message → message déjà supprimé manuellement.
+        // On laisse classifyError remonter 'message-not-found' (code 10008
+        // déjà mappé) pour que l'appelant puisse traiter en succès silencieux.
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.deleteMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async sendDirectMessage(userId, content, options) {
+      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      if (!users) {
+        throw new DiscordSendError('unknown', 'DiscordService.sendDirectMessage : client absent');
+      }
+      try {
+        const user = await users.fetch(userId);
+        const payload: SendPayload =
+          options && (options.files !== undefined || options.embeds !== undefined)
+            ? {
+                content,
+                // discord.js v14 attend `{ name, attachment }`, pas `{ name, data }`.
+                ...(options.files !== undefined
+                  ? {
+                      files: options.files.map((f) => ({ name: f.name, attachment: f.data })),
+                    }
+                  : {}),
+                ...(options.embeds !== undefined ? { embeds: options.embeds } : {}),
+              }
+            : content;
+        await user.send(payload);
+        return true;
+      } catch (err) {
+        // Code 50007 = "Cannot send messages to this user" (DMs fermés).
+        // On considère ça comme un échec attendu et on retourne false.
+        const code = (err as { code?: unknown } | null)?.code;
+        if (code === 50007) {
+          logger.debug('sendDirectMessage : DMs fermés', { userId });
+          return false;
+        }
+        const reason = classifyError(err);
+        throw new DiscordSendError(
+          reason,
+          `DiscordService.sendDirectMessage : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    getGuildName(guildId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.name ?? null;
+    },
+
+    getRoleName(guildId, roleId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.roles.cache.get(roleId)?.name ?? null;
+    },
+
+    async kickMember(guildId, userId, reason) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.kickMember : guild introuvable');
+      }
+      let member: GuildMemberLike;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (err) {
+        const reason2 = classifyError(err);
+        throw new DiscordSendError(
+          reason2,
+          `DiscordService.kickMember : member fetch a échoué (${err instanceof Error ? err.message : String(err)})`,
+        );
+      }
+      if (!member.kick) {
+        throw new DiscordSendError(
+          'unknown',
+          'DiscordService.kickMember : member.kick indisponible',
+        );
+      }
+      try {
+        await member.kick(reason);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.kickMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async banMember(guildId, userId, reason, deleteMessageDays) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.banMember : guild introuvable');
+      }
+      const banOptions: { deleteMessageSeconds?: number; reason?: string } = {};
+      if (deleteMessageDays !== undefined) {
+        banOptions.deleteMessageSeconds = deleteMessageDays * 86400;
+      }
+      if (reason !== undefined) banOptions.reason = reason;
+      try {
+        await guild.members.ban(userId, banOptions);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.banMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async unbanMember(guildId, userId, reason) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) {
+        throw new DiscordSendError('unknown', 'DiscordService.unbanMember : guild introuvable');
+      }
+      try {
+        await guild.bans.remove(userId, reason);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.unbanMember : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async bulkDeleteMessages(channelId, count) {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.bulkDeleteMessages : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.bulkDelete) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.bulkDeleteMessages : le salon ne supporte pas bulkDelete()',
+        );
+      }
+      try {
+        const result = await textChannel.bulkDelete(count);
+        return { deleted: result.size };
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.bulkDeleteMessages : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async setChannelSlowmode(channelId, seconds) {
+      const channel = client?.channels.cache.get(channelId);
+      if (!channel || !('messages' in channel)) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.setChannelSlowmode : salon introuvable',
+        );
+      }
+      const textChannel = channel as TextChannelLike;
+      if (!textChannel.setRateLimitPerUser) {
+        throw new DiscordSendError(
+          'channel-not-found',
+          'DiscordService.setChannelSlowmode : le salon ne supporte pas setRateLimitPerUser()',
+        );
+      }
+      try {
+        await textChannel.setRateLimitPerUser(seconds);
+      } catch (err) {
+        const reasonClassified = classifyError(err);
+        throw new DiscordSendError(
+          reasonClassified,
+          `DiscordService.setChannelSlowmode : ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+
+    async canModerate(guildId, modUserId, targetUserId) {
+      // Auto-cible : refus immédiat sans toucher Discord.
+      if (modUserId === targetUserId) return { ok: false, reason: 'self' };
+
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      if (!guild) return { ok: false, reason: 'unknown' };
+
+      // Bot lui-même : on lit l'id depuis client.user.
+      const botUserId = client?.user?.id;
+      if (botUserId !== undefined && targetUserId === botUserId) {
+        return { ok: false, reason: 'bot' };
+      }
+
+      // Propriétaire de la guild : intouchable.
+      if (guild.ownerId !== undefined && targetUserId === guild.ownerId) {
+        return { ok: false, reason: 'owner' };
+      }
+
+      // Récupère la cible. Si introuvable (= pas membre), pas de
+      // contrainte de hiérarchie — utile pour /unban et /ban
+      // préventif sur snowflake externe.
+      let targetMember: GuildMemberLike | null = null;
+      try {
+        targetMember = await guild.members.fetch(targetUserId);
+      } catch {
+        return { ok: true };
+      }
+      const targetPos = targetMember.roles.highest?.position ?? 0;
+
+      // Mod : doit dépasser la cible.
+      let modMember: GuildMemberLike;
+      try {
+        modMember = await guild.members.fetch(modUserId);
+      } catch {
+        // Mod introuvable (cas pathologique) — refus défensif.
+        return { ok: false, reason: 'unknown' };
+      }
+      const modPos = modMember.roles.highest?.position ?? 0;
+      if (modPos <= targetPos) return { ok: false, reason: 'rank' };
+
+      // Bot : doit dépasser la cible (sinon Discord refusera l'action).
+      const botMember = guild.members.me ?? null;
+      const botPos = botMember?.roles.highest?.position;
+      if (botPos === undefined || botPos <= targetPos) {
+        return { ok: false, reason: 'rank' };
+      }
+
+      return { ok: true };
+    },
+
+    getMemberCount(guildId) {
+      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      return guild?.memberCount ?? null;
+    },
+
+    async getUserDisplayInfo(userId) {
+      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      if (!users) return null;
+      let user: UserLike | undefined;
+      try {
+        user = users.cache.get(userId) ?? (await users.fetch(userId));
+      } catch {
+        return null;
+      }
+      if (!user) return null;
+      const username = user.username ?? user.globalName ?? 'Inconnu';
+      const tag = user.tag ?? user.username ?? username;
+      const avatarUrl = user.displayAvatarURL?.({ size: 256 }) ?? '';
+      const accountCreatedAt = user.createdTimestamp ?? Date.now();
+      return { username, tag, avatarUrl, accountCreatedAt };
     },
   };
 }

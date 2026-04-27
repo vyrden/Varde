@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   configChangedSchema,
   coreEventSchema,
+  guildChannelUpdateSchema,
   guildMemberJoinSchema,
   guildMessageCreateSchema,
   guildMessageEditSchema,
+  guildMessageReactionAddSchema,
+  guildMessageReactionRemoveSchema,
   guildRoleDeleteSchema,
+  guildRoleUpdateSchema,
   isCoreEvent,
   moduleLoadedSchema,
   parseCoreEvent,
@@ -80,8 +84,45 @@ describe('guildMessageCreateSchema', () => {
       authorId: SNOWFLAKE_D,
       content: 'Bonjour',
       createdAt: 1_700_000_000_000,
+      attachments: [],
     };
     expect(guildMessageCreateSchema.parse(input)).toEqual(input);
+  });
+
+  it('accepte des attachments avec MIME et filename optionnels', () => {
+    const result = guildMessageCreateSchema.safeParse({
+      type: 'guild.messageCreate',
+      guildId: SNOWFLAKE_A,
+      channelId: SNOWFLAKE_B,
+      messageId: SNOWFLAKE_C,
+      authorId: SNOWFLAKE_D,
+      content: 'photo',
+      createdAt: 1,
+      attachments: [
+        { id: '1', url: 'https://cdn/x.png', filename: 'x.png', contentType: 'image/png' },
+        { id: '2', url: 'https://cdn/y.mp4', contentType: null },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attachments).toHaveLength(2);
+    }
+  });
+
+  it('attachments par défaut = [] si absent', () => {
+    const result = guildMessageCreateSchema.safeParse({
+      type: 'guild.messageCreate',
+      guildId: SNOWFLAKE_A,
+      channelId: SNOWFLAKE_B,
+      messageId: SNOWFLAKE_C,
+      authorId: SNOWFLAKE_D,
+      content: 'no attachments',
+      createdAt: 1,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.attachments).toEqual([]);
+    }
   });
 
   it('accepte un contenu vide', () => {
@@ -224,6 +265,189 @@ describe('coreEventSchema (union discriminée)', () => {
     } else {
       throw new Error('narrowing cassé');
     }
+  });
+});
+
+describe('guildChannelUpdateSchema', () => {
+  const baseInput = {
+    type: 'guild.channelUpdate',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    nameBefore: 'général',
+    nameAfter: 'général-archive',
+    topicBefore: 'Discussions générales',
+    topicAfter: 'Archivé',
+    positionBefore: 0,
+    positionAfter: 5,
+    parentIdBefore: SNOWFLAKE_C,
+    parentIdAfter: SNOWFLAKE_D,
+    updatedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload enrichi complet', () => {
+    expect(guildChannelUpdateSchema.parse(baseInput)).toEqual(baseInput);
+  });
+
+  it('accepte topicBefore/topicAfter null (channel sans topic)', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      topicBefore: null,
+      topicAfter: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepte parentIdBefore/parentIdAfter null (hors catégorie)', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      parentIdBefore: null,
+      parentIdAfter: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('refuse nameBefore manquant', () => {
+    const { nameBefore, ...missingName } = baseInput;
+    void nameBefore;
+    const result = guildChannelUpdateSchema.safeParse(missingName);
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse positionBefore négatif', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      positionBefore: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse parentIdAfter non-snowflake', () => {
+    const result = guildChannelUpdateSchema.safeParse({
+      ...baseInput,
+      parentIdAfter: 'pas un snowflake',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('guildRoleUpdateSchema', () => {
+  const baseInput = {
+    type: 'guild.roleUpdate',
+    guildId: SNOWFLAKE_A,
+    roleId: SNOWFLAKE_B,
+    nameBefore: 'Membre',
+    nameAfter: 'Membre Vérifié',
+    colorBefore: 0,
+    colorAfter: 0xff0000,
+    hoistBefore: false,
+    hoistAfter: true,
+    mentionableBefore: true,
+    mentionableAfter: false,
+    permissionsBefore: '0',
+    permissionsAfter: '8',
+    updatedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload enrichi complet', () => {
+    expect(guildRoleUpdateSchema.parse(baseInput)).toEqual(baseInput);
+  });
+
+  it('refuse permissionsBefore number (doit rester string pour fidélité bitfield)', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      permissionsBefore: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse colorBefore négatif', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      colorBefore: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse hoistBefore non-booléen', () => {
+    const result = guildRoleUpdateSchema.safeParse({
+      ...baseInput,
+      hoistBefore: 'true',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('permet un narrowing exhaustif depuis coreEventSchema', () => {
+    const parsed = coreEventSchema.parse(baseInput);
+    if (parsed.type === 'guild.roleUpdate') {
+      expect(parsed.nameAfter).toBe('Membre Vérifié');
+      expect(parsed.permissionsAfter).toBe('8');
+    } else {
+      throw new Error('narrowing cassé');
+    }
+  });
+});
+
+describe('guildMessageReactionAddSchema et RemoveSchema', () => {
+  const unicodePayload = {
+    type: 'guild.messageReactionAdd',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    messageId: SNOWFLAKE_C,
+    userId: SNOWFLAKE_D,
+    emoji: { type: 'unicode', value: '🎉' },
+    reactedAt: 1_700_000_000_000,
+  };
+
+  const customPayload = {
+    type: 'guild.messageReactionAdd',
+    guildId: SNOWFLAKE_A,
+    channelId: SNOWFLAKE_B,
+    messageId: SNOWFLAKE_C,
+    userId: SNOWFLAKE_D,
+    emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    reactedAt: 1_700_000_000_000,
+  };
+
+  it('accepte un payload valide avec emoji unicode', () => {
+    expect(guildMessageReactionAddSchema.parse(unicodePayload)).toEqual(unicodePayload);
+  });
+
+  it('accepte un payload valide avec emoji custom', () => {
+    expect(guildMessageReactionAddSchema.parse(customPayload)).toEqual(customPayload);
+  });
+
+  it('refuse un emoji sans discriminant type', () => {
+    const bad = { ...unicodePayload, emoji: { value: '🎉' } };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un emoji unicode avec value vide', () => {
+    const bad = { ...unicodePayload, emoji: { type: 'unicode', value: '' } };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un emoji custom avec id non-snowflake', () => {
+    const bad = {
+      ...customPayload,
+      emoji: { type: 'custom', id: 'abc', name: 'x', animated: false },
+    };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('refuse un userId non-snowflake', () => {
+    const bad = { ...unicodePayload, userId: 'pas-un-snowflake' };
+    expect(guildMessageReactionAddSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('guildMessageReactionRemoveSchema a la même forme (avec type différent)', () => {
+    const payload = { ...unicodePayload, type: 'guild.messageReactionRemove' };
+    expect(guildMessageReactionRemoveSchema.parse(payload)).toEqual(payload);
+  });
+
+  it('coreEventSchema accepte les 2 nouveaux events via la union', () => {
+    expect(coreEventSchema.safeParse(unicodePayload).success).toBe(true);
+    const removePayload = { ...unicodePayload, type: 'guild.messageReactionRemove' };
+    expect(coreEventSchema.safeParse(removePayload).success).toBe(true);
   });
 });
 

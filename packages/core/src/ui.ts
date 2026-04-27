@@ -1,87 +1,82 @@
-import type { UIMessage, UIService } from '@varde/contracts';
+import type { UIAttachment, UIEmbed, UIMessage, UIService } from '@varde/contracts';
 
 /**
  * Factory UI normalisée. Les modules appellent uniquement ces méthodes
- * pour produire des réponses Discord ; le bot (PR 1.6) applique ensuite
- * un middleware qui refuse toute réponse qui ne passe pas par l'une
- * d'entre elles (en dev : throw ; en prod : journalisation).
+ * pour produire des `UIMessage`s. Le rendu Discord (EmbedBuilder,
+ * AttachmentBuilder) vit côté `apps/bot/src/client-adapter.ts`.
  *
  * En V1 la factory est sans état et sans dépendance : chaque méthode
- * produit un `UIMessage` immuable dont le `payload` est une structure
- * JSON simple. Le rendu Discord lui-même (embed builder, boutons) est
- * fait par le bot dans PR 1.6, qui interprète le `kind` et le payload.
+ * produit un `UIMessage` immuable. Les payloads sont figés via
+ * `Object.freeze` pour que les modules ne puissent pas muter un
+ * message après création.
  */
-
-export interface EmbedPayload {
-  readonly title?: string;
-  readonly description?: string;
-}
-
-export interface SuccessPayload {
-  readonly message: string;
-}
-
-export interface ErrorPayload {
-  readonly message: string;
-}
-
-export interface ConfirmPayload {
-  readonly message: string;
-  readonly confirmLabel: string;
-  readonly cancelLabel: string;
-}
 
 const frozen = <T>(value: T): T => Object.freeze(value);
 
-/**
- * Construit le `UIService` contract. Pas d'options en V1 : la
- * localisation est faite par le module via `ctx.i18n.t(key)` avant
- * d'appeler la factory.
- */
+/** Clone figé d'un UIEmbed en copiant les champs optionnels définis. */
+const freezeEmbed = (source: UIEmbed): UIEmbed => {
+  const payload: Record<string, unknown> = {};
+  if (source.title !== undefined) payload['title'] = source.title;
+  if (source.description !== undefined) payload['description'] = source.description;
+  if (source.url !== undefined) payload['url'] = source.url;
+  if (source.color !== undefined) payload['color'] = source.color;
+  if (source.timestamp !== undefined) payload['timestamp'] = source.timestamp;
+  if (source.author !== undefined) payload['author'] = frozen({ ...source.author });
+  if (source.footer !== undefined) payload['footer'] = frozen({ ...source.footer });
+  if (source.fields !== undefined) {
+    payload['fields'] = frozen(source.fields.map((field) => frozen({ ...field })));
+  }
+  if (source.thumbnailUrl !== undefined) payload['thumbnailUrl'] = source.thumbnailUrl;
+  if (source.imageUrl !== undefined) payload['imageUrl'] = source.imageUrl;
+  return frozen(payload) as UIEmbed;
+};
+
+const freezeAttachments = (attachments: readonly UIAttachment[]): readonly UIAttachment[] =>
+  frozen(attachments.map((a) => frozen({ ...a })));
+
 export function createUIService(): UIService {
   return {
-    embed(options) {
-      const payload: EmbedPayload = frozen({
-        ...(options.title !== undefined ? { title: options.title } : {}),
-        ...(options.description !== undefined ? { description: options.description } : {}),
-      });
-      return frozen<UIMessage>({ kind: 'embed', payload });
+    embed(options, attachments) {
+      const payload = freezeEmbed(options);
+      const base: { kind: 'embed'; payload: UIEmbed; attachments?: readonly UIAttachment[] } = {
+        kind: 'embed',
+        payload,
+      };
+      if (attachments !== undefined && attachments.length > 0) {
+        base.attachments = freezeAttachments(attachments);
+      }
+      return frozen<UIMessage>(base);
     },
 
     success(message) {
-      const payload: SuccessPayload = frozen({ message });
-      return frozen<UIMessage>({ kind: 'success', payload });
+      return frozen<UIMessage>({ kind: 'success', payload: frozen({ message }) });
     },
 
     error(message) {
-      const payload: ErrorPayload = frozen({ message });
-      return frozen<UIMessage>({ kind: 'error', payload });
+      return frozen<UIMessage>({ kind: 'error', payload: frozen({ message }) });
     },
 
     confirm(options) {
-      const payload: ConfirmPayload = frozen({
-        message: options.message,
-        confirmLabel: options.confirmLabel ?? 'Confirmer',
-        cancelLabel: options.cancelLabel ?? 'Annuler',
+      return frozen<UIMessage>({
+        kind: 'confirm',
+        payload: frozen({
+          message: options.message,
+          confirmLabel: options.confirmLabel ?? 'Confirmer',
+          cancelLabel: options.cancelLabel ?? 'Annuler',
+        }),
       });
-      return frozen<UIMessage>({ kind: 'confirm', payload });
     },
   };
 }
 
 /**
- * Garde-fou utilisé par le bot (PR 1.6) pour valider qu'une valeur
- * renvoyée par un handler de commande est bien un `UIMessage` produit
- * par la factory. Un objet qui ne passe pas cette garde est refusé
- * en dev et journalisé comme violation en prod.
+ * Garde-fou utilisé par le bot pour valider qu'une valeur renvoyée
+ * par un handler de commande est bien un `UIMessage` produit par la
+ * factory. Un objet qui ne passe pas cette garde est refusé en dev.
  */
 export function isUIMessage(value: unknown): value is UIMessage {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  if (!Object.isFrozen(value)) {
-    return false;
-  }
+  if (typeof value !== 'object' || value === null) return false;
+  if (!Object.isFrozen(value)) return false;
   const candidate = value as { kind?: unknown; payload?: unknown };
   const kinds = ['embed', 'success', 'error', 'confirm'];
   return (

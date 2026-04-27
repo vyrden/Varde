@@ -1,0 +1,199 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
+
+// biome-ignore lint/complexity/useLiteralKeys: noUncheckedIndexedAccess requires bracket notation for process.env
+const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
+const SESSION_COOKIE = 'varde.session';
+
+const buildCookieHeader = async (): Promise<string> => {
+  const cookieStore = await cookies();
+  const session = cookieStore.get(SESSION_COOKIE);
+  return session ? `${SESSION_COOKIE}=${session.value}` : '';
+};
+
+/** Une paire emoji → rôle, soit posée en réaction, soit en bouton. */
+export interface PublishReactionRolePairInput {
+  /** Type de l'élément. Défaut côté API : `'reaction'`. */
+  readonly kind?: 'reaction' | 'button';
+  readonly emoji:
+    | { readonly type: 'unicode'; readonly value: string }
+    | {
+        readonly type: 'custom';
+        readonly id: string;
+        readonly name: string;
+        readonly animated?: boolean;
+      };
+  readonly roleId?: string;
+  readonly roleName?: string;
+  /** Texte du bouton (kind=button uniquement). */
+  readonly label?: string;
+  /** Couleur du bouton (kind=button uniquement). */
+  readonly style?: 'primary' | 'secondary' | 'success' | 'danger';
+}
+
+export interface PublishReactionRoleInput {
+  readonly label: string;
+  readonly channelId: string;
+  readonly message: string;
+  readonly mode: 'normal' | 'unique' | 'verifier';
+  /**
+   * `'ephemeral'` exige qu'au moins une paire soit `kind: 'button'`
+   * (le serveur valide). Pour les paires `kind: 'reaction'`, le runtime
+   * retombe sur `dm`.
+   */
+  readonly feedback: 'dm' | 'ephemeral' | 'none';
+  readonly pairs: ReadonlyArray<PublishReactionRolePairInput>;
+}
+
+export type PublishResult =
+  | { readonly ok: true; readonly id: string; readonly messageId: string }
+  | { readonly ok: false; readonly reason: string; readonly detail?: string };
+
+/**
+ * Publie un nouveau message reaction-roles sur Discord et persiste
+ * l'entrée dans la config via `POST /guilds/:guildId/modules/reaction-roles/publish`.
+ */
+export async function publishReactionRole(
+  guildId: string,
+  input: PublishReactionRoleInput,
+): Promise<PublishResult> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/publish`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify(input),
+      },
+    );
+
+    if (response.status === 201) {
+      const body = (await response.json()) as { id: string; messageId: string };
+      revalidatePath(`/guilds/${guildId}/modules/reaction-roles`);
+      return { ok: true, id: body.id, messageId: body.messageId };
+    }
+
+    const errBody = (await response.json().catch(() => ({}))) as {
+      reason?: string;
+      detail?: string;
+    };
+    return {
+      ok: false,
+      reason: errBody.reason ?? `http-${response.status}`,
+      ...(errBody.detail !== undefined ? { detail: errBody.detail } : {}),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'network',
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export interface SyncReactionRoleInput {
+  readonly label: string;
+  readonly channelId: string;
+  readonly message: string;
+  readonly mode: 'normal' | 'unique' | 'verifier';
+  readonly feedback: 'dm' | 'ephemeral' | 'none';
+  readonly pairs: PublishReactionRoleInput['pairs'];
+}
+
+export type SyncResult =
+  | {
+      readonly ok: true;
+      readonly added: number;
+      readonly removed: number;
+      readonly channelChanged: boolean;
+      /** Présent uniquement quand le salon change : nouveau messageId Discord. */
+      readonly messageId?: string;
+    }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * Synchronise les paires d'un message reaction-roles existant via
+ * `POST /guilds/:guildId/modules/reaction-roles/:messageId/sync`.
+ */
+export async function syncReactionRole(
+  guildId: string,
+  messageId: string,
+  input: SyncReactionRoleInput,
+): Promise<SyncResult> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/${encodeURIComponent(messageId)}/sync`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+        body: JSON.stringify(input),
+      },
+    );
+
+    if (response.ok) {
+      const body = (await response.json()) as {
+        added: number;
+        removed: number;
+        channelChanged?: boolean;
+        messageId?: string;
+      };
+      revalidatePath(`/guilds/${guildId}/modules/reaction-roles`);
+      return {
+        ok: true,
+        added: body.added,
+        removed: body.removed,
+        channelChanged: body.channelChanged === true,
+        ...(body.messageId !== undefined ? { messageId: body.messageId } : {}),
+      };
+    }
+
+    const errBody = (await response.json().catch(() => ({}))) as { reason?: string };
+    return { ok: false, reason: errBody.reason ?? `http-${response.status}` };
+  } catch {
+    return { ok: false, reason: 'network' };
+  }
+}
+
+/**
+ * Supprime une entrée reaction-roles via
+ * `DELETE /guilds/:guildId/modules/reaction-roles/:messageId`.
+ * L'API supprime le message Discord (best-effort : un message déjà
+ * supprimé manuellement n'est pas une erreur) puis nettoie la config.
+ */
+export async function deleteReactionRole(
+  guildId: string,
+  messageId: string,
+): Promise<{ readonly ok: boolean }> {
+  try {
+    const response = await fetch(
+      `${API_URL}/guilds/${encodeURIComponent(guildId)}/modules/reaction-roles/${encodeURIComponent(messageId)}`,
+      {
+        method: 'DELETE',
+        cache: 'no-store',
+        headers: {
+          accept: 'application/json',
+          cookie: await buildCookieHeader(),
+        },
+      },
+    );
+    if (response.ok || response.status === 204) {
+      revalidatePath(`/guilds/${guildId}/modules/reaction-roles`);
+      return { ok: true };
+    }
+    return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}

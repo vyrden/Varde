@@ -124,3 +124,34 @@ export class ModuleError extends AppError {
     this.moduleId = moduleId;
   }
 }
+
+/** Raisons d'un échec d'envoi Discord, stables dans les logs et API. */
+export type DiscordSendErrorReason =
+  | 'channel-not-found'
+  | 'message-not-found'
+  | 'emoji-not-found'
+  | 'missing-permission'
+  | 'rate-limit-exhausted'
+  | 'unknown';
+
+/**
+ * Échec d'envoi d'un message ou embed Discord. Utilisée par
+ * `DiscordService.sendEmbed` et consommable par les modules pour
+ * réagir au cas (marquer une route `broken`, bufferiser, etc.).
+ *
+ * Le champ `reason` est aussi injecté dans `metadata.reason` pour
+ * que les serializers (logs, audit) le voient sans introspection
+ * typée.
+ */
+export class DiscordSendError extends AppError {
+  readonly reason: DiscordSendErrorReason;
+
+  constructor(reason: DiscordSendErrorReason, message: string, options?: AppErrorSubclassOptions) {
+    super('discord_send_failed', message, {
+      ...(options?.cause !== undefined ? { cause: options.cause } : {}),
+      httpStatus: 502,
+      metadata: { ...options?.metadata, reason },
+    });
+    this.reason = reason;
+  }
+}

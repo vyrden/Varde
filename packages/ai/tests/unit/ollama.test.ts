@@ -289,3 +289,31 @@ describe('createOllamaProvider — testConnection', () => {
     expect(info.details).toContain('ECONNREFUSED');
   });
 });
+
+describe('createOllamaProvider — classify', () => {
+  it("n'envoie PAS format=json pour classify (label brut attendu, pas un wrapper JSON)", async () => {
+    const fetchMock = vi.fn(async () => buildChatResponse('toxicity'));
+    const provider = createOllamaProvider({
+      endpoint: 'http://localhost:11434',
+      model: 'llama3.1:8b',
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const result = await provider.classify('truc', ['safe', 'toxicity']);
+    expect(result).toBe('toxicity');
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as { body: string }).body) as {
+      format?: string;
+    };
+    expect(body.format).toBeUndefined();
+  });
+
+  it('fail-open vers safe quand le modèle répond hors-pool', async () => {
+    const fetchMock = vi.fn(async () => buildChatResponse('je ne sais pas'));
+    const provider = createOllamaProvider({
+      endpoint: 'http://localhost:11434',
+      model: 'llama3.1:8b',
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const result = await provider.classify('hi', ['safe', 'toxicity']);
+    expect(result).toBe('safe');
+  });
+});

@@ -40,6 +40,7 @@ const baseInput = (commandName: string): CommandInteractionInput => ({
   channelId: CHANNEL,
   userId: USER,
   options: {},
+  resolved: { users: {}, roles: {}, channels: {} },
 });
 
 describe('createCommandRegistry', () => {
@@ -195,5 +196,37 @@ describe('routeCommandInteraction', () => {
         ctxFactory: stubCtxFactory,
       }),
     ).rejects.toBeInstanceOf(ModuleError);
+  });
+
+  it("refuse via enablementCheck si le module n'est pas activé pour la guild", async () => {
+    const registry = createCommandRegistry();
+    const handler = vi.fn();
+    registry.register(refFor(HELLO), {
+      ping: { name: 'ping', description: 'Ping', handler: handler as never },
+    });
+    const message = await routeCommandInteraction(baseInput('ping'), {
+      registry,
+      ctxFactory: stubCtxFactory,
+      enablementCheck: { isEnabled: () => false },
+    });
+    expect(message.kind).toBe('error');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('autorise via enablementCheck si le module est activé', async () => {
+    const registry = createCommandRegistry();
+    const handler = vi.fn((_input: CommandInteractionInput, ctx: ModuleContext) =>
+      ctx.ui.success('pong'),
+    );
+    registry.register(refFor(HELLO), {
+      ping: { name: 'ping', description: 'Ping', handler },
+    });
+    const message = await routeCommandInteraction(baseInput('ping'), {
+      registry,
+      ctxFactory: stubCtxFactory,
+      enablementCheck: { isEnabled: () => true },
+    });
+    expect(message.kind).toBe('success');
+    expect(handler).toHaveBeenCalled();
   });
 });

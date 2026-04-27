@@ -1,9 +1,15 @@
+export {
+  createDiscordJsChannelSender,
+  type DiscordJsSendPayload,
+  mapEmbedToDiscordJsPayload,
+} from './channel-sender-mapper.js';
 export { attachDiscordClient } from './client-adapter.js';
 export {
   type CommandCtxFactory,
   type CommandPermissionsPort,
   type CommandRegistry,
   createCommandRegistry,
+  type ModuleEnablementCheck,
   type RouteCommandOptions,
   routeCommandInteraction,
 } from './commands.js';
@@ -34,3 +40,12 @@ export {
   type ShutdownCoordinator,
   type ShutdownStep,
 } from './shutdown.js';
+export {
+  collectEnabledCommandsForGuild,
+  type DiscordCommandPayload,
+  type ModuleEnablementProbe,
+  registerSlashCommandsForGuild,
+  type SlashRegistrationClient,
+  toCommandPayload,
+  toOptionPayload,
+} from './slash-registration.js';

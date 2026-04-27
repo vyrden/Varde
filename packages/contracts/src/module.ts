@@ -1,7 +1,7 @@
 import { type ZodObject, type ZodType, z } from 'zod';
 
 import type { ModuleContext, ModuleQuery, UIMessage } from './context.js';
-import type { ChannelId, GuildId, PermissionId, UserId } from './ids.js';
+import type { ChannelId, GuildId, PermissionId, RoleId, UserId } from './ids.js';
 import { type ManifestStatic, manifestStaticSchema, validateEmitPrefix } from './manifest.js';
 
 /**
@@ -29,10 +29,62 @@ export type ModuleGuildLifecycleHandler = (
 export type ModuleQueryMap = Readonly<Record<string, ModuleQuery>>;
 
 /**
+ * Vue résolue d'un user passé en option d'une slash command.
+ * `displayName` est garanti non-vide : fallback côté builder sur
+ * `member.displayName` → `user.globalName` → `user.username` → `user.tag`.
+ * `tag` reste l'identifiant public canonique (`pseudo#0`).
+ */
+export interface ResolvedUser {
+  readonly id: UserId;
+  readonly tag: string;
+  readonly displayName: string;
+  readonly isBot: boolean;
+}
+
+/**
+ * Vue résolue d'un rôle. `position` permet aux handlers de
+ * modération de vérifier la hiérarchie (un mod ne peut pas
+ * sanctionner un membre dont un rôle est plus haut que les siens).
+ */
+export interface ResolvedRole {
+  readonly id: RoleId;
+  readonly name: string;
+  readonly position: number;
+}
+
+/**
+ * Vue résolue d'un salon. `type` est la valeur numérique
+ * `ChannelType` de discord.js (0=GuildText, 2=GuildVoice,
+ * 5=GuildAnnouncement, 11=PublicThread, 13=GuildStageVoice,
+ * 15=GuildForum, etc.). Pas d'import discord.js dans `@varde/contracts` —
+ * les consommateurs gardent le mapping si besoin.
+ */
+export interface ResolvedChannel {
+  readonly id: ChannelId;
+  readonly name: string;
+  readonly type: number;
+}
+
+/**
+ * Entités résolues par le bot à partir de `interaction.options.resolved`.
+ * Indexées par snowflake pour permettre `resolved.users[input.options.member]`.
+ * Toujours présent (objet vide si aucune option de type user/role/channel)
+ * — évite les `?.` chez chaque handler.
+ */
+export interface ResolvedCommandInput {
+  readonly users: Readonly<Record<UserId, ResolvedUser>>;
+  readonly roles: Readonly<Record<RoleId, ResolvedRole>>;
+  readonly channels: Readonly<Record<ChannelId, ResolvedChannel>>;
+}
+
+/**
  * Entrée d'une interaction de commande reçue par le handler d'un
- * module. Les options sont volontairement contraintes aux types
- * Discord natifs stables (string | number | boolean). Les types plus
- * riches (channel, user, role) seront ajoutés si nécessaire post-V1.
+ * module. Les options elles-mêmes restent plates et limitées aux
+ * primitives Discord (string | number | boolean) — pour les options
+ * de type user/role/channel, le snowflake est passé en `string` dans
+ * `options`, et la vue enrichie correspondante est lisible dans
+ * `resolved` (pattern miroir de `interaction.options.resolved` côté
+ * discord.js).
  */
 export interface CommandInteractionInput {
   readonly commandName: string;
@@ -40,6 +92,7 @@ export interface CommandInteractionInput {
   readonly channelId: ChannelId;
   readonly userId: UserId;
   readonly options: Readonly<Record<string, string | number | boolean>>;
+  readonly resolved: ResolvedCommandInput;
 }
 
 /**
@@ -55,17 +108,74 @@ export type ModuleCommandHandler = (
 ) => Promise<UIMessage> | UIMessage;
 
 /**
+ * Type d'une option de slash command. Mappe 1:1 sur Discord
+ * `ApplicationCommandOptionType` (3=string, 4=integer, 5=boolean,
+ * 6=user, 7=channel, 8=role, 10=number). Les types sub-command (1,
+ * 2), mentionable (9) et attachment (11) ne sont pas exposés en V1
+ * — ajout possible plus tard sans casser la rétrocompat.
+ */
+export type ModuleCommandOptionType =
+  | 'string'
+  | 'integer'
+  | 'boolean'
+  | 'number'
+  | 'user'
+  | 'role'
+  | 'channel';
+
+/**
+ * Choix prédéfini d'une option de type `string`. Le user voit `name`
+ * dans le client Discord et le handler reçoit `value` dans
+ * `input.options[option.name]`.
+ */
+export interface ModuleCommandOptionChoice {
+  readonly name: string;
+  readonly value: string;
+}
+
+/**
+ * Déclaration d'une option d'une slash command. Sert deux usages :
+ * 1. Décrire à Discord la forme de la commande (REST registration).
+ * 2. Documenter aux handlers ce qu'attend `input.options`.
+ *
+ * Les bornes (`minLength`, `maxLength`, `minValue`, `maxValue`) sont
+ * appliquées par Discord côté client — pas besoin de re-vérifier
+ * dans le handler. Discord refuse l'interaction si elles sont
+ * dépassées.
+ */
+export interface ModuleCommandOption {
+  readonly name: string;
+  readonly description: string;
+  readonly type: ModuleCommandOptionType;
+  readonly required?: boolean;
+  /** Bornes de longueur pour `type: 'string'`. */
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  /** Bornes pour `type: 'integer' | 'number'`. */
+  readonly minValue?: number;
+  readonly maxValue?: number;
+  /** Choix prédéfinis pour `type: 'string'`. Mutuellement exclusif avec min/maxLength. */
+  readonly choices?: readonly ModuleCommandOptionChoice[];
+}
+
+/**
  * Déclaration d'une slash command par un module.
  *
  * `defaultPermission` est la permission applicative requise pour
  * exécuter la commande ; si elle est déclarée, le bot vérifie
  * `can(actor, permission, ...)` avant d'invoquer le handler. `null`
  * explicite = ouverte à tous les utilisateurs.
+ *
+ * `options` décrit les arguments attendus. Le bot s'en sert pour
+ * enregistrer la commande auprès de Discord (REST) au boot — les
+ * commandes sans `options` sont enregistrées sans paramètres.
+ * L'ordre des options est préservé tel quel à Discord.
  */
 export interface ModuleCommand {
   readonly name: string;
   readonly description: string;
   readonly defaultPermission?: PermissionId | null;
+  readonly options?: readonly ModuleCommandOption[];
   readonly handler: ModuleCommandHandler;
 }
 

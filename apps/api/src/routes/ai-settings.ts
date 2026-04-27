@@ -183,10 +183,25 @@ export function registerAiSettingsRoutes(
       }
       const extracted = extractAiConfig(snapshot);
       const providerId: AiProviderId = extracted.providerId ?? 'none';
-      const storedKey =
-        providerId === 'openai-compat'
-          ? await keystore.get(guildId as GuildId, KEYSTORE_API_KEY_SLOT)
-          : null;
+      // Lecture défensive du keystore : si la clé est corrompue ou
+      // chiffrée avec une master key obsolète, on log un warn et on
+      // retourne `hasApiKey: false` pour que l'admin puisse en
+      // re-poser une propre. Sans ce catch, la page /settings/ai
+      // renverrait 502 et serait inatteignable — état bloquant.
+      let storedKey: string | null = null;
+      if (providerId === 'openai-compat') {
+        try {
+          storedKey = await keystore.get(guildId as GuildId, KEYSTORE_API_KEY_SLOT);
+        } catch (error) {
+          app.log.warn(
+            {
+              guildId,
+              err: error instanceof Error ? error.message : String(error),
+            },
+            "keystore : clé API IA illisible, la page signalera 'aucune clé' — re-poser une clé l'écrasera",
+          );
+        }
+      }
       return {
         providerId,
         endpoint: extracted.endpoint ?? null,

@@ -93,6 +93,7 @@ describe('mapDiscordEvent — messages', () => {
       authorId: '42',
       content: 'salut',
       createdAt: AT,
+      attachments: [],
     });
   });
 
@@ -133,7 +134,6 @@ describe('mapDiscordEvent — messages', () => {
 describe('mapDiscordEvent — salons, rôles, guild', () => {
   it.each([
     ['channelCreate', 'guild.channelCreate', 'createdAt'] as const,
-    ['channelUpdate', 'guild.channelUpdate', 'updatedAt'] as const,
     ['channelDelete', 'guild.channelDelete', 'deletedAt'] as const,
   ])('%s → %s porte %s', (kind, type, timestampField) => {
     const event = mapDiscordEvent({
@@ -145,9 +145,39 @@ describe('mapDiscordEvent — salons, rôles, guild', () => {
     expect(event).toMatchObject({ type, guildId: '111', channelId: '222', [timestampField]: AT });
   });
 
+  it('channelUpdate → guild.channelUpdate porte les diffs name/topic/position/parent', () => {
+    const event = mapDiscordEvent({
+      kind: 'channelUpdate',
+      guildId: '111',
+      channelId: '222',
+      nameBefore: 'général',
+      nameAfter: 'général-archive',
+      topicBefore: 'Discussions',
+      topicAfter: null,
+      positionBefore: 0,
+      positionAfter: 5,
+      parentIdBefore: null,
+      parentIdAfter: '333',
+      updatedAt: AT,
+    });
+    expect(event).toEqual({
+      type: 'guild.channelUpdate',
+      guildId: '111',
+      channelId: '222',
+      nameBefore: 'général',
+      nameAfter: 'général-archive',
+      topicBefore: 'Discussions',
+      topicAfter: null,
+      positionBefore: 0,
+      positionAfter: 5,
+      parentIdBefore: null,
+      parentIdAfter: '333',
+      updatedAt: AT,
+    });
+  });
+
   it.each([
     ['roleCreate', 'guild.roleCreate', 'createdAt'] as const,
-    ['roleUpdate', 'guild.roleUpdate', 'updatedAt'] as const,
     ['roleDelete', 'guild.roleDelete', 'deletedAt'] as const,
   ])('%s → %s porte %s', (kind, type, timestampField) => {
     const event = mapDiscordEvent({
@@ -157,6 +187,62 @@ describe('mapDiscordEvent — salons, rôles, guild', () => {
       [timestampField]: AT,
     } as DiscordEventInput);
     expect(event).toMatchObject({ type, guildId: '111', roleId: 'r1', [timestampField]: AT });
+  });
+
+  it('roleUpdate → guild.roleUpdate porte les diffs name/color/hoist/mentionable/permissions', () => {
+    const event = mapDiscordEvent({
+      kind: 'roleUpdate',
+      guildId: '111',
+      roleId: 'r1',
+      nameBefore: 'Membre',
+      nameAfter: 'Membre Vérifié',
+      colorBefore: 0,
+      colorAfter: 0xff0000,
+      hoistBefore: false,
+      hoistAfter: true,
+      mentionableBefore: true,
+      mentionableAfter: false,
+      permissionsBefore: '0',
+      permissionsAfter: '8',
+      updatedAt: AT,
+    });
+    expect(event).toEqual({
+      type: 'guild.roleUpdate',
+      guildId: '111',
+      roleId: 'r1',
+      nameBefore: 'Membre',
+      nameAfter: 'Membre Vérifié',
+      colorBefore: 0,
+      colorAfter: 0xff0000,
+      hoistBefore: false,
+      hoistAfter: true,
+      mentionableBefore: true,
+      mentionableAfter: false,
+      permissionsBefore: '0',
+      permissionsAfter: '8',
+      updatedAt: AT,
+    });
+  });
+
+  it('roleUpdate préserve le bitfield permissions en string (pas de coercion number)', () => {
+    const event = mapDiscordEvent({
+      kind: 'roleUpdate',
+      guildId: '111',
+      roleId: 'r1',
+      nameBefore: 'R',
+      nameAfter: 'R',
+      colorBefore: 0,
+      colorAfter: 0,
+      hoistBefore: false,
+      hoistAfter: false,
+      mentionableBefore: false,
+      mentionableAfter: false,
+      permissionsBefore: '0',
+      permissionsAfter: '1099511627775',
+      updatedAt: AT,
+    });
+    expect(event).toMatchObject({ permissionsAfter: '1099511627775' });
+    expect(typeof (event as { permissionsAfter: unknown }).permissionsAfter).toBe('string');
   });
 
   it('guildCreate → guild.join et guildDelete → guild.leave', () => {
@@ -170,6 +256,45 @@ describe('mapDiscordEvent — salons, rôles, guild', () => {
       guildId: '111',
       leftAt: AT,
     });
+  });
+});
+
+describe('mapDiscordEvent — reactions', () => {
+  const baseUnicode = {
+    kind: 'messageReactionAdd' as const,
+    guildId: '111',
+    channelId: '222',
+    messageId: '333',
+    userId: '42',
+    emoji: { type: 'unicode' as const, value: '🎉' },
+    reactedAt: AT,
+  };
+
+  it('messageReactionAdd avec emoji unicode → guild.messageReactionAdd', () => {
+    const event = mapDiscordEvent(baseUnicode);
+    expect(event).toMatchObject({
+      type: 'guild.messageReactionAdd',
+      guildId: '111',
+      channelId: '222',
+      messageId: '333',
+      userId: '42',
+      emoji: { type: 'unicode', value: '🎉' },
+    });
+  });
+
+  it('messageReactionAdd avec emoji custom', () => {
+    const event = mapDiscordEvent({
+      ...baseUnicode,
+      emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    });
+    expect(event).toMatchObject({
+      emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+    });
+  });
+
+  it('messageReactionRemove → guild.messageReactionRemove', () => {
+    const event = mapDiscordEvent({ ...baseUnicode, kind: 'messageReactionRemove' });
+    expect(event.type).toBe('guild.messageReactionRemove');
   });
 });
 
@@ -216,13 +341,59 @@ describe('mapDiscordEvent — parité avec le schéma Zod', () => {
         deletedAt: AT,
       },
       { kind: 'channelCreate', guildId: '111', channelId: '222', createdAt: AT },
-      { kind: 'channelUpdate', guildId: '111', channelId: '222', updatedAt: AT },
+      {
+        kind: 'channelUpdate',
+        guildId: '111',
+        channelId: '222',
+        nameBefore: 'a',
+        nameAfter: 'b',
+        topicBefore: null,
+        topicAfter: 't',
+        positionBefore: 0,
+        positionAfter: 1,
+        parentIdBefore: null,
+        parentIdAfter: '333',
+        updatedAt: AT,
+      },
       { kind: 'channelDelete', guildId: '111', channelId: '222', deletedAt: AT },
       { kind: 'roleCreate', guildId: '111', roleId: 'r1', createdAt: AT },
-      { kind: 'roleUpdate', guildId: '111', roleId: 'r1', updatedAt: AT },
+      {
+        kind: 'roleUpdate',
+        guildId: '111',
+        roleId: 'r1',
+        nameBefore: 'a',
+        nameAfter: 'b',
+        colorBefore: 0,
+        colorAfter: 0xff0000,
+        hoistBefore: false,
+        hoistAfter: true,
+        mentionableBefore: false,
+        mentionableAfter: true,
+        permissionsBefore: '0',
+        permissionsAfter: '8',
+        updatedAt: AT,
+      },
       { kind: 'roleDelete', guildId: '111', roleId: 'r1', deletedAt: AT },
       { kind: 'guildCreate', guildId: '111', joinedAt: AT },
       { kind: 'guildDelete', guildId: '111', leftAt: AT },
+      {
+        kind: 'messageReactionAdd',
+        guildId: '111',
+        channelId: '222',
+        messageId: '333',
+        userId: '42',
+        emoji: { type: 'unicode', value: '🎉' },
+        reactedAt: AT,
+      },
+      {
+        kind: 'messageReactionRemove',
+        guildId: '111',
+        channelId: '222',
+        messageId: '333',
+        userId: '42',
+        emoji: { type: 'custom', id: '123456789012345678', name: 'rocket', animated: false },
+        reactedAt: AT,
+      },
     ];
     for (const input of fixtures) {
       expect(() => roundTrip(input)).not.toThrow();

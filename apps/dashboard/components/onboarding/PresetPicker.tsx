@@ -1,6 +1,12 @@
 'use client';
 
-import type { PresetDefinition } from '@varde/presets';
+import type {
+  PresetCategory,
+  PresetChannel,
+  PresetDefinition,
+  PresetModuleConfig,
+  PresetRole,
+} from '@varde/presets';
 import {
   Badge,
   Button,
@@ -9,7 +15,10 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Drawer,
+  Textarea,
 } from '@varde/ui';
+import Link from 'next/link';
 import { type ReactElement, useState, useTransition } from 'react';
 
 import { startOnboardingWithPreset } from '../../lib/onboarding-actions';
@@ -18,28 +27,49 @@ import { AIGenerator } from './AIGenerator';
 export interface PresetPickerProps {
   readonly guildId: string;
   readonly presets: readonly PresetDefinition[];
+  /**
+   * Snapshot du provider IA actuel pour la sidebar. Optionnel — si
+   * absent (fetch a échoué), on n'affiche pas la card.
+   */
+  readonly aiProvider?: AiProviderSnapshot | null;
+}
+
+export interface AiProviderSnapshot {
+  readonly providerId: 'none' | 'ollama' | 'openai-compat';
+  readonly model: string | null;
+  readonly endpoint: string | null;
+  readonly hasApiKey: boolean;
 }
 
 /**
- * Étape 1 du flow : choix d'un preset de départ. Les cartes affichent
- * un résumé chiffré (rôles / catégories / salons / modules) et la
- * description FR. Au click, on appelle la server action
+ * Étape 1 du flow : choix d'un preset de départ. Layout 2 colonnes —
+ * main avec feature card IA + grille de presets, sidebar avec
+ * avertissement 30 min + à propos.
+ *
+ * Au-dessus du catalogue, une feature card CTA « Générer un preset
+ * sur mesure » expose un Textarea inline qui pré-remplit l'écran
+ * `AIGenerator` au submit (PR 3.10).
+ *
+ * Au click sur un preset, on appelle la server action
  * `startOnboardingWithPreset` ; la page onboarding est ensuite
  * revalidée côté serveur et affiche l'étape suivante (BuilderCanvas).
- *
- * Au-dessus du catalogue, une CTA "Me générer un preset sur mesure
- * (IA)" bascule sur `AIGenerator` — flow parallèle qui appelle
- * `/onboarding/ai/generate-preset` puis crée la session avec
- * `source: 'ai'` si l'admin accepte la proposition (PR 3.10).
  */
-export function PresetPicker({ guildId, presets }: PresetPickerProps): ReactElement {
+export function PresetPicker({ guildId, presets, aiProvider }: PresetPickerProps): ReactElement {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [aiDescription, setAiDescription] = useState('');
   const [showAi, setShowAi] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   if (showAi) {
-    return <AIGenerator guildId={guildId} onBack={() => setShowAi(false)} />;
+    return (
+      <AIGenerator
+        guildId={guildId}
+        onBack={() => setShowAi(false)}
+        initialDescription={aiDescription}
+      />
+    );
   }
 
   const onChoose = (presetId: string): void => {
@@ -54,95 +84,582 @@ export function PresetPicker({ guildId, presets }: PresetPickerProps): ReactElem
     });
   };
 
+  const onAiSubmit = (): void => {
+    setShowAi(true);
+  };
+
+  const previewPreset =
+    previewId !== null ? (presets.find((p) => p.id === previewId) ?? null) : null;
+  const previewBusy = pending && selectedId === previewId;
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Choisir un preset de départ</h2>
-        <p className="text-sm text-muted-foreground">
-          Un preset est un squelette de serveur (rôles, catégories, salons, modules). Vous pourrez
-          preview et appliquer, puis défaire si besoin dans les 30 minutes.
-        </p>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="flex flex-col gap-4 lg:col-span-2">
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        <FeatureAiCard
+          description={aiDescription}
+          onChange={setAiDescription}
+          onSubmit={onAiSubmit}
+          disabled={pending}
+        />
+
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {presets.map((preset) => {
+            const busy = pending && selectedId === preset.id;
+            return (
+              <li key={preset.id}>
+                <PresetCard
+                  preset={preset}
+                  busy={busy}
+                  onChoose={onChoose}
+                  onPreview={() => setPreviewId(preset.id)}
+                />
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+      <aside className="lg:col-span-1">
+        <div className="sticky top-6 flex flex-col gap-4">
+          <RollbackWarningCard />
+          {aiProvider !== undefined && aiProvider !== null ? (
+            <AiProviderCard guildId={guildId} provider={aiProvider} />
+          ) : null}
+          <AboutCard />
+        </div>
+      </aside>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Pas de preset qui colle ?</p>
-            <p className="text-xs text-muted-foreground">
-              Décrivez votre communauté, l'IA propose un preset sur mesure que vous pourrez ensuite
-              éditer et appliquer.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowAi(true)}
-            disabled={pending}
-          >
-            Me générer un preset sur mesure (IA)
-          </Button>
-        </CardContent>
-      </Card>
-
-      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {presets.map((preset) => {
-          const busy = pending && selectedId === preset.id;
-          return (
-            <li key={preset.id}>
-              <Card>
-                <CardHeader className="space-y-1">
-                  <CardTitle>{preset.name}</CardTitle>
-                  <CardDescription>{preset.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="flex flex-wrap gap-1.5">
-                    {preset.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                  <dl className="grid grid-cols-4 gap-2 text-xs text-muted-foreground">
-                    <PresetStat label="rôles" value={preset.roles.length} />
-                    <PresetStat label="catégories" value={preset.categories.length} />
-                    <PresetStat label="salons" value={preset.channels.length} />
-                    <PresetStat label="modules" value={preset.modules.length} />
-                  </dl>
-                  <Button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => onChoose(preset.id)}
-                    aria-label={`Démarrer avec le preset ${preset.name}`}
-                  >
-                    {busy ? 'Démarrage...' : 'Démarrer avec ce preset'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </li>
-          );
-        })}
-      </ul>
+      <Drawer
+        open={previewPreset !== null}
+        onClose={() => setPreviewId(null)}
+        title={previewPreset?.name ?? ''}
+        {...(previewPreset !== null ? { subtitle: previewPreset.description } : {})}
+        size="xl"
+        footer={
+          previewPreset !== null ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Vous pourrez tout éditer avant l'application.
+              </p>
+              <Button
+                type="button"
+                disabled={previewBusy}
+                onClick={() => onChoose(previewPreset.id)}
+              >
+                {previewBusy ? 'Démarrage…' : 'Démarrer avec ce preset →'}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {previewPreset !== null ? <PresetPreview preset={previewPreset} /> : null}
+      </Drawer>
     </div>
   );
 }
 
+// --- AI provider card ---
+
+interface AiProviderCardProps {
+  readonly guildId: string;
+  readonly provider: AiProviderSnapshot;
+}
+
+const PROVIDER_LABEL: Record<AiProviderSnapshot['providerId'], string> = {
+  none: 'Aucun (stub local)',
+  ollama: 'Ollama',
+  'openai-compat': 'OpenAI-compatible',
+};
+
+function AiProviderCard({ guildId, provider }: AiProviderCardProps): ReactElement {
+  const isConfigured = provider.providerId === 'none' || provider.model !== null;
+  const dotClass = isConfigured ? 'bg-success' : 'bg-warning';
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Fournisseur IA</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+          <span className="text-foreground">{PROVIDER_LABEL[provider.providerId]}</span>
+        </div>
+        {provider.model !== null ? (
+          <div className="space-y-0.5 text-muted-foreground">
+            <div className="flex justify-between gap-2">
+              <span>Modèle</span>
+              <span className="truncate font-mono text-foreground">{provider.model}</span>
+            </div>
+            {provider.endpoint !== null ? (
+              <div className="flex justify-between gap-2">
+                <span>Endpoint</span>
+                <span className="truncate font-mono text-foreground">{provider.endpoint}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : provider.providerId === 'none' ? (
+          <p className="text-muted-foreground">
+            Le générateur de preset utilisera la heuristique locale (rule-based).
+          </p>
+        ) : (
+          <p className="text-warning">Configuration incomplète — modèle manquant.</p>
+        )}
+        <Link
+          href={`/guilds/${guildId}/settings/ai`}
+          className="block pt-1 font-medium text-primary hover:underline"
+        >
+          Modifier →
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Feature CTA card (IA) ---
+
+interface FeatureAiCardProps {
+  readonly description: string;
+  readonly onChange: (next: string) => void;
+  readonly onSubmit: () => void;
+  readonly disabled: boolean;
+}
+
+function FeatureAiCard({
+  description,
+  onChange,
+  onSubmit,
+  disabled,
+}: FeatureAiCardProps): ReactElement {
+  return (
+    <Card className="overflow-hidden border-l-4 border-l-primary bg-linear-to-br from-primary/10 to-card">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M8 1.5l1.4 4.1L13.5 7l-4.1 1.4L8 12.5 6.6 8.4 2.5 7l4.1-1.4L8 1.5z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          <CardTitle>Générer un preset sur mesure avec l'IA</CardTitle>
+        </div>
+        <CardDescription>
+          Décrivez votre communauté en quelques mots. L'IA propose un preset personnalisé que vous
+          pourrez éditer puis appliquer.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Textarea
+          value={description}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          placeholder='Ex : "Serveur gaming FPS, 50 membres, surtout du vocal le soir, besoin d&apos;un canal LFG."'
+          aria-label="Description de la communauté"
+        />
+        <div className="flex justify-end">
+          <Button type="button" onClick={onSubmit} disabled={disabled}>
+            Générer →
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Card de preset ---
+
+interface PresetCardProps {
+  readonly preset: PresetDefinition;
+  readonly busy: boolean;
+  readonly onChoose: (presetId: string) => void;
+  readonly onPreview: () => void;
+}
+
+function PresetCard({ preset, busy, onChoose, onPreview }: PresetCardProps): ReactElement {
+  const meta = presetMeta(preset);
+  return (
+    <Card className="group flex h-full flex-col transition-colors duration-150 ease-out hover:border-primary/60">
+      <CardHeader className="space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <span
+            aria-hidden="true"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-base"
+            style={{ backgroundColor: meta.iconBg, color: meta.iconColor }}
+          >
+            {meta.icon}
+          </span>
+          <div className="flex flex-wrap justify-end gap-1">
+            {preset.tags.slice(0, 3).map((tag) => (
+              <PresetTag key={tag} tag={tag} />
+            ))}
+          </div>
+        </div>
+        <CardTitle className="text-base">{preset.name}</CardTitle>
+        <CardDescription className="line-clamp-3">{preset.description}</CardDescription>
+      </CardHeader>
+      <CardContent className="mt-auto space-y-3 pt-0">
+        <div className="grid grid-cols-4 gap-1 border-t border-border pt-3">
+          <PresetStat value={preset.roles.length} label="rôles" />
+          <PresetStat value={preset.categories.length} label="catégories" />
+          <PresetStat value={preset.channels.length} label="salons" />
+          <PresetStat value={preset.modules.length} label="modules" />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1"
+            onClick={onPreview}
+            aria-label={`Aperçu du preset ${preset.name}`}
+          >
+            Aperçu
+          </Button>
+          <Button
+            type="button"
+            className="flex-1"
+            disabled={busy}
+            onClick={() => onChoose(preset.id)}
+            aria-label={`Démarrer avec le preset ${preset.name}`}
+          >
+            {busy ? 'Démarrage…' : 'Démarrer →'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PresetStat({
-  label,
   value,
+  label,
 }: {
-  readonly label: string;
   readonly value: number;
+  readonly label: string;
 }): ReactElement {
   return (
-    <div>
-      <dt className="font-medium text-foreground">{value}</dt>
-      <dd>{label}</dd>
+    <div className="flex flex-col text-center">
+      <span className="text-lg font-bold leading-tight text-foreground">{value}</span>
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
     </div>
+  );
+}
+
+// --- Preview drawer body ---
+
+const PERMISSION_LABEL: Record<PresetRole['permissionPreset'], string> = {
+  'moderator-full': 'Modérateur (complet)',
+  'moderator-minimal': 'Modérateur (minimal)',
+  'member-default': 'Membre',
+  'member-restricted': 'Membre (restreint)',
+};
+
+const CHANNEL_GLYPH: Record<PresetChannel['type'], string> = {
+  text: '#',
+  voice: '🔊',
+  forum: '💬',
+};
+
+function PresetPreview({ preset }: { readonly preset: PresetDefinition }): ReactElement {
+  const channelsByCategory = new Map<string | null, PresetChannel[]>();
+  for (const ch of preset.channels) {
+    const key = ch.categoryLocalId;
+    const list = channelsByCategory.get(key);
+    if (list !== undefined) list.push(ch);
+    else channelsByCategory.set(key, [ch]);
+  }
+  const orphanChannels = channelsByCategory.get(null) ?? [];
+
+  return (
+    <div className="space-y-6 text-sm">
+      {preset.tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {preset.tags.map((tag) => (
+            <PresetTag key={tag} tag={tag} />
+          ))}
+        </div>
+      ) : null}
+
+      <PreviewSection title="Rôles" count={preset.roles.length}>
+        {preset.roles.length === 0 ? (
+          <PreviewEmpty>Aucun rôle créé par ce preset.</PreviewEmpty>
+        ) : (
+          <ul className="space-y-1.5">
+            {preset.roles.map((role) => (
+              <PreviewRoleRow key={role.localId} role={role} />
+            ))}
+          </ul>
+        )}
+      </PreviewSection>
+
+      <PreviewSection
+        title="Catégories & salons"
+        count={preset.categories.length + preset.channels.length}
+      >
+        {preset.categories.length === 0 && preset.channels.length === 0 ? (
+          <PreviewEmpty>Aucune catégorie ni aucun salon créé.</PreviewEmpty>
+        ) : (
+          <div className="space-y-3">
+            {preset.categories.map((cat) => (
+              <PreviewCategoryGroup
+                key={cat.localId}
+                category={cat}
+                channels={channelsByCategory.get(cat.localId) ?? []}
+              />
+            ))}
+            {orphanChannels.length > 0 ? (
+              <PreviewCategoryGroup category={null} channels={orphanChannels} />
+            ) : null}
+          </div>
+        )}
+      </PreviewSection>
+
+      <PreviewSection title="Modules activés" count={preset.modules.length}>
+        {preset.modules.length === 0 ? (
+          <PreviewEmpty>Aucun module activé par ce preset.</PreviewEmpty>
+        ) : (
+          <ul className="space-y-1.5">
+            {preset.modules.map((mod) => (
+              <PreviewModuleRow key={mod.moduleId} mod={mod} />
+            ))}
+          </ul>
+        )}
+      </PreviewSection>
+    </div>
+  );
+}
+
+function PreviewSection({
+  title,
+  count,
+  children,
+}: {
+  readonly title: string;
+  readonly count: number;
+  readonly children: ReactElement | ReactElement[];
+}): ReactElement {
+  return (
+    <section>
+      <header className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
+        <Badge variant="secondary">{count}</Badge>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function PreviewEmpty({ children }: { readonly children: string }): ReactElement {
+  return <p className="text-xs italic text-muted-foreground">{children}</p>;
+}
+
+function PreviewRoleRow({ role }: { readonly role: PresetRole }): ReactElement {
+  const colorHex = `#${role.color.toString(16).padStart(6, '0')}`;
+  return (
+    <li className="flex items-center gap-2 rounded-md bg-sidebar px-2.5 py-1.5">
+      <span
+        aria-hidden="true"
+        className="h-3 w-3 shrink-0 rounded-full border border-border/40"
+        style={{ backgroundColor: role.color === 0 ? 'transparent' : colorHex }}
+      />
+      <span className="flex-1 truncate font-medium text-foreground">{role.name}</span>
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        {PERMISSION_LABEL[role.permissionPreset]}
+      </span>
+      {role.hoist ? <Badge variant="outline">épinglé</Badge> : null}
+    </li>
+  );
+}
+
+function PreviewCategoryGroup({
+  category,
+  channels,
+}: {
+  readonly category: PresetCategory | null;
+  readonly channels: readonly PresetChannel[];
+}): ReactElement {
+  return (
+    <div className="rounded-md bg-sidebar px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {category?.name ?? 'Sans catégorie'}
+      </div>
+      {channels.length > 0 ? (
+        <ul className="mt-1 space-y-0.5">
+          {channels.map((ch) => (
+            <PreviewChannelRow key={ch.localId} channel={ch} />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-xs italic text-muted-foreground">Catégorie vide.</p>
+      )}
+    </div>
+  );
+}
+
+function PreviewChannelRow({ channel }: { readonly channel: PresetChannel }): ReactElement {
+  const restricted = channel.readableBy.length > 0 || channel.writableBy.length > 0;
+  return (
+    <li className="flex items-center gap-2 px-1 py-0.5">
+      <span aria-hidden="true" className="w-4 text-center text-muted-foreground">
+        {CHANNEL_GLYPH[channel.type]}
+      </span>
+      <span className="flex-1 truncate text-foreground">{channel.name}</span>
+      {channel.slowmodeSeconds > 0 ? (
+        <span className="shrink-0 text-[11px] text-muted-foreground">
+          slow {channel.slowmodeSeconds}s
+        </span>
+      ) : null}
+      {restricted ? (
+        <span
+          className="shrink-0 text-[11px] text-warning"
+          title="Accès restreint à certains rôles"
+        >
+          🔒
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+function PreviewModuleRow({ mod }: { readonly mod: PresetModuleConfig }): ReactElement {
+  return (
+    <li className="flex items-center gap-2 rounded-md bg-sidebar px-2.5 py-1.5">
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 shrink-0 rounded-full ${mod.enabled ? 'bg-success' : 'bg-muted'}`}
+      />
+      <span className="flex-1 font-mono text-xs text-foreground">{mod.moduleId}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {mod.enabled ? 'activé' : 'désactivé'}
+      </span>
+    </li>
+  );
+}
+
+// --- Tags & metadata ---
+
+interface TagStyle {
+  readonly bg: string;
+  readonly fg: string;
+}
+
+const TAG_PALETTE: Record<string, TagStyle> = {
+  gaming: { bg: '#1a1a2e', fg: '#7289da' },
+  voice: { bg: '#1a1a2e', fg: '#7289da' },
+  tech: { bg: '#1a2233', fg: '#5b9bd5' },
+  dev: { bg: '#1a2233', fg: '#5b9bd5' },
+  ops: { bg: '#1a2233', fg: '#5b9bd5' },
+  'text-only': { bg: '#1a2233', fg: '#5b9bd5' },
+  creative: { bg: '#2a1a2e', fg: '#c27adb' },
+  art: { bg: '#2a1a2e', fg: '#c27adb' },
+  design: { bg: '#2a1a2e', fg: '#c27adb' },
+  study: { bg: '#1a2e1a', fg: '#3ba55c' },
+  education: { bg: '#1a2e1a', fg: '#3ba55c' },
+  small: { bg: '#2b2d31', fg: '#80848e' },
+  generic: { bg: '#2b2d31', fg: '#80848e' },
+  starter: { bg: '#2b2d31', fg: '#80848e' },
+  minimal: { bg: '#2b2d31', fg: '#80848e' },
+};
+
+const DEFAULT_TAG_STYLE: TagStyle = { bg: '#2b2d31', fg: '#80848e' };
+
+function PresetTag({ tag }: { readonly tag: string }): ReactElement {
+  const style = TAG_PALETTE[tag.toLowerCase()] ?? DEFAULT_TAG_STYLE;
+  return (
+    <span
+      className="rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+      style={{ backgroundColor: style.bg, color: style.fg }}
+    >
+      {tag}
+    </span>
+  );
+}
+
+interface PresetMeta {
+  readonly icon: string;
+  readonly iconBg: string;
+  readonly iconColor: string;
+}
+
+function presetMeta(preset: PresetDefinition): PresetMeta {
+  const tags = preset.tags.map((t) => t.toLowerCase());
+  if (tags.some((t) => t === 'gaming' || t === 'voice')) {
+    return { icon: '🎮', iconBg: '#1a1a2e', iconColor: '#7289da' };
+  }
+  if (tags.some((t) => t === 'tech' || t === 'dev' || t === 'ops')) {
+    return { icon: '💻', iconBg: '#1a2233', iconColor: '#5b9bd5' };
+  }
+  if (tags.some((t) => t === 'creative' || t === 'art' || t === 'design')) {
+    return { icon: '🎨', iconBg: '#2a1a2e', iconColor: '#c27adb' };
+  }
+  if (tags.some((t) => t === 'study' || t === 'education')) {
+    return { icon: '📚', iconBg: '#1a2e1a', iconColor: '#3ba55c' };
+  }
+  return { icon: '✦', iconBg: '#2b2d31', iconColor: '#80848e' };
+}
+
+// --- Sidebar cards ---
+
+function RollbackWarningCard(): ReactElement {
+  return (
+    <Card className="border-l-4 border-l-warning">
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true" className="text-warning">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+              <path
+                d="M8 4.5V8l2 1.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <CardTitle className="text-sm">Annulation possible</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs text-muted-foreground">
+        <p>
+          Après application, vous disposez de{' '}
+          <strong className="text-foreground">30 minutes</strong> pour défaire le preset (rollback
+          intégral).
+        </p>
+        <p>Au-delà, les changements sont permanents et ne peuvent être annulés en un clic.</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AboutCard(): ReactElement {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">À propos</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs text-muted-foreground">
+        <p>Un preset crée :</p>
+        <ul className="space-y-1 pl-4">
+          <li>· des rôles Discord</li>
+          <li>· des catégories et salons</li>
+          <li>· active certains modules Varde</li>
+        </ul>
+        <p className="pt-1">
+          Les salons et rôles existants ne sont pas supprimés — un preset n'ajoute que ce qui
+          manque.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

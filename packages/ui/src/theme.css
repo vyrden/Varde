@@ -1,95 +1,152 @@
 /*
- * Theme Varde — Tailwind 4 CSS-first.
+ * Theme Varde — palette Discord (dark-only V1).
  *
- * À importer depuis le `globals.css` d'un consommateur :
- *     @import "tailwindcss";
- *     @import "@varde/ui/theme.css";
+ * Mapping des couches DA :
+ *   --rail            (#1e1f22) — couche la plus sombre, rail des guilds + inputs
+ *   --sidebar         (#2b2d31) — sidebar nav + cards + popovers
+ *   --surface         (#313338) — zone de contenu principale
+ *   --surface-hover   (#35373c) — hover sur éléments de liste
+ *   --surface-active  (#404249) — élément sélectionné / actif
  *
- * Expose deux familles de variables :
- * 1. Tokens sémantiques sur `:root` (et `.dark` pour le mode sombre),
- *    consultés par les composants du paquet via les classes
- *    `bg-background`, `text-foreground`, `border-border`, etc.
- * 2. Mapping vers les utilitaires Tailwind via le bloc `@theme inline`
- *    pour que `tailwindcss` génère les classes correspondantes.
+ * Les tokens shadcn classiques (--background, --card, --primary…) sont
+ * mappés sur ces couches pour rétrocompatibilité avec les classes
+ * existantes (bg-background, bg-card, etc.).
+ *
+ * Pas de mode clair en V1 (cf. DA.md). Les classes `dark:` deviennent
+ * inutiles — on applique une seule couleur quel que soit le mode.
  */
 
 @layer base {
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    /* Couches DA */
+    --rail: #1e1f22;
+    --sidebar: #2b2d31;
+    --surface: #313338;
+    --surface-hover: #35373c;
+    --surface-active: #404249;
 
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    /* Tokens sémantiques (mappent sur les couches ci-dessus) */
+    --background: #313338;
+    --foreground: #dbdee1;
 
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
+    --card: #2b2d31;
+    --card-foreground: #dbdee1;
 
-    --primary: oklch(0.55 0.18 260);
-    --primary-foreground: oklch(0.985 0 0);
+    --popover: #2b2d31;
+    --popover-foreground: #dbdee1;
 
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
+    /* Accent blurple Discord */
+    --primary: #5865F2;
+    --primary-foreground: #ffffff;
+    --primary-hover: #4752C4;
 
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* Bouton « secondary » Discord (gris neutre) */
+    --secondary: #4e5058;
+    --secondary-foreground: #ffffff;
+    --secondary-hover: #6d6f78;
 
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --muted: #383a40;
+    --muted-foreground: #80848e;
 
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0 0);
+    --accent: #35373c;
+    --accent-foreground: #dbdee1;
 
-    --success: oklch(0.64 0.165 150);
-    --success-foreground: oklch(0.985 0 0);
+    /* Couleurs fonctionnelles Discord */
+    --destructive: #ed4245;
+    --destructive-foreground: #ffffff;
+    --destructive-hover: #c03537;
 
-    --warning: oklch(0.76 0.18 85);
-    --warning-foreground: oklch(0.205 0 0);
+    --success: #23a55a;
+    --success-foreground: #ffffff;
 
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --warning: #fee75c;
+    --warning-foreground: #1e1f22;
 
-    --radius: 0.625rem;
+    --info: #00a8fc;
+    --info-foreground: #ffffff;
+
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --input: #1e1f22;
+    --ring: #5865F2;
+
+    --radius: 0.5rem;
+
+    /*
+     * Ombres — barème inspiré du site marketing Discord. Trois paliers :
+     * ─ sm   : élévation discrète (cards calmes, panels en repos)
+     * ─ md   : éléments interactifs au hover (cards, popovers actifs)
+     * ─ lg   : ouvertures modales, drawers, overlays
+     * Les ombres restent neutres (noires, opacité variable) ; le glow
+     * blurple est gardé pour les éléments qui doivent vraiment
+     * « ressortir » (CTAs, focus ring).
+     */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16);
+    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.32);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
+    --shadow-glow-primary: 0 0 0 1px rgba(88, 101, 242, 0.55), 0 4px 16px rgba(88, 101, 242, 0.32);
+
+    /*
+     * Dégradés blurple — utilisés sur les CTAs principaux et certains
+     * accents (icône d'en-tête, badges premium). Légère diagonale pour
+     * rappeler le style des boutons de discord.com.
+     */
+    --gradient-primary: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #6571f4 0%, #5865f2 100%);
+
+    /*
+     * Courbes d'easing standardisées. `--ease-out` pour les
+     * apparitions/hover, `--ease-spring` pour les retours interactifs
+     * (légère décélération qui rappelle le rebond Discord sans en
+     * faire trop). Durations en variables pour pouvoir resserrer
+     * partout d'un coup.
+     */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+    --duration-fast: 120ms;
+    --duration-base: 180ms;
+    --duration-slow: 260ms;
+
+    /*
+     * Police principale — Noto Sans (substitut public à gg sans Discord).
+     * Le consommateur (apps/dashboard) injecte la variable
+     * `--font-noto-sans` via `next/font/google` ; le fallback couvre
+     * les contextes sans Next (storybook, tests).
+     */
+    --font-sans:
+      var(--font-noto-sans, 'Noto Sans'), 'Helvetica Neue', Helvetica, Arial,
+      'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+    --font-mono:
+      ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+      monospace;
   }
 
+  /* Pas de bascule mode clair en V1 — la classe `.dark` reste pour
+     ne pas casser un éventuel toggle, mais elle hérite des mêmes
+     valeurs que :root. */
   .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
+    color-scheme: dark;
+  }
 
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-
-    --primary: oklch(0.7 0.17 260);
-    --primary-foreground: oklch(0.205 0 0);
-
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0 0);
-
-    --success: oklch(0.64 0.165 150);
-    --success-foreground: oklch(0.985 0 0);
-
-    --warning: oklch(0.76 0.18 85);
-    --warning-foreground: oklch(0.205 0 0);
-
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.556 0 0);
+  html,
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @theme inline {
+  /* Couches DA exposées comme classes Tailwind */
+  --color-rail: var(--rail);
+  --color-sidebar: var(--sidebar);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+
+  /* Tokens sémantiques (compat shadcn) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -110,11 +167,26 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  --radius-sm: 0.1875rem; /* 3px — boutons Discord */
+  --radius-md: 0.25rem;   /* 4px — inputs, panels */
+  --radius-lg: 0.5rem;    /* 8px — cards */
+  --radius-xl: 0.75rem;   /* 12px */
+
+  /* Ombres Discord-marketing — exposées en classes shadow-*. */
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-glow-primary: var(--shadow-glow-primary);
+
+  --color-border-strong: var(--border-strong);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
+

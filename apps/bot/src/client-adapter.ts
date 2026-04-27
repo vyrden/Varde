@@ -1,5 +1,31 @@
-import type { ChannelId, GuildId, Logger, UserId } from '@varde/contracts';
-import type { Channel, Client, Guild, GuildMember, Interaction, Message, Role } from 'discord.js';
+import type {
+  ButtonInteractionInput,
+  ChannelId,
+  GuildId,
+  Logger,
+  MessageId,
+  ResolvedChannel,
+  ResolvedCommandInput,
+  ResolvedRole,
+  ResolvedUser,
+  RoleId,
+  UIMessage,
+  UserId,
+} from '@varde/contracts';
+import type {
+  Channel,
+  ChatInputCommandInteraction,
+  Client,
+  Guild,
+  GuildMember,
+  Interaction,
+  Message,
+  MessageReaction,
+  PartialMessageReaction,
+  PartialUser,
+  Role,
+  User,
+} from 'discord.js';
 
 import type { BotDispatcher } from './dispatcher.js';
 import type { DiscordEventInput } from './mapper.js';
@@ -59,6 +85,21 @@ const memberUpdateInput = (oldMember: GuildMember, newMember: GuildMember): Disc
 
 const messageCreateInput = (message: Message): DiscordEventInput | null => {
   if (!message.guildId) return null;
+  // Filtre les messages des bots et webhooks. Les modules officiels
+  // (automod, logs) ne sont jamais censés agir sur leurs propres
+  // posts — ce filtre tue toute boucle accidentelle (auto-modération
+  // d'un message d'audit) et économise le coût de dispatcher.
+  if (message.author.bot) return null;
+  // Snapshot des attachements — utilisé par les règles automod
+  // `restricted-channels` (modes images/videos) et tout consommateur
+  // futur. Discord peut ne pas avoir encore déterminé `contentType`
+  // pour les CDN frais ; on le passe tel quel, le caller fail-open.
+  const attachments = Array.from(message.attachments.values()).map((a) => ({
+    id: a.id,
+    url: a.url,
+    ...(a.name ? { filename: a.name } : {}),
+    ...(a.contentType !== undefined ? { contentType: a.contentType } : {}),
+  }));
   return {
     kind: 'messageCreate',
     guildId: message.guildId,
@@ -67,6 +108,7 @@ const messageCreateInput = (message: Message): DiscordEventInput | null => {
     authorId: message.author.id,
     content: message.content,
     createdAt: message.createdTimestamp,
+    attachments,
   };
 };
 
@@ -98,16 +140,12 @@ const messageDeleteInput = (message: Message): DiscordEventInput | null => {
 
 const channelInput = (
   channel: Channel,
-  kind: 'channelCreate' | 'channelUpdate' | 'channelDelete',
+  kind: 'channelCreate' | 'channelDelete',
 ): DiscordEventInput | null => {
   if (!('guildId' in channel) || !channel.guildId) return null;
   const timestamp = Date.now();
   const timestampField =
-    kind === 'channelCreate'
-      ? { createdAt: timestamp }
-      : kind === 'channelUpdate'
-        ? { updatedAt: timestamp }
-        : { deletedAt: timestamp };
+    kind === 'channelCreate' ? { createdAt: timestamp } : { deletedAt: timestamp };
   return {
     kind,
     guildId: channel.guildId,
@@ -116,17 +154,46 @@ const channelInput = (
   } as DiscordEventInput;
 };
 
-const roleInput = (
-  role: Role,
-  kind: 'roleCreate' | 'roleUpdate' | 'roleDelete',
-): DiscordEventInput => {
+const channelUpdateInput = (oldChannel: Channel, newChannel: Channel): DiscordEventInput | null => {
+  if (!('guildId' in newChannel) || !newChannel.guildId) return null;
+  // Les channels de guilde ont toujours name/position/parentId en discord.js v14.
+  // `topic` n'existe que sur les channels textuels ; on normalise en null sinon.
+  const anyOld = oldChannel as unknown as {
+    name?: string;
+    position?: number;
+    parentId?: string | null;
+    topic?: string | null;
+  };
+  const anyNew = newChannel as unknown as {
+    id: string;
+    guildId: string;
+    name?: string;
+    position?: number;
+    parentId?: string | null;
+    topic?: string | null;
+  };
+  const oldTopic = 'topic' in anyOld ? (anyOld.topic ?? null) : null;
+  const newTopic = 'topic' in anyNew ? (anyNew.topic ?? null) : null;
+  return {
+    kind: 'channelUpdate',
+    guildId: anyNew.guildId,
+    channelId: anyNew.id,
+    nameBefore: anyOld.name ?? '',
+    nameAfter: anyNew.name ?? '',
+    topicBefore: oldTopic,
+    topicAfter: newTopic,
+    positionBefore: anyOld.position ?? 0,
+    positionAfter: anyNew.position ?? 0,
+    parentIdBefore: anyOld.parentId ?? null,
+    parentIdAfter: anyNew.parentId ?? null,
+    updatedAt: Date.now(),
+  };
+};
+
+const roleInput = (role: Role, kind: 'roleCreate' | 'roleDelete'): DiscordEventInput => {
   const timestamp = Date.now();
   const timestampField =
-    kind === 'roleCreate'
-      ? { createdAt: timestamp }
-      : kind === 'roleUpdate'
-        ? { updatedAt: timestamp }
-        : { deletedAt: timestamp };
+    kind === 'roleCreate' ? { createdAt: timestamp } : { deletedAt: timestamp };
   return {
     kind,
     guildId: role.guild.id,
@@ -134,6 +201,23 @@ const roleInput = (
     ...timestampField,
   } as DiscordEventInput;
 };
+
+const roleUpdateInput = (oldRole: Role, newRole: Role): DiscordEventInput => ({
+  kind: 'roleUpdate',
+  guildId: newRole.guild.id,
+  roleId: newRole.id,
+  nameBefore: oldRole.name,
+  nameAfter: newRole.name,
+  colorBefore: oldRole.color,
+  colorAfter: newRole.color,
+  hoistBefore: oldRole.hoist,
+  hoistAfter: newRole.hoist,
+  mentionableBefore: oldRole.mentionable,
+  mentionableAfter: newRole.mentionable,
+  permissionsBefore: oldRole.permissions.bitfield.toString(),
+  permissionsAfter: newRole.permissions.bitfield.toString(),
+  updatedAt: Date.now(),
+});
 
 const guildCreateInput = (guild: Guild): DiscordEventInput => ({
   kind: 'guildCreate',
@@ -147,15 +231,58 @@ const guildDeleteInput = (guild: Guild): DiscordEventInput => ({
   leftAt: Date.now(),
 });
 
+const reactionInput = (
+  reaction: MessageReaction | PartialMessageReaction,
+  user: User | PartialUser,
+  kind: 'messageReactionAdd' | 'messageReactionRemove',
+): DiscordEventInput | null => {
+  const guildId = reaction.message.guildId;
+  if (!guildId) return null;
+  const emojiNode = reaction.emoji;
+  const emoji = emojiNode.id
+    ? {
+        type: 'custom' as const,
+        id: emojiNode.id,
+        name: emojiNode.name ?? '',
+        animated: emojiNode.animated ?? false,
+      }
+    : {
+        type: 'unicode' as const,
+        value: emojiNode.name ?? '',
+      };
+  return {
+    kind,
+    guildId,
+    channelId: reaction.message.channelId,
+    messageId: reaction.message.id,
+    userId: user.id,
+    emoji,
+    reactedAt: Date.now(),
+  };
+};
+
+/**
+ * Routeur d'interactions bouton. Reçoit un click et retourne un
+ * `UIMessage` rendu en réponse éphémère, ou `null` si aucun handler
+ * ne matche (le bot accuse alors silencieusement réception). Wiré
+ * sur `CoreInteractionsRegistry.dispatchButton` côté server.
+ */
+export type ButtonDispatcher = (input: ButtonInteractionInput) => Promise<UIMessage | null>;
+
 /**
  * Attache les handlers discord.js au dispatcher. Retourne une
  * fonction `detach` à appeler au shutdown pour retirer proprement
  * les listeners (utile en tests et pour hot-reload post-V1).
+ *
+ * `dispatchButton` est optionnel : sans lui, les `interactionCreate`
+ * de type bouton sont ignorés silencieusement (utile pour les tests
+ * qui ne couvrent que les commandes).
  */
 export function attachDiscordClient(
   client: Client,
   dispatcher: BotDispatcher,
   logger: Logger,
+  dispatchButton?: ButtonDispatcher,
 ): AttachResult {
   const log = logger.child({ component: 'client-adapter' });
 
@@ -183,19 +310,28 @@ export function attachDiscordClient(
   );
   on('messageDelete', (message) => dispatch(messageDeleteInput(message as Message)));
   on('channelCreate', (channel) => dispatch(channelInput(channel as Channel, 'channelCreate')));
-  on('channelUpdate', (_oldChannel, newChannel) =>
-    dispatch(channelInput(newChannel as Channel, 'channelUpdate')),
+  on('channelUpdate', (oldChannel, newChannel) =>
+    dispatch(channelUpdateInput(oldChannel as Channel, newChannel as Channel)),
   );
   on('channelDelete', (channel) => dispatch(channelInput(channel as Channel, 'channelDelete')));
   on('roleCreate', (role) => dispatch(roleInput(role as Role, 'roleCreate')));
-  on('roleUpdate', (_oldRole, newRole) => dispatch(roleInput(newRole as Role, 'roleUpdate')));
+  on('roleUpdate', (oldRole, newRole) =>
+    dispatch(roleUpdateInput(oldRole as Role, newRole as Role)),
+  );
   on('roleDelete', (role) => dispatch(roleInput(role as Role, 'roleDelete')));
   on('guildCreate', (guild) => dispatch(guildCreateInput(guild as Guild)));
   on('guildDelete', (guild) => dispatch(guildDeleteInput(guild as Guild)));
+  on('messageReactionAdd', (reaction, user) =>
+    dispatch(reactionInput(reaction as MessageReaction, user as User, 'messageReactionAdd')),
+  );
+  on('messageReactionRemove', (reaction, user) =>
+    dispatch(reactionInput(reaction as MessageReaction, user as User, 'messageReactionRemove')),
+  );
 
   // Interaction routing.
-  const interactionHandler = async (interaction: Interaction): Promise<void> => {
-    if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
+  const handleChatInputCommand = async (
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> => {
     const guildId = interaction.guildId;
     if (!guildId) return;
     try {
@@ -204,7 +340,8 @@ export function attachDiscordClient(
         guildId: guildId as GuildId,
         channelId: interaction.channelId as ChannelId,
         userId: interaction.user.id as UserId,
-        options: {},
+        options: extractCommandOptions(interaction),
+        resolved: extractResolved(interaction),
       });
       // Rendu texte plat V1 basé sur le kind.
       const content = renderUIMessage(result as UIMessageLike);
@@ -217,6 +354,62 @@ export function attachDiscordClient(
       if (!interaction.replied) {
         await interaction.reply({ content: 'Erreur interne.', ephemeral: true }).catch(() => {});
       }
+    }
+  };
+
+  /**
+   * Click sur un bouton Discord. Toujours répondu en éphémère — c'est
+   * la valeur ajoutée des composants par rapport aux réactions emoji.
+   * Si aucun handler ne matche, on accuse silencieusement réception
+   * pour éviter le spinner « cette interaction a échoué » dans le
+   * client Discord.
+   */
+  const handleButton = async (
+    interaction: import('discord.js').ButtonInteraction,
+  ): Promise<void> => {
+    if (!dispatchButton) {
+      // Pas de routeur câblé → on accuse réception poliment.
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    }
+    const guildId = interaction.guildId;
+    if (!guildId || !interaction.message) {
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    }
+    try {
+      const result = await dispatchButton({
+        guildId: guildId as GuildId,
+        channelId: interaction.channelId as ChannelId,
+        messageId: interaction.message.id as MessageId,
+        userId: interaction.user.id as UserId,
+        customId: interaction.customId,
+      });
+      if (result === null) {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      const content = renderUIMessage(result as UIMessageLike);
+      await interaction.reply({ content, ephemeral: true });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.error('button interaction handler a échoué', err, {
+        customId: interaction.customId,
+      });
+      if (!interaction.replied) {
+        await interaction.reply({ content: 'Erreur interne.', ephemeral: true }).catch(() => {});
+      }
+    }
+  };
+
+  const interactionHandler = async (interaction: Interaction): Promise<void> => {
+    if (interaction.isChatInputCommand() && interaction.inGuild()) {
+      await handleChatInputCommand(interaction);
+      return;
+    }
+    if (interaction.isButton() && interaction.inGuild()) {
+      await handleButton(interaction);
+      return;
     }
   };
   client.on('interactionCreate', interactionHandler as (...args: unknown[]) => void);
@@ -256,4 +449,93 @@ const renderUIMessage = (message: UIMessageLike): string => {
     default:
       return '';
   }
+};
+
+/**
+ * Aplatit `interaction.options.data` en `Record<name, value>` pour
+ * `CommandInteractionInput.options`. Le champ `value` discord.js
+ * porte la valeur primitive ou le snowflake selon le type d'option
+ * (3=string, 4=integer, 5=boolean, 6=user, 7=channel, 8=role,
+ * 10=number) — discord.js le pose toujours pour ces 7 types. Les
+ * sous-commandes (1, 2) ne sont pas exposées en V1, on les ignore.
+ *
+ * Pour les types user/role/channel, `value` contient le snowflake en
+ * string ; les détails enrichis (tag, name, position) sont dans
+ * `extractResolved`.
+ */
+const extractCommandOptions = (
+  interaction: ChatInputCommandInteraction,
+): Record<string, string | number | boolean> => {
+  const out: Record<string, string | number | boolean> = {};
+  for (const opt of interaction.options.data) {
+    if (opt.value === undefined || opt.value === null) continue;
+    if (
+      typeof opt.value === 'string' ||
+      typeof opt.value === 'number' ||
+      typeof opt.value === 'boolean'
+    ) {
+      out[opt.name] = opt.value;
+    }
+  }
+  return out;
+};
+
+/**
+ * Construit un `ResolvedCommandInput` depuis `interaction.options.resolved`
+ * (discord.js v14). Les Collections sont traduites en Records indexés par
+ * snowflake. `displayName` cascade `member.displayName` → `user.globalName`
+ * → `user.username` → `user.tag` pour ne jamais être vide. Les rôles
+ * `@everyone` peuvent ne pas avoir de position dans la collection — on
+ * tombe sur 0 dans ce cas.
+ */
+const extractResolved = (interaction: ChatInputCommandInteraction): ResolvedCommandInput => {
+  const resolved = interaction.options.resolved;
+  const users: Record<UserId, ResolvedUser> = {};
+  const roles: Record<RoleId, ResolvedRole> = {};
+  const channels: Record<ChannelId, ResolvedChannel> = {};
+
+  if (resolved?.users) {
+    for (const [snowflake, user] of resolved.users) {
+      if (!user) continue;
+      const member = resolved.members?.get(snowflake);
+      const memberDisplay =
+        member && 'displayName' in member && typeof member.displayName === 'string'
+          ? member.displayName
+          : null;
+      const displayName =
+        memberDisplay && memberDisplay.length > 0
+          ? memberDisplay
+          : (user.globalName ?? user.username ?? user.tag);
+      users[snowflake as UserId] = {
+        id: snowflake as UserId,
+        tag: user.tag,
+        displayName,
+        isBot: user.bot,
+      };
+    }
+  }
+
+  if (resolved?.roles) {
+    for (const [snowflake, role] of resolved.roles) {
+      if (!role) continue;
+      roles[snowflake as RoleId] = {
+        id: snowflake as RoleId,
+        name: role.name,
+        position: typeof role.position === 'number' ? role.position : 0,
+      };
+    }
+  }
+
+  if (resolved?.channels) {
+    for (const [snowflake, channel] of resolved.channels) {
+      if (!channel) continue;
+      channels[snowflake as ChannelId] = {
+        id: snowflake as ChannelId,
+        name: 'name' in channel && typeof channel.name === 'string' ? channel.name : '',
+        type: typeof channel.type === 'number' ? channel.type : -1,
+      };
+    }
+  }
+
+  return { users, roles, channels };
 };

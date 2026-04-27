@@ -33,3 +33,31 @@ describe('PRESET_CATALOG', () => {
     });
   }
 });
+
+describe('PRESET_CATALOG — bindings logs.config.manage', () => {
+  it('tech et gaming portent le binding logs.config.manage → role-mod', () => {
+    const tech = PRESET_CATALOG.find((p) => p.id === 'community-tech-small');
+    const gaming = PRESET_CATALOG.find((p) => p.id === 'community-gaming-small');
+    expect(tech?.permissionBindings).toContainEqual({
+      permissionId: 'logs.config.manage',
+      roleLocalId: 'role-mod',
+    });
+    expect(gaming?.permissionBindings).toContainEqual({
+      permissionId: 'logs.config.manage',
+      roleLocalId: 'role-mod',
+    });
+  });
+
+  it('creative, study, starter restent avec permissionBindings vide (pas de rôle mod par dessein)', () => {
+    const expectedEmptyIds = [
+      'community-creative',
+      'community-study-group',
+      'community-generic-starter',
+    ];
+    for (const id of expectedEmptyIds) {
+      const preset = PRESET_CATALOG.find((p) => p.id === id);
+      expect(preset, `preset ${id} attendu dans le catalog`).toBeDefined();
+      expect(preset?.permissionBindings).toEqual([]);
+    }
+  });
+});

@@ -88,16 +88,29 @@ const presetProposalResponseSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.5),
 });
 
+const suggestionItemSchema = z.object({
+  label: z.string().min(1).max(200),
+  patch: z.record(z.string(), z.unknown()),
+  rationale: z.string().min(1).max(500),
+});
+
+/**
+ * Accepte array direct ou object wrapper (`suggestions`, `completions`,
+ * `items`) — cohérent avec le parser OpenAI-compat. Voir
+ * `openai-compat.ts` pour l'explication détaillée.
+ */
 const suggestionArrayResponseSchema = z
-  .array(
-    z.object({
-      label: z.string().min(1).max(200),
-      patch: z.record(z.string(), z.unknown()),
-      rationale: z.string().min(1).max(500),
-    }),
-  )
-  .min(1)
-  .max(5);
+  .union([
+    z.array(suggestionItemSchema).min(1).max(5),
+    z
+      .object({ suggestions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.suggestions),
+    z
+      .object({ completions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.completions),
+    z.object({ items: z.array(suggestionItemSchema).min(1).max(5) }).transform((o) => o.items),
+  ])
+  .transform((arr) => arr as readonly z.infer<typeof suggestionItemSchema>[]);
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -166,19 +179,26 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
 
   const chat = async (
     messages: readonly OllamaMessage[],
+    opts: { readonly jsonFormat?: boolean } = {},
   ): Promise<{ readonly content: string }> => {
+    // `jsonFormat=true` par défaut : `generatePreset` / `suggestCompletion`
+    // attendent du JSON. `classify` doit pouvoir désactiver pour récupérer
+    // un simple label brut — sans contraindre le modèle à un wrapper JSON.
+    const jsonFormat = opts.jsonFormat ?? true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      const body: Record<string, unknown> = {
+        model,
+        messages,
+        stream: false,
+      };
+      // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
+      if (jsonFormat) body['format'] = 'json';
       const response = await fetchImpl(`${endpoint}/api/chat`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: false,
-          format: 'json',
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -252,6 +272,29 @@ export function createOllamaProvider(options: CreateOllamaProviderOptions): AIPr
       const prompt = buildSuggestCompletionPrompt(input);
       const data = await chatForJson(prompt, suggestionArrayResponseSchema, 'suggestCompletion');
       return data;
+    },
+
+    async classify(text, labels) {
+      // Prompt simple : on demande un seul label brut parmi le pool.
+      // `jsonFormat: false` — on ne veut pas que le modèle enveloppe
+      // sa sortie. Erreur du provider remontée au caller (automod
+      // logge + retombe sur `null` côté `classifyAgainst`).
+      const labelList = labels.join(', ');
+      const messages: OllamaMessage[] = [
+        {
+          role: 'system',
+          content: `Tu es un classifier de contenu Discord. Le message peut être dans n'importe quelle langue (français, anglais, espagnol, etc.). On te donne un message et une liste de catégories. Réponds avec UN SEUL des labels listés, exactement, en minuscules, sans guillemets, sans explication, sans ponctuation. Catégories possibles : ${labelList}.`,
+        },
+        { role: 'user', content: text.slice(0, 2000) },
+      ];
+      const { content } = await chat(messages, { jsonFormat: false });
+      const trimmed = content.trim().toLowerCase();
+      for (const label of labels) {
+        if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+          return label;
+        }
+      }
+      return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
     },
 
     async testConnection(): Promise<ProviderInfo> {

@@ -2,21 +2,45 @@ import { randomBytes } from 'node:crypto';
 
 import {
   type Authenticator,
+  buildAiProviderForGuild,
   createApiServer,
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
   registerAiSettingsRoutes,
   registerAuditRoutes,
+  registerBotSettingsRoutes,
+  registerDiscordChannelsRoutes,
+  registerDiscordEmojisRoutes,
   registerGuildsRoutes,
+  registerLogsRoutes,
+  registerModulePermissionsRoutes,
   registerModulesRoutes,
   registerOnboardingRoutes,
+  registerReactionRolesRoutes,
+  registerUnboundPermissionsRoutes,
+  registerWelcomeRoutes,
+  type WelcomeUploadsService,
 } from '@varde/api';
 import type { BotDispatcher, CommandRegistry, OnboardingDiscordBridge } from '@varde/bot';
 import { createCommandRegistry, createDispatcher } from '@varde/bot';
-import type { ActionId, EventBus, Logger, ModuleId, UserId } from '@varde/contracts';
+import type {
+  ActionId,
+  AIService,
+  DiscordService,
+  EventBus,
+  GuildId,
+  Logger,
+  ModuleId,
+  PermissionId,
+  RoleId,
+  UserId,
+} from '@varde/contracts';
+import { readBotSettings } from '@varde/contracts';
 import {
   CORE_ACTIONS,
   type CoreAuditService,
@@ -35,6 +59,7 @@ import {
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
+  type I18nMessages,
   type OnboardingExecutor,
   type OnboardingHostService,
   type PluginLoader,
@@ -76,6 +101,46 @@ const ensurePseudoModuleRegistered = async <D extends DbDriver>(
     .values({ id: moduleId, version: '1.0.0', manifest: {}, schemaVersion: 0 })
     .onConflictDoNothing({ target: sqliteSchema.modulesRegistry.id })
     .run();
+};
+
+/**
+ * Construit l'`AIService` exposé à `ctx.ai` pour une guild donnée.
+ * Le `AIProvider` sous-jacent est résolu via `buildAiProviderForGuild`
+ * de manière paresseuse (1ʳᵉ utilisation seulement) puis mémoïsé dans
+ * la closure ; les rappels suivants delegate sans aller-retour DB.
+ *
+ * Seules les méthodes nécessaires au runtime moderation (`classify`)
+ * sont implémentées concrètement. `complete` et `summarize` jettent
+ * un `Error` non-implémenté — elles ne sont pas câblées par ailleurs
+ * et un consommateur tiers est invité à passer par l'API
+ * `apps/api/onboarding-ai-routes` pour `complete`/`generatePreset`.
+ */
+const createGuildAiService = (
+  guildId: GuildId,
+  config: CoreConfigService,
+  keystore: ReturnType<typeof createKeystoreService>,
+): AIService => {
+  let providerPromise: Promise<{
+    readonly classify: (text: string, labels: readonly string[]) => Promise<string>;
+  }> | null = null;
+  const getProvider = () => {
+    if (providerPromise === null) {
+      providerPromise = buildAiProviderForGuild({ config, keystore, guildId });
+    }
+    return providerPromise;
+  };
+  return {
+    async classify(text, labels) {
+      const provider = await getProvider();
+      return provider.classify(text, labels);
+    },
+    async complete() {
+      throw new Error('AIService.complete : non implémenté côté runtime moderation');
+    },
+    async summarize() {
+      throw new Error('AIService.summarize : non implémenté côté runtime moderation');
+    },
+  };
 };
 
 /**
@@ -139,6 +204,54 @@ export interface CreateServerOptions<D extends DbDriver> {
    * sans `VARDE_DISCORD_TOKEN`.
    */
   readonly onboardingBridge?: OnboardingDiscordBridge;
+  /**
+   * Fonction listant les salons texte Discord d'une guild. Fournie par
+   * `bin.ts` lorsque le bot est connecté. Absente → les routes GET
+   * /discord/text-channels et /discord/roles répondent 503.
+   */
+  readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Fonction listant les rôles Discord d'une guild. Voir `listGuildTextChannels`. */
+  readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Fonction listant les emojis custom visibles depuis une guild
+   * (emojis du serveur courant + emojis des autres serveurs où le bot
+   * est présent). Absente → la route GET /discord/emojis répond 503.
+   */
+  readonly listGuildEmojis?: (guildId: string) => Promise<{
+    readonly current: readonly { id: string; name: string; animated: boolean }[];
+    readonly external: readonly {
+      id: string;
+      name: string;
+      animated: boolean;
+      guildName: string;
+    }[];
+  }>;
+  /**
+   * Service de persistance des images de fond welcome/goodbye.
+   * Câblé par `bin.ts` à partir de `VARDE_UPLOADS_DIR`. Omis → les
+   * routes upload/delete/get répondent 503.
+   */
+  readonly welcomeUploads?: WelcomeUploadsService;
+  /**
+   * Service Discord concret câblé par `bin.ts` quand le token est
+   * présent. Omis → `createCtxFactory` utilise son stub interne
+   * (lève une erreur explicite si un module tente de l'appeler).
+   */
+  readonly discordService?: DiscordService;
+  /**
+   * Locales par module, indexées par `moduleId`. Chaque entrée est
+   * un dict `{ locale: { key: message } }` (forme `I18nMessages`).
+   * Permet à `ctx.i18n.t(key, params)` de résoudre la clé. Sans
+   * mapping, le service retourne la clé brute (utile pour repérer
+   * les chaînes manquantes mais inacceptable en prod).
+   */
+  readonly locales?: Readonly<Record<string, I18nMessages>>;
+  /**
+   * Locale par défaut utilisée par le i18n quand la guild n'en a
+   * pas encore défini une via `core.bot-settings`. Défaut `'en'`
+   * côté `createCtxFactory` ; le fallback est toujours `'en'`.
+   */
+  readonly defaultLocale?: string;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -203,6 +316,64 @@ export async function createServer<D extends DbDriver>(
     executor: onboardingExecutor,
   });
 
+  // Keystore IA + factory AIService par-guild. Le keystore lit/écrit
+  // les clés API chiffrées (`core.ai.providerApiKey`). La factory
+  // résout pour chaque guild un `AIService` minimaliste qui delegate
+  // à un `AIProvider` lazy-construit via `buildAiProviderForGuild` ;
+  // le provider lui-même est mémoïsé par `AIService` pour ne pas
+  // refaire d'aller-retour DB à chaque message classifié.
+  //
+  // Les `AIService` sont cachés par `guildId` et invalidés à chaque
+  // `config.changed` scope `modules.core.ai` ou `modules.ai`
+  // (l'admin a édité son provider depuis `/settings/ai`).
+  const aiModuleId = 'core.ai' as ModuleId;
+  await ensurePseudoModuleRegistered(client, aiModuleId);
+  const aiKeystore = createKeystoreService({
+    client,
+    moduleId: aiModuleId,
+    masterKey: options.keystore?.masterKey ?? randomBytes(32),
+    ...(options.keystore?.previousMasterKey
+      ? { previousMasterKey: options.keystore.previousMasterKey }
+      : {}),
+  });
+
+  const aiServiceCache = new Map<GuildId, ReturnType<typeof createGuildAiService>>();
+  const aiFactory = (guildId: GuildId) => {
+    let svc = aiServiceCache.get(guildId);
+    if (!svc) {
+      svc = createGuildAiService(guildId, config, aiKeystore);
+      aiServiceCache.set(guildId, svc);
+    }
+    return svc;
+  };
+  // Invalidation cache IA à chaque changement de config IA d'une guild.
+  // On évite de purger toutes les guilds — le cache est par-guild,
+  // seul l'event `core.ai` (scope `modules.ai`) compte.
+  eventBus.on('config.changed', (event) => {
+    aiServiceCache.delete(event.guildId);
+  });
+
+  // Cache des locales effectives par guild. Source de vérité :
+  // `core.bot-settings.language` (édité depuis `/guilds/<id>/settings/bot`).
+  // Le cache est rafraîchi à chaque `config.changed` ; la première
+  // résolution d'une guild inconnue déclenche un fetch async — `null`
+  // jusqu'à ce que le cache soit peuplé, ce qui fait retomber
+  // `ctx.i18n.t` sur `defaultLocale` le temps que ça arrive.
+  const guildLocales = new Map<GuildId, string>();
+  const loadGuildLocale = async (guildId: GuildId): Promise<void> => {
+    try {
+      const snapshot = await config.get(guildId);
+      const settings = readBotSettings(snapshot);
+      guildLocales.set(guildId, settings.language);
+    } catch {
+      // NotFoundError ou autre échec → on laisse le cache vide ; le
+      // prochain accès déclenchera un nouvel essai.
+    }
+  };
+  eventBus.on('config.changed', async (event) => {
+    await loadGuildLocale(event.guildId);
+  });
+
   const ctxBundle = createCtxFactory({
     client,
     loggerRoot: logger,
@@ -214,9 +385,53 @@ export async function createServer<D extends DbDriver>(
     ...(options.keystore?.previousMasterKey
       ? { keystorePreviousMasterKey: options.keystore.previousMasterKey }
       : {}),
+    ...(options.discordService !== undefined ? { discord: options.discordService } : {}),
+    ...(options.locales !== undefined ? { locales: options.locales } : {}),
+    ...(options.defaultLocale !== undefined ? { defaultLocale: options.defaultLocale } : {}),
+    aiFactory,
+    getGuildLocale: (guildId) => {
+      const cached = guildLocales.get(guildId);
+      if (cached !== undefined) return cached;
+      void loadGuildLocale(guildId);
+      return null;
+    },
   });
 
-  const loader = createPluginLoader({ coreVersion, logger, ctxFactory: ctxBundle.factory });
+  const loader = createPluginLoader({
+    coreVersion,
+    logger,
+    ctxFactory: ctxBundle.factory,
+    // Persiste module + permissions dans la DB au chargement.
+    // Ordre FK : upsert `modules_registry` d'abord (sinon la FK
+    // `permissions_registry.module_id` viole), puis `permissions_registry`
+    // (sinon la FK `permission_bindings.permission_id` viole au premier
+    // onboarding apply — ADR 0008).
+    persistModuleRegistration: async ({ moduleId, version, manifest, permissions: perms }) => {
+      if (client.driver === 'pg') {
+        const pg = client as DbClient<'pg'>;
+        await pg.db
+          .insert(pgSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: pgSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          });
+      } else {
+        const sqlite = client as DbClient<'sqlite'>;
+        sqlite.db
+          .insert(sqliteSchema.modulesRegistry)
+          .values({ id: moduleId, version, manifest, schemaVersion: manifest.schemaVersion })
+          .onConflictDoUpdate({
+            target: sqliteSchema.modulesRegistry.id,
+            set: { version, manifest, schemaVersion: manifest.schemaVersion },
+          })
+          .run();
+      }
+      if (perms.length > 0) {
+        await permissions.registerPermissions(perms);
+      }
+    },
+  });
   const commandRegistry = createCommandRegistry();
 
   const dispatcher = createDispatcher({
@@ -224,6 +439,10 @@ export async function createServer<D extends DbDriver>(
     commandRegistry,
     ctxFactory: (ref) => ctxBundle.factory(ref),
     logger,
+    // `loader` expose `isEnabled(moduleId, guildId)` — defense in
+    // depth contre une commande dont le module est désactivé runtime
+    // mais reste cachée côté Discord.
+    enablementCheck: { isEnabled: (m, g) => loader.isEnabled(m, g) },
   });
 
   const authenticator: Authenticator =
@@ -304,6 +523,12 @@ export async function createServer<D extends DbDriver>(
           });
         },
         resolveLocalId: () => null,
+        permissions: {
+          bind: (permissionId, roleId) =>
+            permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+          unbind: (permissionId, roleId) =>
+            permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+        },
       };
     }
 
@@ -351,24 +576,14 @@ export async function createServer<D extends DbDriver>(
         });
       },
       resolveLocalId: () => null,
+      permissions: {
+        bind: (permissionId, roleId) =>
+          permissions.bind(guildId, permissionId as PermissionId, roleId as RoleId),
+        unbind: (permissionId, roleId) =>
+          permissions.unbind(guildId, permissionId as PermissionId, roleId as RoleId),
+      },
     };
   };
-
-  // Paramètres IA (jalon 3) : keystore scopé `core.ai` pour les
-  // credentials, config non-sensible dans `guild_config`. Le
-  // keystore référence modules_registry via FK, on y insère donc
-  // un pseudo-module idempotent — il n'apparaît pas dans /modules
-  // (ce dernier lit `loader.loadOrder()`, pas la table).
-  const aiModuleId = 'core.ai' as ModuleId;
-  await ensurePseudoModuleRegistered(client, aiModuleId);
-  const aiKeystore = createKeystoreService({
-    client,
-    moduleId: aiModuleId,
-    masterKey: options.keystore?.masterKey ?? randomBytes(32),
-    ...(options.keystore?.previousMasterKey
-      ? { previousMasterKey: options.keystore.previousMasterKey }
-      : {}),
-  });
 
   // Scheduler scopé au pseudo-module `core.onboarding` pour tenir les
   // jobs d'auto-expiration des sessions appliquées (PR 3.12b). Chaque
@@ -385,9 +600,46 @@ export async function createServer<D extends DbDriver>(
   });
 
   registerGuildsRoutes(api, { client, discord });
+  registerDiscordChannelsRoutes(api, {
+    discord,
+    // Réutilise le bridge onboarding pour la création de salon.
+    // Absent si le bot n'est pas connecté (CI, dev sans token).
+    ...(onboardingBridge
+      ? {
+          createGuildChannel: (guildId, payload) =>
+            onboardingBridge.createChannel(guildId, { ...payload }),
+        }
+      : {}),
+    ...(options.listGuildTextChannels
+      ? { listGuildTextChannels: options.listGuildTextChannels }
+      : {}),
+    ...(options.listGuildRoles ? { listGuildRoles: options.listGuildRoles } : {}),
+  });
+  registerDiscordEmojisRoutes(api, {
+    discord,
+    ...(options.listGuildEmojis ? { listGuildEmojis: options.listGuildEmojis } : {}),
+  });
+  registerLogsRoutes(api, {
+    discord,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+  });
+  registerReactionRolesRoutes(api, {
+    discord,
+    config,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+  });
+  registerWelcomeRoutes(api, {
+    discord,
+    config,
+    ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
+    ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
+  });
   registerModulesRoutes(api, { loader, config, discord });
+  registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
+  registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });
   registerAiSettingsRoutes(api, { config, keystore: aiKeystore, discord });
+  registerBotSettingsRoutes(api, { config, discord });
   registerOnboardingRoutes(api, {
     client,
     discord,
@@ -397,12 +649,14 @@ export async function createServer<D extends DbDriver>(
     ai: { config, keystore: aiKeystore, logger },
     scheduler: onboardingScheduler,
     schedulerLogger,
+    audit,
   });
 
   await reconcileOnboardingSessions({
     client,
     scheduler: onboardingScheduler,
     logger: schedulerLogger,
+    audit,
   });
 
   const start = async (): Promise<{ readonly address: string }> => {

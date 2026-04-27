@@ -4,6 +4,7 @@ import {
   type CommandCtxFactory,
   type CommandPermissionsPort,
   type CommandRegistry,
+  type ModuleEnablementCheck,
   routeCommandInteraction,
 } from './commands.js';
 import { type DiscordEventInput, mapDiscordEvent } from './mapper.js';
@@ -28,6 +29,13 @@ export interface CreateDispatcherOptions {
   readonly ctxFactory: CommandCtxFactory;
   readonly logger: Logger;
   readonly permissions?: CommandPermissionsPort;
+  /**
+   * Sonde d'activation des modules (typiquement `loader`). Sans
+   * elle, toutes les commandes du registry sont routées ; avec elle,
+   * une commande dont le module n'est pas activé pour la guild
+   * répond `ui.error('Module non activé...')`.
+   */
+  readonly enablementCheck?: ModuleEnablementCheck;
 }
 
 /** Dispatcher public. */
@@ -39,7 +47,7 @@ export interface BotDispatcher {
 }
 
 export function createDispatcher(options: CreateDispatcherOptions): BotDispatcher {
-  const { eventBus, commandRegistry, ctxFactory, permissions } = options;
+  const { eventBus, commandRegistry, ctxFactory, permissions, enablementCheck } = options;
   const logger = options.logger.child({ component: 'dispatcher' });
 
   return {
@@ -61,6 +69,7 @@ export function createDispatcher(options: CreateDispatcherOptions): BotDispatche
         registry: commandRegistry,
         ctxFactory,
         ...(permissions ? { permissions } : {}),
+        ...(enablementCheck ? { enablementCheck } : {}),
       });
     },
   };

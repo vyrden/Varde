@@ -108,6 +108,20 @@ export const communityCreative: PresetDefinition = {
       readableBy: [],
       writableBy: [],
     },
+    {
+      localId: 'chan-logs',
+      categoryLocalId: 'cat-discuss',
+      name: 'logs',
+      nameFr: 'logs',
+      nameEn: 'logs',
+      type: 'text',
+      topic: 'Journal des actions modérateurs et événements serveur.',
+      topicFr: 'Journal des actions modérateurs et événements serveur.',
+      topicEn: 'Server moderation and event log.',
+      slowmodeSeconds: 0,
+      readableBy: ['role-contributor'],
+      writableBy: ['role-contributor'],
+    },
   ],
   modules: [
     {
@@ -115,5 +129,29 @@ export const communityCreative: PresetDefinition = {
       enabled: true,
       config: { welcomeDelayMs: 800 },
     },
+    {
+      moduleId: 'moderation',
+      enabled: false,
+      config: {
+        version: 1,
+        mutedRoleId: null,
+        dmOnSanction: true,
+        automod: {
+          rules: [
+            {
+              id: 'rule-self-promo',
+              label: 'Lien externe sans contexte',
+              kind: 'regex',
+              pattern: '\\b(twitch\\.tv|youtube\\.com|instagram\\.com|tiktok\\.com)/[^\\s]+\\s*$',
+              action: 'warn',
+              durationMs: null,
+              enabled: true,
+            },
+          ],
+          bypassRoleIds: [],
+        },
+      },
+    },
   ],
+  permissionBindings: [],
 };

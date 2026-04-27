@@ -1,11 +1,10 @@
-import { PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { Separator } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
 import { AIProviderForm } from '../../../../../components/settings/AIProviderForm';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
   AiSettingsApiError,
   type AiSettingsDto,
@@ -18,10 +17,10 @@ interface AiSettingsPageProps {
 }
 
 /**
- * Page paramètres IA (PR 3.9). Server component qui fetche les
- * paramètres actuels puis délègue le rendu éditable à un composant
- * client. L'admin choisit un provider, configure, peut tester la
- * connexion et enregistrer — la clé API est chiffrée côté serveur.
+ * Page paramètres IA. Header custom (breadcrumb « PARAMÈTRES →
+ * FOURNISSEUR IA » + icône blurple + titre + description) + Separator,
+ * puis le form 2 colonnes (provider cards + formulaire à gauche,
+ * statut connexion + à propos à droite).
  */
 export default async function AiSettingsPage({
   params,
@@ -45,23 +44,36 @@ export default async function AiSettingsPage({
   if (!guild) notFound();
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← Retour au serveur
-          </Link>
-        </div>
-        <PageTitle
-          title={`Paramètres IA — ${guild.name}`}
-          description="Choisissez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair."
+    <>
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <PageBreadcrumb
+          items={[
+            { label: 'Paramètres', href: `/guilds/${guildId}/settings` },
+            { label: 'Fournisseur IA' },
+          ]}
         />
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M8 1.5l1.4 4.1L13.5 7l-4.1 1.4L8 12.5 6.6 8.4 2.5 7l4.1-1.4L8 1.5z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Fournisseur IA
+          </h1>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Configurez le provider IA utilisé par l'onboarding. Auto-hébergé ou via une API tierce. La
+          clé API éventuelle est chiffrée côté serveur et n'est jamais renvoyée en clair.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
         <AIProviderForm guildId={guildId} initial={settings} />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

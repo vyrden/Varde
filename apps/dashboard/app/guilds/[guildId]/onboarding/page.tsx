@@ -1,16 +1,19 @@
 import { PRESET_CATALOG } from '@varde/presets';
-import { PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { Separator } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../auth';
-import { DashboardHeader } from '../../../../components/DashboardHeader';
 import { AppliedStep } from '../../../../components/onboarding/AppliedStep';
 import { BuilderCanvas } from '../../../../components/onboarding/BuilderCanvas';
 import { FinishedStep } from '../../../../components/onboarding/FinishedStep';
-import { PresetPicker } from '../../../../components/onboarding/PresetPicker';
+import {
+  type AiProviderSnapshot,
+  PresetPicker,
+} from '../../../../components/onboarding/PresetPicker';
 import { PreviewStep } from '../../../../components/onboarding/PreviewStep';
+import { PageBreadcrumb } from '../../../../components/shell/PageBreadcrumb';
+import { fetchAiSettings } from '../../../../lib/ai-settings-client';
 import { ApiError, fetchAdminGuilds } from '../../../../lib/api-client';
 import {
   fetchCurrentOnboardingSession,
@@ -23,18 +26,18 @@ interface OnboardingPageProps {
 }
 
 /**
- * Page onboarding builder (PR 3.5). Server component qui fetche la
- * session active et dispatche vers le step client correspondant :
+ * Page onboarding builder. Header custom (breadcrumb « Gestion →
+ * Onboarding », icône fusée blurple, titre, description) + Separator,
+ * puis dispatch vers le step client correspondant à la session :
  *
- * - pas de session     → PresetPicker
- * - draft              → BuilderCanvas (affichage + preview)
- * - previewing         → PreviewStep (liste d'actions + apply)
- * - applied            → AppliedStep (résumé + rollback)
- * - rolled_back / …    → FinishedStep (résumé terminal + reset)
+ * - pas de session     → PresetPicker (layout 2 colonnes en interne)
+ * - draft              → BuilderCanvas
+ * - previewing         → PreviewStep
+ * - applied            → AppliedStep
+ * - rolled_back / …    → FinishedStep
  *
- * `applying` est un état de transit très court (le temps de
- * l'appel executor). Si on tombe dessus, on retombe sur le canvas
- * — la page sera re-fetchée après l'action, qui aura fini.
+ * `applying` est un état de transit très court ; on retombe sur le
+ * canvas — la page sera re-fetchée après l'action.
  */
 export default async function OnboardingPage({
   params,
@@ -61,37 +64,67 @@ export default async function OnboardingPage({
   const guild = guilds.find((g) => g.id === guildId);
   if (!guild) notFound();
 
+  // Fetch best-effort du provider IA pour la sidebar de PresetPicker.
+  // Si l'appel échoue, on omet la card — la page reste fonctionnelle.
+  let aiProvider: AiProviderSnapshot | null = null;
+  try {
+    const ai = await fetchAiSettings(guildId);
+    aiProvider = {
+      providerId: ai.providerId,
+      model: ai.model,
+      endpoint: ai.endpoint,
+      hasApiKey: ai.hasApiKey,
+    };
+  } catch {
+    aiProvider = null;
+  }
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-5xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← Retour au serveur
-          </Link>
-        </div>
-        <PageTitle
-          title={`Onboarding — ${guild.name}`}
-          description="Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30 min après apply."
+    <>
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <PageBreadcrumb
+          items={[{ label: 'Gestion', href: `/guilds/${guildId}` }, { label: 'Onboarding' }]}
         />
-        <StepRouter guildId={guildId} session={onboarding} />
-      </main>
-    </div>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M9 2c2 0 4 2 4 4 0 1.2-.4 2.2-1 3l-4 4-1-1 4-4c.4-.5.6-1.2.6-2 0-1.5-1.1-2.6-2.6-2.6-.8 0-1.5.2-2 .6l-4 4-1-1 4-4c.8-.6 1.8-1 3-1zM3 13l-1.5 1.5M5 11l-2 2"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            Onboarding
+          </h1>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Installez un preset de départ, prévisualisez, appliquez. Défaire reste possible pendant 30
+          minutes après application.
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
+        <StepRouter guildId={guildId} session={onboarding} aiProvider={aiProvider} />
+      </div>
+    </>
   );
 }
 
 function StepRouter({
   guildId,
   session,
+  aiProvider,
 }: {
   readonly guildId: string;
   readonly session: OnboardingSessionDto | null;
+  readonly aiProvider: AiProviderSnapshot | null;
 }): ReactElement {
   if (session === null) {
-    return <PresetPicker guildId={guildId} presets={PRESET_CATALOG} />;
+    return <PresetPicker guildId={guildId} presets={PRESET_CATALOG} aiProvider={aiProvider} />;
   }
   if (session.status === 'draft' || session.status === 'applying') {
     return <BuilderCanvas session={session} />;

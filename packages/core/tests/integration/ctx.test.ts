@@ -155,6 +155,95 @@ describe('createCtxFactory — composition minimale', () => {
       await shutdown();
     }
   });
+
+  it('i18n.t résout la locale par-guild via getGuildLocale (et invalide à la volée)', async () => {
+    const logger = silentLogger();
+    let currentLocale: string | null = null;
+    const { factory, shutdown } = createCtxFactory({
+      client,
+      loggerRoot: logger,
+      eventBus: createEventBus({ logger }),
+      config: createConfigService({ client }),
+      permissions: createPermissionService({
+        client,
+        resolveMemberContext: async () => null,
+      }),
+      keystoreMasterKey: randomBytes(32),
+      defaultLocale: 'en',
+      locales: {
+        [HELLO]: {
+          en: { greeting: 'Hello' },
+          fr: { greeting: 'Bonjour' },
+        },
+      },
+      getGuildLocale: () => currentLocale,
+    });
+    try {
+      const ctx = factory({ id: HELLO, version: '1.0.0' }, GUILD);
+      // Locale inconnue → retombe sur defaultLocale.
+      expect(ctx.i18n.t('greeting')).toBe('Hello');
+      // Une fois la locale connue, le même ctx la voit immédiatement.
+      currentLocale = 'fr';
+      expect(ctx.i18n.t('greeting')).toBe('Bonjour');
+      // Retour à `null` (cache vidé) → fallback defaultLocale.
+      currentLocale = null;
+      expect(ctx.i18n.t('greeting')).toBe('Hello');
+    } finally {
+      await shutdown();
+    }
+  });
+
+  it('i18n.t sans guildId reste figé sur defaultLocale (pas de getter)', async () => {
+    const logger = silentLogger();
+    const getGuildLocale = vi.fn(() => 'fr');
+    const { factory, shutdown } = createCtxFactory({
+      client,
+      loggerRoot: logger,
+      eventBus: createEventBus({ logger }),
+      config: createConfigService({ client }),
+      permissions: createPermissionService({
+        client,
+        resolveMemberContext: async () => null,
+      }),
+      keystoreMasterKey: randomBytes(32),
+      defaultLocale: 'en',
+      locales: { [HELLO]: { en: { hi: 'Hi' }, fr: { hi: 'Salut' } } },
+      getGuildLocale,
+    });
+    try {
+      const ctx = factory({ id: HELLO, version: '1.0.0' });
+      expect(ctx.i18n.t('hi')).toBe('Hi');
+      expect(getGuildLocale).not.toHaveBeenCalled();
+    } finally {
+      await shutdown();
+    }
+  });
+
+  it("discord.sendEmbed throw explicitement quand aucun DiscordService n'est câblé", async () => {
+    const logger = silentLogger();
+    const { factory, shutdown } = createCtxFactory({
+      client,
+      loggerRoot: logger,
+      eventBus: createEventBus({ logger }),
+      config: createConfigService({ client }),
+      permissions: createPermissionService({
+        client,
+        resolveMemberContext: async () => null,
+      }),
+      keystoreMasterKey: randomBytes(32),
+    });
+    try {
+      const ctx = factory({ id: HELLO, version: '1.0.0' });
+      await expect(
+        ctx.discord.sendEmbed('channel-id' as never, {
+          kind: 'embed',
+          payload: { title: 'test' },
+        }),
+      ).rejects.toThrowError(/DiscordService non câblé/);
+    } finally {
+      await shutdown();
+    }
+  });
 });
 
 describe('createCtxFactory — bout en bout avec le loader', () => {

@@ -1,3 +1,4 @@
+export * from './bot-settings.js';
 export * from './context.js';
 export * from './db-records.js';
 export * from './errors.js';
@@ -6,4 +7,5 @@ export * from './ids.js';
 export * from './manifest.js';
 export * from './module.js';
 export * from './onboarding.js';
+export * from './ui.js';
 export * from './ulid.js';

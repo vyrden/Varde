@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   draftChannelSchema,
+  draftPermissionBindingSchema,
   draftRoleSchema,
+  onboardingActionRequestSchema,
   onboardingDraftSchema,
 } from '../../src/onboarding.js';
 
@@ -88,5 +90,41 @@ describe('onboardingDraftSchema', () => {
     expect(() => draftRoleSchema.parse({ localId: 'r', name: 'R', color: 0 })).not.toThrow();
     expect(() => draftRoleSchema.parse({ localId: 'r', name: 'R', color: 0xffffff })).not.toThrow();
     expect(() => draftRoleSchema.parse({ localId: 'r', name: 'R', color: 0xffffff + 1 })).toThrow();
+  });
+});
+
+describe('OnboardingDraft permissionBindings', () => {
+  it('draftPermissionBindingSchema valide un binding minimal', () => {
+    const parsed = draftPermissionBindingSchema.parse({
+      permissionId: 'logs.config.manage',
+      roleLocalId: 'role-mod',
+    });
+    expect(parsed.permissionId).toBe('logs.config.manage');
+    expect(parsed.roleLocalId).toBe('role-mod');
+  });
+
+  it('onboardingDraftSchema a un champ permissionBindings (défaut vide)', () => {
+    const draft = onboardingDraftSchema.parse({});
+    expect(draft.permissionBindings).toEqual([]);
+  });
+
+  it('onboardingDraftSchema accepte des bindings explicites', () => {
+    const draft = onboardingDraftSchema.parse({
+      permissionBindings: [{ permissionId: 'x.y', roleLocalId: 'r' }],
+    });
+    expect(draft.permissionBindings).toHaveLength(1);
+  });
+});
+
+describe('OnboardingActionRequest — core.bindPermission', () => {
+  it('accepte un request de type core.bindPermission avec payload', () => {
+    const request = onboardingActionRequestSchema.parse({
+      type: 'core.bindPermission',
+      payload: {
+        permissionId: 'logs.config.manage',
+        roleLocalId: 'role-mod',
+      },
+    });
+    expect(request.type).toBe('core.bindPermission');
   });
 });

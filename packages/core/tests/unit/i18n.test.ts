@@ -40,4 +40,16 @@ describe('createI18n', () => {
     });
     expect(i18n.t('score', { points: 42 })).toBe('Score: 42');
   });
+
+  it('résout la locale dynamiquement quand `locale` est un getter', () => {
+    let current = 'en';
+    const i18n = createI18n({
+      messages,
+      locale: () => current,
+      fallbackLocale: 'en',
+    });
+    expect(i18n.t('greeting', { name: 'Alice' })).toBe('Hello, Alice!');
+    current = 'fr';
+    expect(i18n.t('greeting', { name: 'Alice' })).toBe('Bonjour, Alice !');
+  });
 });

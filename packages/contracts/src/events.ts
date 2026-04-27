@@ -36,6 +36,18 @@ const moduleIdSchema = z.custom<ModuleId>(isModuleId);
 /** Timestamp en millisecondes depuis l'epoch. */
 const timestampSchema = z.number().int().nonnegative();
 
+/** Emoji unicode ou custom Discord (discriminated union). */
+const emojiSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('unicode'), value: z.string().min(1) }),
+  z.object({
+    type: z.literal('custom'),
+    id: z.string().regex(/^\d{17,19}$/, 'emoji.id doit être un snowflake Discord'),
+    name: z.string().min(1),
+    animated: z.boolean(),
+  }),
+]);
+export type Emoji = z.infer<typeof emojiSchema>;
+
 // --- Événements Discord : membres ---
 
 export const guildMemberJoinSchema = z.object({
@@ -69,6 +81,20 @@ export type GuildMemberUpdateEvent = z.infer<typeof guildMemberUpdateSchema>;
 
 // --- Événements Discord : messages ---
 
+/**
+ * Attachement Discord normalisé pour les events. Le `contentType`
+ * est le MIME ; certains messages historiques l'ont à `null` (Discord
+ * peut ne pas l'avoir encore détecté côté CDN). Les modules consommateurs
+ * doivent fail-open (traiter `null` comme « inconnu ») plutôt que rejeter.
+ */
+export const messageAttachmentSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+  filename: z.string().optional(),
+  contentType: z.string().nullable().optional(),
+});
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
 export const guildMessageCreateSchema = z.object({
   type: z.literal('guild.messageCreate'),
   guildId: guildIdSchema,
@@ -77,6 +103,12 @@ export const guildMessageCreateSchema = z.object({
   authorId: userIdSchema,
   content: z.string(),
   createdAt: timestampSchema,
+  /**
+   * Attachements liés au message. Vide si aucun. Optionnel pour la
+   * rétro-compat avec les modules qui ne le lisent pas — les modules
+   * qui l'attendent lisent `attachments ?? []`.
+   */
+  attachments: z.array(messageAttachmentSchema).readonly().default([]),
 });
 export type GuildMessageCreateEvent = z.infer<typeof guildMessageCreateSchema>;
 
@@ -102,6 +134,28 @@ export const guildMessageDeleteSchema = z.object({
 });
 export type GuildMessageDeleteEvent = z.infer<typeof guildMessageDeleteSchema>;
 
+export const guildMessageReactionAddSchema = z.object({
+  type: z.literal('guild.messageReactionAdd'),
+  guildId: guildIdSchema,
+  channelId: channelIdSchema,
+  messageId: messageIdSchema,
+  userId: userIdSchema,
+  emoji: emojiSchema,
+  reactedAt: timestampSchema,
+});
+export type GuildMessageReactionAddEvent = z.infer<typeof guildMessageReactionAddSchema>;
+
+export const guildMessageReactionRemoveSchema = z.object({
+  type: z.literal('guild.messageReactionRemove'),
+  guildId: guildIdSchema,
+  channelId: channelIdSchema,
+  messageId: messageIdSchema,
+  userId: userIdSchema,
+  emoji: emojiSchema,
+  reactedAt: timestampSchema,
+});
+export type GuildMessageReactionRemoveEvent = z.infer<typeof guildMessageReactionRemoveSchema>;
+
 // --- Événements Discord : salons ---
 
 export const guildChannelCreateSchema = z.object({
@@ -116,6 +170,14 @@ export const guildChannelUpdateSchema = z.object({
   type: z.literal('guild.channelUpdate'),
   guildId: guildIdSchema,
   channelId: channelIdSchema,
+  nameBefore: z.string(),
+  nameAfter: z.string(),
+  topicBefore: z.string().nullable(),
+  topicAfter: z.string().nullable(),
+  positionBefore: z.number().int().nonnegative(),
+  positionAfter: z.number().int().nonnegative(),
+  parentIdBefore: channelIdSchema.nullable(),
+  parentIdAfter: channelIdSchema.nullable(),
   updatedAt: timestampSchema,
 });
 export type GuildChannelUpdateEvent = z.infer<typeof guildChannelUpdateSchema>;
@@ -142,6 +204,16 @@ export const guildRoleUpdateSchema = z.object({
   type: z.literal('guild.roleUpdate'),
   guildId: guildIdSchema,
   roleId: roleIdSchema,
+  nameBefore: z.string(),
+  nameAfter: z.string(),
+  colorBefore: z.number().int().nonnegative(),
+  colorAfter: z.number().int().nonnegative(),
+  hoistBefore: z.boolean(),
+  hoistAfter: z.boolean(),
+  mentionableBefore: z.boolean(),
+  mentionableAfter: z.boolean(),
+  permissionsBefore: z.string(),
+  permissionsAfter: z.string(),
   updatedAt: timestampSchema,
 });
 export type GuildRoleUpdateEvent = z.infer<typeof guildRoleUpdateSchema>;
@@ -231,6 +303,8 @@ export const coreEventSchema = z.discriminatedUnion('type', [
   guildMessageCreateSchema,
   guildMessageEditSchema,
   guildMessageDeleteSchema,
+  guildMessageReactionAddSchema,
+  guildMessageReactionRemoveSchema,
   guildChannelCreateSchema,
   guildChannelUpdateSchema,
   guildChannelDeleteSchema,

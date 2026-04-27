@@ -39,6 +39,7 @@ const samplePreset: PresetDefinition = {
     },
   ],
   modules: [],
+  permissionBindings: [],
 };
 
 describe('PresetPicker', () => {
@@ -59,7 +60,7 @@ describe('PresetPicker', () => {
     startOnboardingWithPreset.mockResolvedValue({ ok: true, data: {} });
     render(<PresetPicker guildId="g1" presets={[samplePreset]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /sample/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Démarrer avec le preset Sample/i }));
 
     await waitFor(() => expect(startOnboardingWithPreset).toHaveBeenCalledTimes(1));
     expect(startOnboardingWithPreset).toHaveBeenCalledWith('g1', 'p-sample');
@@ -74,7 +75,7 @@ describe('PresetPicker', () => {
     });
     render(<PresetPicker guildId="g1" presets={[samplePreset]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /sample/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Démarrer avec le preset Sample/i }));
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('déjà en cours'));
   });

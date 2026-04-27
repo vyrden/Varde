@@ -6,7 +6,8 @@ copilote de l'admin.
 
 ## Statut
 
-Projet en conception avancée.
+Projet en conception avancée — jalon 4 livré, jalon 5 (polish V1)
+restant avant V1.0.0.
 
 - Jalon 1 (core minimum viable) terminé (2026-04-21) : le noyau sait
   charger un module, le brancher sur un événement Discord et lui
@@ -28,6 +29,20 @@ Projet en conception avancée.
   branche Ollama en local ou un backend OpenAI-compatible
   (OpenAI / OpenRouter / Groq / vLLM / LM Studio), la clé vit
   chiffrée AES-256-GCM dans le keystore (ADR 0007).
+- Jalon 4 (modules officiels V1) terminé (2026-04-27) : les cinq
+  capacités V1 sont livrées et utilisables depuis le dashboard sans
+  fichier de config par serveur — `logs` (audit Discord routé par
+  type d'événement), `welcome` (accueil/départ avec carte d'avatar
+  générée + auto-rôle + filtre comptes neufs), `reaction-roles`
+  (réactions emoji et boutons mélangeables, modes normal/unique/
+  vérificateur), `moderation` (slash commands manuelles + automod
+  multi-règles incluant rate-limit et classification IA),
+  `onboarding-presets` (livré comme service API plus que comme
+  module bot — voir ADR 0010, catalogue de 5 presets éditables avec
+  apply/rollback Discord). Refonte UX/UI single-page sur les quatre
+  pages module avec primitives partagées (`StickyActionBar`,
+  `CollapsibleSection`, `EntityMultiPicker`, `DiscordMessagePreview`,
+  `useDirtyExitGuard`).
 
 Paquets livrés à ce jour :
 
@@ -64,14 +79,35 @@ Paquets livrés à ce jour :
 - `@varde/presets` — catalogue de 5 presets hand-curés (tech,
   gaming, creative, study, generic starter) validés Zod +
   validator sémantique sur les refs locales.
+- `modules/logs` — audit Discord routé par type d'événement (ajouts,
+  départs, modifs rôles/salons, suppressions de messages, etc.) avec
+  filtres globaux et exclusions, mode simple monosalon ou mode
+  avancé multi-routes.
+- `modules/welcome` — message d'accueil et de départ (salon ou DM),
+  carte d'avatar 700×250 PNG générée via `@napi-rs/canvas` (avatar
+  circulaire, fond couleur ou image custom uploadée, polices
+  intégrées et système), auto-rôle avec délai et filtre comptes
+  neufs (kick ou quarantaine).
+- `modules/reaction-roles` — messages avec paires emoji-rôle
+  modifiables sur le dashboard, réactions emoji et boutons Discord
+  mélangeables sur un même message, modes `normal` / `unique` /
+  `vérificateur`, feedback DM ou éphémère selon le mode.
+- `modules/moderation` — slash commands manuelles (`/ban`, `/kick`,
+  `/mute`, `/tempban`, `/tempmute`, `/warn`, `/clear`, `/slowmode`,
+  `/case`, `/infractions`, …) avec audit, et automod multi-règles
+  (blacklist, regex, keyword-list multi-langues, rate-limit,
+  ai-classify, invites, links, caps, emojis, spoilers, mentions,
+  zalgo) avec actions composables (`delete` / `warn` / `mute`),
+  bypass roles, salons restreints.
 - `modules/hello-world` — module témoin de l'API core.
 - `modules/onboarding-test` — module témoin du contrat
   d'extension onboarding : contribue une action custom et un hint
   via `ctx.onboarding.*` (PR 3.13).
 
-Reste à livrer avant V1.0.0 : modules officiels
-moderation / welcome / roles / logs (jalon 4), polish i18n +
-Playwright (jalon 5). Pas encore de release tagguée.
+Reste à livrer avant V1.0.0 : polish jalon 5 (internationalisation
+FR/EN du dashboard, documentation utilisateur, guide module tiers,
+compose production, tests Playwright, changelog). Pas encore de
+release tagguée.
 
 ## Pourquoi un bot de plus
 

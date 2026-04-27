@@ -1,4 +1,12 @@
-import type { ChannelId, CoreEvent, GuildId, MessageId, RoleId, UserId } from '@varde/contracts';
+import type {
+  ChannelId,
+  CoreEvent,
+  Emoji,
+  GuildId,
+  MessageId,
+  RoleId,
+  UserId,
+} from '@varde/contracts';
 
 /**
  * Traduction discord.js ↔ `CoreEvent` (contract @varde/contracts).
@@ -22,6 +30,8 @@ export type DiscordEventKind =
   | 'messageCreate'
   | 'messageUpdate'
   | 'messageDelete'
+  | 'messageReactionAdd'
+  | 'messageReactionRemove'
   | 'channelCreate'
   | 'channelUpdate'
   | 'channelDelete'
@@ -65,6 +75,12 @@ interface MessageCreateInput {
   readonly authorId: string;
   readonly content: string;
   readonly createdAt: number;
+  readonly attachments?: ReadonlyArray<{
+    readonly id: string;
+    readonly url: string;
+    readonly filename?: string;
+    readonly contentType?: string | null;
+  }>;
 }
 
 interface MessageUpdateInput {
@@ -87,6 +103,26 @@ interface MessageDeleteInput {
   readonly deletedAt: number;
 }
 
+interface MessageReactionAddInput {
+  readonly kind: 'messageReactionAdd';
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly userId: string;
+  readonly emoji: Emoji;
+  readonly reactedAt: number;
+}
+
+interface MessageReactionRemoveInput {
+  readonly kind: 'messageReactionRemove';
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly userId: string;
+  readonly emoji: MessageReactionAddInput['emoji'];
+  readonly reactedAt: number;
+}
+
 interface ChannelCreateInput {
   readonly kind: 'channelCreate';
   readonly guildId: string;
@@ -98,6 +134,14 @@ interface ChannelUpdateInput {
   readonly kind: 'channelUpdate';
   readonly guildId: string;
   readonly channelId: string;
+  readonly nameBefore: string;
+  readonly nameAfter: string;
+  readonly topicBefore: string | null;
+  readonly topicAfter: string | null;
+  readonly positionBefore: number;
+  readonly positionAfter: number;
+  readonly parentIdBefore: string | null;
+  readonly parentIdAfter: string | null;
   readonly updatedAt: number;
 }
 
@@ -119,6 +163,16 @@ interface RoleUpdateInput {
   readonly kind: 'roleUpdate';
   readonly guildId: string;
   readonly roleId: string;
+  readonly nameBefore: string;
+  readonly nameAfter: string;
+  readonly colorBefore: number;
+  readonly colorAfter: number;
+  readonly hoistBefore: boolean;
+  readonly hoistAfter: boolean;
+  readonly mentionableBefore: boolean;
+  readonly mentionableAfter: boolean;
+  readonly permissionsBefore: string;
+  readonly permissionsAfter: string;
   readonly updatedAt: number;
 }
 
@@ -149,6 +203,8 @@ export type DiscordEventInput =
   | MessageCreateInput
   | MessageUpdateInput
   | MessageDeleteInput
+  | MessageReactionAddInput
+  | MessageReactionRemoveInput
   | ChannelCreateInput
   | ChannelUpdateInput
   | ChannelDeleteInput
@@ -199,6 +255,7 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         authorId: input.authorId as UserId,
         content: input.content,
         createdAt: input.createdAt,
+        attachments: input.attachments ?? [],
       };
     case 'messageUpdate':
       return {
@@ -220,6 +277,26 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         authorId: input.authorId === null ? null : (input.authorId as UserId),
         deletedAt: input.deletedAt,
       };
+    case 'messageReactionAdd':
+      return {
+        type: 'guild.messageReactionAdd',
+        guildId: input.guildId as GuildId,
+        channelId: input.channelId as ChannelId,
+        messageId: input.messageId as MessageId,
+        userId: input.userId as UserId,
+        emoji: input.emoji,
+        reactedAt: input.reactedAt,
+      };
+    case 'messageReactionRemove':
+      return {
+        type: 'guild.messageReactionRemove',
+        guildId: input.guildId as GuildId,
+        channelId: input.channelId as ChannelId,
+        messageId: input.messageId as MessageId,
+        userId: input.userId as UserId,
+        emoji: input.emoji,
+        reactedAt: input.reactedAt,
+      };
     case 'channelCreate':
       return {
         type: 'guild.channelCreate',
@@ -232,6 +309,14 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         type: 'guild.channelUpdate',
         guildId: input.guildId as GuildId,
         channelId: input.channelId as ChannelId,
+        nameBefore: input.nameBefore,
+        nameAfter: input.nameAfter,
+        topicBefore: input.topicBefore,
+        topicAfter: input.topicAfter,
+        positionBefore: input.positionBefore,
+        positionAfter: input.positionAfter,
+        parentIdBefore: input.parentIdBefore === null ? null : (input.parentIdBefore as ChannelId),
+        parentIdAfter: input.parentIdAfter === null ? null : (input.parentIdAfter as ChannelId),
         updatedAt: input.updatedAt,
       };
     case 'channelDelete':
@@ -253,6 +338,16 @@ export function mapDiscordEvent(input: DiscordEventInput): CoreEvent {
         type: 'guild.roleUpdate',
         guildId: input.guildId as GuildId,
         roleId: input.roleId as RoleId,
+        nameBefore: input.nameBefore,
+        nameAfter: input.nameAfter,
+        colorBefore: input.colorBefore,
+        colorAfter: input.colorAfter,
+        hoistBefore: input.hoistBefore,
+        hoistAfter: input.hoistAfter,
+        mentionableBefore: input.mentionableBefore,
+        mentionableAfter: input.mentionableAfter,
+        permissionsBefore: input.permissionsBefore,
+        permissionsAfter: input.permissionsAfter,
         updatedAt: input.updatedAt,
       };
     case 'roleDelete':

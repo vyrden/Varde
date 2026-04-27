@@ -23,22 +23,62 @@
  * via l'API REST : à livrer quand la surface commandes sera stable.
  */
 
+import { resolve as resolvePath } from 'node:path';
+
+import {
+  createWelcomeUploadsService,
+  type GuildRoleDto,
+  type GuildTextChannelDto,
+  readModuleEnabledOverride,
+} from '@varde/api';
 import {
   attachDiscordClient,
+  createDiscordJsChannelSender,
+  createDiscordService,
   createOnboardingDiscordBridge,
   type OnboardingDiscordBridge,
+  registerSlashCommandsForGuild,
 } from '@varde/bot';
-import type { GuildId, Logger, ModuleId } from '@varde/contracts';
+import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
 import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
-import { helloWorld } from '@varde/module-hello-world';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
+import { logs, locales as logsLocales } from '@varde/module-logs';
+import { moderation } from '@varde/module-moderation';
+import { reactionRoles, locales as reactionRolesLocales } from '@varde/module-reaction-roles';
+import { welcome } from '@varde/module-welcome';
+import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
 
 import { createServer } from './server.js';
 
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
 
 const HELLO_WORLD_ID = 'hello-world' as ModuleId;
+
+/**
+ * Aggrégation des locales fournies par chaque module officiel,
+ * indexée par `moduleId`. Passée à `createServer` qui la propage à
+ * `createCtxFactory` pour que `ctx.i18n.t(key, params)` résolve les
+ * chaînes depuis le bon dictionnaire. Les modules sans locales
+ * (welcome, moderation V1) sont absents — le fallback i18n reste la
+ * clé brute, mais ils n'utilisent pas `ctx.i18n.t` actuellement.
+ */
+const MODULE_LOCALES = {
+  'hello-world': helloWorldLocales,
+  logs: logsLocales,
+  'reaction-roles': reactionRolesLocales,
+} as const;
+
+/**
+ * Modules activés par défaut sur toute guild connue. **Politique
+ * V1 : seul `hello-world` est auto-activé** (témoin du contrat
+ * core/module). Les modules officiels (`logs`, `moderation`,
+ * `reaction-roles`, `welcome`) restent désactivés tant que l'admin
+ * ne les active pas explicitement via le toggle du dashboard. C'est
+ * un opt-in volontaire pour que l'admin garde la main sur ce qui
+ * tourne sur son serveur.
+ */
+const DEFAULT_ENABLED_MODULES: readonly ModuleId[] = [HELLO_WORLD_ID];
 
 const die = (message: string): never => {
   process.stderr.write(`[varde-server] ${message}\n`);
@@ -63,6 +103,43 @@ const readOptional = (name: string, fallback: string): string => {
 const readOptionalRaw = (name: string): string | null => {
   const value = process.env[name];
   return typeof value === 'string' && value.length > 0 ? value : null;
+};
+
+/**
+ * Lit la master key keystore depuis l'environnement. Fail fast si la
+ * variable est vide ou mal formée — sans master key stable entre
+ * redémarrages, toutes les clés chiffrées (API keys IA, secrets
+ * modules) deviennent illisibles au prochain boot, ce qui casse
+ * silencieusement le produit. Mieux vaut refuser de démarrer.
+ *
+ * Format attendu : 32 octets encodés en base64 (génération :
+ * `openssl rand -base64 32`). L'utilisateur voit un message clair
+ * si la valeur manque.
+ */
+const readKeystoreMasterKey = (): Buffer => {
+  // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on process.env
+  const raw = process.env['VARDE_KEYSTORE_MASTER_KEY'];
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return die(
+      [
+        'VARDE_KEYSTORE_MASTER_KEY est vide ou manquante.',
+        '',
+        'Sans cette clé, le keystore chiffre les secrets (clés API IA, etc.) avec une',
+        'clé aléatoire différente à chaque démarrage — tous les secrets stockés',
+        'deviennent illisibles au prochain boot.',
+        '',
+        'Génère-en une (32 octets base64) et ajoute-la à .env.local :',
+        '  openssl rand -base64 32',
+      ].join('\n'),
+    );
+  }
+  const buf = Buffer.from(raw, 'base64');
+  if (buf.length !== 32) {
+    return die(
+      `VARDE_KEYSTORE_MASTER_KEY doit décoder en 32 octets (reçu ${buf.length}). Regénère avec : openssl rand -base64 32`,
+    );
+  }
+  return buf;
 };
 
 const parsePort = (raw: string, name: string): number => {
@@ -129,18 +206,41 @@ async function upsertGuild(
   }
 }
 
-async function enableHelloWorldOn(
+async function enableDefaultModulesOn(
   handle: ServerHandle,
   guildId: string,
   logger: Logger,
 ): Promise<void> {
+  // Lit l'état persisté pour cette guild (overrides admins via UI).
+  // Si vide ou erreur → fallback sur DEFAULT_ENABLED_MODULES.
+  let snapshot: unknown = {};
   try {
-    await handle.loader.enable(guildId as GuildId, HELLO_WORLD_ID);
-  } catch (error) {
-    logger.warn('enable hello-world échoué', {
-      err: error instanceof Error ? error.message : String(error),
-      guildId,
-    });
+    snapshot = await handle.config.get(guildId as GuildId);
+  } catch {
+    snapshot = {};
+  }
+
+  // Set des modules à appliquer en runtime, suivant les règles :
+  //   override = true   → enable
+  //   override = false  → ne PAS enable (admin a désactivé)
+  //   override = null   → enable si dans DEFAULT_ENABLED_MODULES
+  const candidates = new Set<ModuleId>(DEFAULT_ENABLED_MODULES);
+  for (const moduleId of handle.loader.loadOrder()) {
+    const override = readModuleEnabledOverride(snapshot, moduleId);
+    if (override === true) candidates.add(moduleId);
+    if (override === false) candidates.delete(moduleId);
+  }
+
+  for (const moduleId of candidates) {
+    try {
+      await handle.loader.enable(guildId as GuildId, moduleId);
+    } catch (error) {
+      logger.warn('enable module au boot échoué', {
+        err: error instanceof Error ? error.message : String(error),
+        guildId,
+        moduleId,
+      });
+    }
   }
 }
 
@@ -152,7 +252,7 @@ async function seedFromEnv(
   if (ids.length === 0) return;
   for (const id of ids) {
     await upsertGuild(handle, id, `seed-${id}`, logger);
-    await enableHelloWorldOn(handle, id, logger);
+    await enableDefaultModulesOn(handle, id, logger);
   }
   logger.info('seed guilds depuis env appliqué', { count: ids.length });
 }
@@ -165,17 +265,52 @@ async function seedFromEnv(
  * runtime de `VARDE_SEED_GUILD_IDS` : dès que le bot est invité sur
  * un serveur, il y est opérationnel sans intervention manuelle.
  */
-function subscribeAutoOnboard(handle: ServerHandle, logger: Logger): () => void {
+function subscribeAutoOnboard(
+  handle: ServerHandle,
+  logger: Logger,
+  getDiscordClient: () => Client | null,
+): () => void {
   return handle.eventBus.on('guild.join', async (event) => {
     await upsertGuild(handle, event.guildId, event.guildId, logger);
-    await enableHelloWorldOn(handle, event.guildId, logger);
-    logger.info('guild rejointe, hello-world activé', { guildId: event.guildId });
+    await enableDefaultModulesOn(handle, event.guildId, logger);
+    const client = getDiscordClient();
+    if (client !== null) {
+      await registerSlashCommandsForGuild(
+        client,
+        event.guildId,
+        collectAllCommands(handle),
+        logger,
+      );
+    }
+    logger.info('guild rejointe, modules par défaut activés', { guildId: event.guildId });
   });
 }
 
 interface DiscordAttachment {
   readonly client: Client;
   readonly bridge: OnboardingDiscordBridge;
+  /** Service Discord concret à passer à `createServer` via `discordService`. */
+  readonly discordService: DiscordService;
+  /** Liste les salons texte d'une guild depuis le cache discord.js. */
+  readonly listGuildTextChannels: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
+  /** Liste les rôles d'une guild depuis le cache discord.js. */
+  readonly listGuildRoles: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Liste les emojis custom visibles depuis une guild :
+   * - `current` : emojis du serveur courant.
+   * - `external` : emojis des autres serveurs où le bot est présent
+   *   (utilisables par les utilisateurs Nitro côté Discord, et par le
+   *   bot lui-même pour pré-réagir).
+   */
+  readonly listGuildEmojis: (guildId: string) => Promise<{
+    readonly current: readonly { id: string; name: string; animated: boolean }[];
+    readonly external: readonly {
+      id: string;
+      name: string;
+      animated: boolean;
+      guildName: string;
+    }[];
+  }>;
 }
 
 interface DiscordBinding {
@@ -191,14 +326,105 @@ interface DiscordBinding {
  * permet à `createServer()` d'enregistrer les routes onboarding avec
  * un bridge vivant tout en gardant `.login()` sous le contrôle du
  * caller (bin.ts l'appelle après `attachDiscordToHandle`).
+ *
+ * Le `ChannelSender` concret est construit ici à partir du Client ;
+ * il est wrappé dans un `DiscordService` (rate limiter + traçabilité)
+ * et passé à `createServer` pour alimenter `ctx.discord` des modules.
  */
-function createDiscordAttachment(): DiscordAttachment {
+function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      // Nécessaire pour `messageCreate` / `messageUpdate` / `messageDelete`
+      // — sans cet intent, l'automod et le module logs ne reçoivent
+      // jamais d'événement message.
+      GatewayIntentBits.GuildMessages,
+      // Privileged intent à activer dans le portail Discord. Sans lui
+      // les events `messageCreate` arrivent avec `content: ""`, ce qui
+      // rend les règles automod textuelles (blacklist / regex / IA)
+      // inutiles. Les règles `rate-limit` continuent de fonctionner.
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMessageReactions,
+    ],
+    // Sans ces partials, discord.js ignore silencieusement les réactions
+    // sur des objets pas en cache (cas typiques : message posté avant le
+    // redémarrage du bot, utilisateur jamais vu récemment).
+    partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember],
   });
   const bridge = createOnboardingDiscordBridge(client);
-  return { client, bridge };
+  const sender = createDiscordJsChannelSender(client);
+  const discordService = createDiscordService({ sender, logger, client });
+
+  const listGuildTextChannels = async (
+    guildId: string,
+  ): Promise<readonly GuildTextChannelDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    // On préfère `guild.channels.fetch()` pour couvrir les cas où le cache
+    // n'est pas encore peuplé (redémarrage rapide post-reconnexion).
+    const channels = await guild.channels.fetch();
+    return Array.from(channels.values())
+      .filter(
+        (ch): ch is NonNullable<typeof ch> => ch !== null && ch.type === ChannelType.GuildText,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((ch) => ({ id: ch.id, name: ch.name }));
+  };
+
+  const listGuildRoles = async (guildId: string): Promise<readonly GuildRoleDto[]> => {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return [];
+    const roles = await guild.roles.fetch();
+    return Array.from(roles.values())
+      .filter((r) => !r.managed && r.name !== '@everyone')
+      .sort((a, b) => b.position - a.position)
+      .map((r) => ({ id: r.id, name: r.name }));
+  };
+
+  const listGuildEmojis: DiscordAttachment['listGuildEmojis'] = async (guildId) => {
+    const current: { id: string; name: string; animated: boolean }[] = [];
+    const external: { id: string; name: string; animated: boolean; guildName: string }[] = [];
+    for (const guild of client.guilds.cache.values()) {
+      for (const emoji of guild.emojis.cache.values()) {
+        if (emoji.id === null || emoji.name === null) continue;
+        if (guild.id === guildId) {
+          current.push({ id: emoji.id, name: emoji.name, animated: emoji.animated ?? false });
+        } else {
+          external.push({
+            id: emoji.id,
+            name: emoji.name,
+            animated: emoji.animated ?? false,
+            guildName: guild.name,
+          });
+        }
+      }
+    }
+    current.sort((a, b) => a.name.localeCompare(b.name));
+    external.sort((a, b) => a.guildName.localeCompare(b.guildName) || a.name.localeCompare(b.name));
+    return { current, external };
+  };
+
+  return {
+    client,
+    bridge,
+    discordService,
+    listGuildTextChannels,
+    listGuildRoles,
+    listGuildEmojis,
+  };
 }
+
+/**
+ * Liste **toutes** les commandes du registry, indépendamment de
+ * l'état d'activation per-guild. On les publie en bloc à Discord
+ * au boot — l'admin voit les commandes des modules désactivés
+ * (pattern MEE6), mais le routeur les refuse en defense-in-depth
+ * tant que le module n'est pas activé. Trade-off : zéro latence
+ * de toggle vs petite confusion possible sur les commandes vues.
+ */
+const collectAllCommands = (handle: ServerHandle) =>
+  handle.commandRegistry.list().map((entry) => entry.command);
 
 function attachDiscordToHandle(
   attachment: DiscordAttachment,
@@ -208,12 +434,20 @@ function attachDiscordToHandle(
   attachment.client.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
+    const commands = collectAllCommands(handle);
     for (const guild of guilds) {
       await upsertGuild(handle, guild.id, guild.name, logger);
-      await enableHelloWorldOn(handle, guild.id, logger);
+      await enableDefaultModulesOn(handle, guild.id, logger);
+      // Enregistre toutes les slash commands à Discord pour cette
+      // guild. Idempotent : remplace l'intégralité des commandes
+      // côté Discord à chaque boot. Pas de re-register au toggle —
+      // les modules désactivés sont rejetés par le router au runtime.
+      await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
-  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger);
+  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger, (input) =>
+    handle.ctxBundle.interactions.dispatchButton(input),
+  );
   return {
     detach,
     destroy: () => attachment.client.destroy(),
@@ -235,6 +469,9 @@ async function main(): Promise<void> {
     | 'fatal';
   const seedIds = seedGuildIds(readOptional('VARDE_SEED_GUILD_IDS', ''));
   const discordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
+  const keystoreMasterKey = readKeystoreMasterKey();
+  const uploadsDir = resolvePath(readOptional('VARDE_UPLOADS_DIR', './uploads'));
+  const welcomeUploads = createWelcomeUploadsService(uploadsDir);
 
   const logger = createLogger({ level: logLevel });
 
@@ -243,7 +480,7 @@ async function main(): Promise<void> {
   // directement le vrai bridge (PR 3.12d). `.login()` est repoussé
   // jusqu'après `createServer()` pour que le dispatcher soit prêt à
   // recevoir les events gateway.
-  const discordAttachment = discordToken !== null ? createDiscordAttachment() : null;
+  const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
 
   const driver = pickDriver(databaseUrl);
   const handle =
@@ -251,24 +488,65 @@ async function main(): Promise<void> {
       ? await createServer({
           database: { driver: 'pg', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
+          locales: MODULE_LOCALES,
+          defaultLocale: 'fr',
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
+          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          welcomeUploads,
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
           api: { port, host, corsOrigin, authSecret },
+          keystore: { masterKey: keystoreMasterKey },
           logger,
+          locales: MODULE_LOCALES,
+          defaultLocale: 'fr',
           ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
+          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
+          ...(discordAttachment
+            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
+            : {}),
+          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
+          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          welcomeUploads,
         });
 
   handle.loader.register(helloWorld);
+  handle.loader.register(logs);
+  handle.loader.register(moderation);
+  handle.loader.register(reactionRoles);
+  handle.loader.register(welcome);
   await handle.loader.loadAll();
 
-  const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger);
+  // Hydrate le `commandRegistry` du bot depuis les modules chargés.
+  // Le loader ne fait pas ce câblage automatiquement (le registry
+  // appartient à @varde/bot, pas au core) — c'est `bin.ts` qui
+  // assemble. Sans ça, aucune slash command n'est routable et la
+  // registration REST par-guild n'enverrait rien à Discord.
+  for (const id of handle.loader.loadOrder()) {
+    const def = handle.loader.get(id);
+    if (def?.commands && Object.keys(def.commands).length > 0) {
+      handle.commandRegistry.register(
+        { id: def.manifest.id, version: def.manifest.version },
+        def.commands,
+      );
+    }
+  }
+
+  let discord: DiscordBinding | null = null;
+  const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
+    discord !== null && discordAttachment !== null ? discordAttachment.client : null,
+  );
 
   await seedFromEnv(handle, seedIds, logger);
 
-  let discord: DiscordBinding | null = null;
   if (discordAttachment !== null && discordToken !== null) {
     discord = attachDiscordToHandle(discordAttachment, handle, logger);
     await discordAttachment.client.login(discordToken);

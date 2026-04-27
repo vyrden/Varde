@@ -96,6 +96,20 @@ export const communityGamingSmall: PresetDefinition = {
       readableBy: [],
       writableBy: [],
     },
+    {
+      localId: 'chan-logs',
+      categoryLocalId: 'cat-text',
+      name: 'logs',
+      nameFr: 'logs',
+      nameEn: 'logs',
+      type: 'text',
+      topic: 'Journal des actions modérateurs et événements serveur.',
+      topicFr: 'Journal des actions modérateurs et événements serveur.',
+      topicEn: 'Server moderation and event log.',
+      slowmodeSeconds: 0,
+      readableBy: ['role-mod'],
+      writableBy: ['role-mod'],
+    },
   ],
   modules: [
     {
@@ -103,5 +117,38 @@ export const communityGamingSmall: PresetDefinition = {
       enabled: true,
       config: { welcomeDelayMs: 500 },
     },
+    {
+      moduleId: 'moderation',
+      enabled: false,
+      config: {
+        version: 1,
+        mutedRoleId: null,
+        dmOnSanction: false,
+        automod: {
+          rules: [
+            {
+              id: 'rule-everyone-abuse',
+              label: 'Mention @everyone / @here',
+              kind: 'regex',
+              pattern: '@(everyone|here)',
+              action: 'delete',
+              durationMs: null,
+              enabled: true,
+            },
+            {
+              id: 'rule-spam-caps',
+              label: 'Spam de majuscules (5+ mots consécutifs)',
+              kind: 'regex',
+              pattern: '\\b[A-Z]{4,}(\\s+[A-Z]{4,}){4,}\\b',
+              action: 'warn',
+              durationMs: null,
+              enabled: true,
+            },
+          ],
+          bypassRoleIds: [],
+        },
+      },
+    },
   ],
+  permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
 };

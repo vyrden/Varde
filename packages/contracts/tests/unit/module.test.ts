@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import type { UIMessage } from '../../src/index.js';
 import { defineModule } from '../../src/module.js';
 
 const baseManifest = {
@@ -206,5 +207,51 @@ describe('defineModule — configUi', () => {
       },
     });
     expect(module.configUi?.fields).toHaveLength(1);
+  });
+});
+
+describe('UIMessage discriminated union', () => {
+  it('narrow "embed" donne un payload UIEmbed et attachments optionnels', () => {
+    const message: UIMessage = {
+      kind: 'embed',
+      payload: { title: 'Titre', description: 'Description' },
+      attachments: [
+        {
+          filename: 'content.txt',
+          contentType: 'text/plain; charset=utf-8',
+          data: Buffer.from('hi'),
+        },
+      ],
+    };
+    if (message.kind === 'embed') {
+      expect(message.payload.title).toBe('Titre');
+      expect(message.attachments?.[0]?.filename).toBe('content.txt');
+    }
+  });
+
+  it('narrow "success" ne permet pas d\'accéder à title', () => {
+    const message: UIMessage = { kind: 'success', payload: { message: 'ok' } };
+    if (message.kind === 'success') {
+      expect(message.payload.message).toBe('ok');
+      // @ts-expect-error : title n'existe pas sur UITextPayload
+      void message.payload.title;
+    }
+  });
+
+  it('narrow "error" donne { message }', () => {
+    const message: UIMessage = { kind: 'error', payload: { message: 'oops' } };
+    if (message.kind === 'error') {
+      expect(message.payload.message).toBe('oops');
+    }
+  });
+
+  it('narrow "confirm" expose confirmLabel et cancelLabel', () => {
+    const message: UIMessage = {
+      kind: 'confirm',
+      payload: { message: 'Sûr ?', confirmLabel: 'Oui', cancelLabel: 'Non' },
+    };
+    if (message.kind === 'confirm') {
+      expect(message.payload.confirmLabel).toBe('Oui');
+    }
   });
 });

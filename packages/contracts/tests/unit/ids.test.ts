@@ -89,8 +89,13 @@ describe('PermissionId guard', () => {
     expect(isPermissionId('moderation')).toBe(false);
   });
 
-  it('refuse avec plus de deux segments', () => {
-    expect(isPermissionId('moderation.ban.permanent')).toBe(false);
+  it('accepte un format module.category.action (trois segments)', () => {
+    expect(isPermissionId('moderation.ban.permanent')).toBe(true);
+    expect(isPermissionId('logs.config.manage')).toBe(true);
+  });
+
+  it('refuse avec plus de trois segments', () => {
+    expect(isPermissionId('moderation.ban.permanent.extra')).toBe(false);
   });
 
   it('refuse avec un segment vide', () => {

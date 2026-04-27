@@ -23,6 +23,10 @@ export {
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
+  type CoreInteractionsRegistry,
+  createInteractionsRegistry,
+} from './interactions.js';
+export {
   type CreateKeystoreServiceOptions,
   createKeystoreService,
 } from './keystore.js';
@@ -71,11 +75,4 @@ export {
   type CreateSchedulerServiceOptions,
   createSchedulerService,
 } from './scheduler.js';
-export {
-  type ConfirmPayload,
-  createUIService,
-  type EmbedPayload,
-  type ErrorPayload,
-  isUIMessage,
-  type SuccessPayload,
-} from './ui.js';
+export { createUIService, isUIMessage } from './ui.js';

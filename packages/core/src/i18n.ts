@@ -14,10 +14,15 @@ import type { I18nService } from '@varde/contracts';
 /** Table de messages `{ locale: { clé: message } }`. */
 export type I18nMessages = Readonly<Record<string, Readonly<Record<string, string>>>>;
 
-/** Options de construction d'un I18nService. */
+/**
+ * Options de construction d'un I18nService. `locale` accepte une chaîne
+ * fixe ou un getter résolu à chaque appel `t()` — utile quand la locale
+ * effective d'une guild peut changer pendant la durée de vie de
+ * l'instance (édition `core.bot-settings.language` côté dashboard).
+ */
 export interface CreateI18nOptions {
   readonly messages: I18nMessages;
-  readonly locale: string;
+  readonly locale: string | (() => string);
   readonly fallbackLocale?: string;
 }
 
@@ -39,13 +44,15 @@ const interpolate = (
 /** Construit un I18nService scoped sur une locale et son fallback. */
 export function createI18n(options: CreateI18nOptions): I18nService {
   const { messages, locale, fallbackLocale } = options;
+  const resolveLocale = typeof locale === 'function' ? locale : () => locale;
   return {
     t(key, params) {
-      const primary = messages[locale]?.[key];
+      const current = resolveLocale();
+      const primary = messages[current]?.[key];
       if (primary !== undefined) {
         return interpolate(primary, params);
       }
-      if (fallbackLocale && fallbackLocale !== locale) {
+      if (fallbackLocale && fallbackLocale !== current) {
         const secondary = messages[fallbackLocale]?.[key];
         if (secondary !== undefined) {
           return interpolate(secondary, params);

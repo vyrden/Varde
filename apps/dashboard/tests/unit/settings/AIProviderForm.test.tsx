@@ -42,8 +42,7 @@ describe('AIProviderForm', () => {
 
   it('bascule vers openai-compat et révèle endpoint + model + apiKey', () => {
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
-    const select = screen.getByLabelText('Provider') as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: 'openai-compat' } });
+    fireEvent.click(screen.getByLabelText('OpenAI-compatible'));
 
     expect((screen.getByLabelText('Endpoint') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Modèle') as HTMLInputElement).value).toBe('');
@@ -63,7 +62,7 @@ describe('AIProviderForm', () => {
   it('soumet ollama en construisant un FormData avec les champs attendus', async () => {
     saveAiSettings.mockResolvedValue({ ok: true });
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'ollama' } });
+    fireEvent.click(screen.getByLabelText('Ollama'));
     fireEvent.change(screen.getByLabelText('Endpoint'), {
       target: { value: 'http://localhost:11434' },
     });
@@ -84,7 +83,7 @@ describe('AIProviderForm', () => {
   it('soumet openai-compat avec une apiKey via FormData (pas d objet JS expansé)', async () => {
     saveAiSettings.mockResolvedValue({ ok: true });
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai-compat' } });
+    fireEvent.click(screen.getByLabelText('OpenAI-compatible'));
     fireEvent.change(screen.getByLabelText('Endpoint'), {
       target: { value: 'https://api.openai.com/v1' },
     });
@@ -106,7 +105,7 @@ describe('AIProviderForm', () => {
       data: { providerId: 'ollama', model: 'llama3.1:8b', ok: true, latencyMs: 412 },
     });
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'ollama' } });
+    fireEvent.click(screen.getByLabelText('Ollama'));
     fireEvent.change(screen.getByLabelText('Endpoint'), {
       target: { value: 'http://localhost:11434' },
     });
@@ -122,7 +121,7 @@ describe('AIProviderForm', () => {
 
   it('refuse un submit openai-compat sans endpoint', async () => {
     render(<AIProviderForm guildId="g1" initial={initialNone} />);
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'openai-compat' } });
+    fireEvent.click(screen.getByLabelText('OpenAI-compatible'));
     fireEvent.click(screen.getByRole('button', { name: /enregistrer/i }));
 
     await waitFor(() => {

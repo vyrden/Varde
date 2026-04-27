@@ -81,7 +81,7 @@ describe('createOpenAICompatibleProvider — options', () => {
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
     const headers = (init as { headers: Record<string, string> }).headers;
-    expect(headers['authorization']).toBe('Bearer sk-test-123');
+    expect(headers.authorization).toBe('Bearer sk-test-123');
     expect(headers['http-referer']).toBe('https://varde.local');
   });
 
@@ -318,5 +318,51 @@ describe('createOpenAICompatibleProvider — testConnection', () => {
     });
     const info = await provider.testConnection();
     expect(info.id).toBe('openrouter');
+  });
+});
+
+describe('createOpenAICompatibleProvider — classify', () => {
+  it("n'envoie PAS response_format=json_object pour classify (cause de 400 OpenAI)", async () => {
+    // Régression : avant le fix, `classify` héritait du JSON mode
+    // global et OpenAI rejetait avec 400 (le prompt ne mentionne pas
+    // "JSON"), faisant retomber silencieusement sur `safe`.
+    const fetchMock = vi.fn(async () => buildChatResponse('toxicity'));
+    const provider = createOpenAICompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'k',
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const result = await provider.classify('truc', ['safe', 'toxicity']);
+    expect(result).toBe('toxicity');
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as { body: string }).body) as {
+      response_format?: { type: string };
+    };
+    expect(body.response_format).toBeUndefined();
+  });
+
+  it('fail-open vers safe quand le modèle répond hors-pool', async () => {
+    const fetchMock = vi.fn(async () => buildChatResponse('je ne sais pas'));
+    const provider = createOpenAICompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'k',
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    const result = await provider.classify('hi', ['safe', 'toxicity']);
+    expect(result).toBe('safe');
+  });
+
+  it('remonte AIProviderError quand le provider HTTP plante (caller logge)', async () => {
+    const fetchMock = vi.fn(async () => new Response('Bad Request', { status: 400 }));
+    const provider = createOpenAICompatibleProvider({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      apiKey: 'k',
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    await expect(provider.classify('hi', ['safe', 'toxicity'])).rejects.toBeInstanceOf(
+      AIProviderError,
+    );
   });
 });

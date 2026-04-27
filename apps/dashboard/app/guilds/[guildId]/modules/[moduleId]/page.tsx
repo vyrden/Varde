@@ -1,11 +1,12 @@
-import { EmptyState, PageTitle } from '@varde/ui';
-import Link from 'next/link';
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, Separator } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import { ConfigForm } from '../../../../../components/ConfigForm';
-import { DashboardHeader } from '../../../../../components/DashboardHeader';
+import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
+import { moduleIcon } from '../../../../../components/shell/module-icons';
+import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -23,6 +24,10 @@ interface ModuleConfigPageProps {
  * d'existence côté liste) et sa config + `configUi`. Le formulaire
  * est monté seulement si le module expose un `configUi` — sinon on
  * affiche un `EmptyState` explicite (module sans config éditable).
+ *
+ * Layout : header custom (breadcrumb + icône + titre + badge inline +
+ * description), séparateur, puis grid 2/3 ↔ 1/3 (formulaire / sidebar
+ * de métadonnées).
  */
 export default async function ModuleConfigPage({
   params,
@@ -52,41 +57,82 @@ export default async function ModuleConfigPage({
   const module = modules.find((m) => m.id === moduleId);
   if (!guild || !module) notFound();
 
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader userName={session.user.name} />
-      <main className="mx-auto max-w-3xl space-y-6 p-6">
-        <div>
-          <Link
-            href={`/guilds/${guildId}`}
-            className="text-sm text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring rounded"
-          >
-            ← {guild.name}
-          </Link>
-        </div>
-        <PageTitle
-          title={module.name}
-          description={
-            module.description || `Configuration du module ${module.name} (v${module.version}).`
-          }
-        />
+  const isEnabled = module.enabled !== false;
 
-        {moduleConfig.configUi && moduleConfig.configUi.fields.length > 0 ? (
-          <ConfigForm
-            guildId={guildId}
-            moduleId={moduleId}
-            moduleName={module.name}
-            ui={moduleConfig.configUi}
-            initialValues={moduleConfig.config}
-            schema={moduleConfig.configSchema}
-          />
-        ) : (
-          <EmptyState
-            title="Module sans configuration éditable"
-            description="Ce module n'expose pas de schéma de configuration. Rien à régler ici."
-          />
-        )}
-      </main>
-    </div>
+  return (
+    <>
+      <header className="bg-surface px-6 pt-5 pb-4">
+        <PageBreadcrumb
+          items={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: module.name }]}
+        />
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+              isEnabled ? 'bg-primary/15 text-primary' : 'bg-surface-active text-muted-foreground'
+            }`}
+          >
+            {moduleIcon(module.id, 20)}
+          </div>
+          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
+            {module.name}
+          </h1>
+          <Badge variant={isEnabled ? 'active' : 'inactive'}>
+            {isEnabled ? 'Actif' : 'Inactif'}
+          </Badge>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {module.description || `Configuration du module ${module.name}.`}
+        </p>
+      </header>
+      <Separator />
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="flex flex-col gap-4 lg:col-span-2">
+            {moduleConfig.configUi && moduleConfig.configUi.fields.length > 0 ? (
+              <ConfigForm
+                guildId={guildId}
+                moduleId={moduleId}
+                moduleName={module.name}
+                ui={moduleConfig.configUi}
+                initialValues={moduleConfig.config}
+                schema={moduleConfig.configSchema}
+              />
+            ) : (
+              <EmptyState
+                title="Module sans configuration éditable"
+                description="Ce module n'expose pas de schéma de configuration. Rien à régler ici."
+              />
+            )}
+          </div>
+
+          <aside className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Informations</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-mono text-foreground">v{module.version}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Statut</span>
+                  <ModuleEnabledToggle
+                    guildId={guildId}
+                    moduleId={module.id}
+                    moduleName={module.name}
+                    initialEnabled={isEnabled}
+                  />
+                </div>
+                <p className="pt-1 text-xs text-muted-foreground">
+                  Désactiver un module coupe immédiatement ses handlers events et commandes pour ce
+                  serveur. La config est conservée — réactiver restaure tout.
+                </p>
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
+      </div>
+    </>
   );
 }

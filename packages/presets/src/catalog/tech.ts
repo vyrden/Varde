@@ -123,6 +123,20 @@ export const communityTechSmall: PresetDefinition = {
       readableBy: [],
       writableBy: [],
     },
+    {
+      localId: 'chan-logs',
+      categoryLocalId: 'cat-info',
+      name: 'logs',
+      nameFr: 'logs',
+      nameEn: 'logs',
+      type: 'text',
+      topic: 'Journal des actions modérateurs et événements serveur.',
+      topicFr: 'Journal des actions modérateurs et événements serveur.',
+      topicEn: 'Server moderation and event log.',
+      slowmodeSeconds: 0,
+      readableBy: ['role-mod'],
+      writableBy: ['role-mod'],
+    },
   ],
   modules: [
     {
@@ -130,5 +144,53 @@ export const communityTechSmall: PresetDefinition = {
       enabled: true,
       config: { welcomeDelayMs: 1000 },
     },
+    {
+      moduleId: 'moderation',
+      enabled: false,
+      config: {
+        version: 1,
+        mutedRoleId: null,
+        dmOnSanction: true,
+        automod: {
+          rules: [
+            {
+              id: 'rule-spam-links',
+              label: 'Spam de liens (3+)',
+              kind: 'regex',
+              pattern: '(https?://[^ ]+\\s+){3,}',
+              action: 'delete',
+              durationMs: null,
+              enabled: true,
+            },
+            {
+              id: 'rule-everyone-abuse',
+              label: 'Mention @everyone abusive',
+              kind: 'regex',
+              pattern: '@(everyone|here)',
+              action: 'warn',
+              durationMs: null,
+              enabled: true,
+            },
+          ],
+          bypassRoleIds: ['@role:role-mod'],
+        },
+      },
+    },
+    {
+      moduleId: 'welcome',
+      enabled: false,
+      config: {
+        accountAgeFilter: { enabled: true, minDays: 1, action: 'kick', quarantineRoleId: null },
+      },
+    },
+    {
+      // Pré-câble le module logs sur le salon `chan-logs` créé par
+      // ce preset. Le placeholder `@channel:chan-logs` est résolu
+      // par `core.patchModuleConfig` au moment de l'apply.
+      moduleId: 'logs',
+      enabled: false,
+      config: { channelId: '@channel:chan-logs' },
+    },
   ],
+  permissionBindings: [{ permissionId: 'logs.config.manage', roleLocalId: 'role-mod' }],
 };

@@ -20,6 +20,7 @@ interface FakeCtxArgs {
   readonly map: Readonly<Record<string, string>>;
   readonly guildId?: string;
   readonly onCreateChannel?: (payload: DiscordCreateChannelPayload) => void;
+  readonly onConfigPatch?: (patch: Readonly<Record<string, unknown>>) => void;
 }
 
 const makeCtx = (args: FakeCtxArgs): OnboardingActionContext => ({
@@ -37,7 +38,9 @@ const makeCtx = (args: FakeCtxArgs): OnboardingActionContext => ({
     },
     deleteChannel: async () => undefined,
   },
-  configPatch: async () => undefined,
+  configPatch: async (patch) => {
+    args.onConfigPatch?.(patch);
+  },
   resolveLocalId: (localId) => args.map[localId] ?? null,
 });
 
@@ -285,5 +288,109 @@ describe('createChannel.apply — résolution refs (PR 3.12a)', () => {
     });
 
     expect(onCreate.mock.calls[0]?.[0]?.permissionOverwrites).toBeUndefined();
+  });
+});
+
+describe('patchModuleConfig.apply — résolution placeholders @role:/@channel:', () => {
+  it('résout `@channel:chan-logs` à la string snowflake correspondante', async () => {
+    const onConfigPatch = vi.fn();
+    const ctx = makeCtx({
+      map: { 'chan-logs': '999111222333444555' },
+      onConfigPatch,
+    });
+
+    await patchModuleConfigAction.apply(ctx, {
+      moduleId: 'logs',
+      config: { channelId: '@channel:chan-logs' },
+    });
+
+    expect(onConfigPatch).toHaveBeenCalledWith({
+      modules: { logs: { channelId: '999111222333444555' } },
+    });
+  });
+
+  it('résout récursivement dans des objets et arrays imbriqués', async () => {
+    const onConfigPatch = vi.fn();
+    const ctx = makeCtx({
+      map: { 'role-mod': 'snow-mod', 'role-bot': 'snow-bot', 'chan-logs': 'snow-chan' },
+      onConfigPatch,
+    });
+
+    await patchModuleConfigAction.apply(ctx, {
+      moduleId: 'moderation',
+      config: {
+        mutedRoleId: '@role:role-bot',
+        automod: {
+          rules: [{ id: 'r1', label: 'l', kind: 'blacklist', pattern: 'x', action: 'warn' }],
+          bypassRoleIds: ['@role:role-mod', '@role:role-bot'],
+        },
+        logChannel: '@channel:chan-logs',
+      },
+    });
+
+    expect(onConfigPatch).toHaveBeenCalledWith({
+      modules: {
+        moderation: {
+          mutedRoleId: 'snow-bot',
+          automod: {
+            rules: [{ id: 'r1', label: 'l', kind: 'blacklist', pattern: 'x', action: 'warn' }],
+            bypassRoleIds: ['snow-mod', 'snow-bot'],
+          },
+          logChannel: 'snow-chan',
+        },
+      },
+    });
+  });
+
+  it('préserve les strings qui ne matchent pas le pattern', async () => {
+    const onConfigPatch = vi.fn();
+    const ctx = makeCtx({ map: {}, onConfigPatch });
+
+    await patchModuleConfigAction.apply(ctx, {
+      moduleId: 'welcome',
+      config: {
+        message: 'Bienvenue {user}, n hésite pas à @everyone',
+        emoji: '👋',
+      },
+    });
+
+    expect(onConfigPatch).toHaveBeenCalledWith({
+      modules: {
+        welcome: {
+          message: 'Bienvenue {user}, n hésite pas à @everyone',
+          emoji: '👋',
+        },
+      },
+    });
+  });
+
+  it('jette une Error explicite si une référence est non résolue', async () => {
+    const ctx = makeCtx({ map: {} });
+    await expect(
+      patchModuleConfigAction.apply(ctx, {
+        moduleId: 'logs',
+        config: { channelId: '@channel:chan-disparu' },
+      }),
+    ).rejects.toThrow(/chan-disparu/);
+  });
+
+  it('préserve les primitives non-string (number, boolean, null)', async () => {
+    const onConfigPatch = vi.fn();
+    const ctx = makeCtx({ map: {}, onConfigPatch });
+
+    await patchModuleConfigAction.apply(ctx, {
+      moduleId: 'welcome',
+      config: {
+        accountAgeFilter: { enabled: true, minDays: 7, action: 'kick', quarantineRoleId: null },
+      },
+    });
+
+    expect(onConfigPatch).toHaveBeenCalledWith({
+      modules: {
+        welcome: {
+          accountAgeFilter: { enabled: true, minDays: 7, action: 'kick', quarantineRoleId: null },
+        },
+      },
+    });
   });
 });

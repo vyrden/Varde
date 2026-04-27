@@ -5,6 +5,8 @@ import {
   suggestCompletionInputSchema,
 } from '@varde/ai';
 import {
+  type ActionId,
+  type AuditService,
   type GuildId,
   type KeystoreService,
   type Logger,
@@ -18,7 +20,7 @@ import {
   type Ulid,
   type UserId,
 } from '@varde/contracts';
-import { type CoreConfigService, deepMerge, type OnboardingExecutor } from '@varde/core';
+import type { CoreConfigService, OnboardingExecutor } from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
 import { type PresetDefinition, presetDefinitionSchema } from '@varde/presets';
 import type { FastifyInstance } from 'fastify';
@@ -77,6 +79,80 @@ import {
 
 const DEFAULT_ROLLBACK_WINDOW_MS = 30 * 60 * 1000;
 
+/**
+ * Clés du draft qui sont des arrays d'objets additifs. Un patch qui
+ * en fournit une concatène au lieu de remplacer — contrairement au
+ * `deepMerge` générique de `@varde/core` qui écrase toute valeur
+ * non-object. Sans cette distinction, une suggestion IA qui renvoie
+ * `{ roles: [newRole] }` effaçait les rôles préexistants du preset.
+ *
+ * La concaténation filtre les doublons de `localId` : si le patch
+ * contient un élément avec un `localId` déjà présent, on garde
+ * l'élément patché (il remplace l'ancien).
+ */
+const ARRAY_KEYS_WITH_LOCAL_ID = new Set(['roles', 'categories', 'channels']);
+const ARRAY_KEYS_WITH_MODULE_ID = new Set(['modules']);
+const ARRAY_KEYS_UNKEYED = new Set(['permissionBindings']);
+
+const hasLocalId = (item: unknown): item is { readonly localId: string } =>
+  typeof item === 'object' &&
+  item !== null &&
+  typeof (item as { localId?: unknown }).localId === 'string';
+
+const hasModuleId = (item: unknown): item is { readonly moduleId: string } =>
+  typeof item === 'object' &&
+  item !== null &&
+  typeof (item as { moduleId?: unknown }).moduleId === 'string';
+
+const mergeArrayByLocalId = (
+  base: readonly unknown[],
+  patch: readonly unknown[],
+): readonly unknown[] => {
+  const patchIds = new Set(patch.filter(hasLocalId).map((item) => item.localId));
+  const kept = base.filter((item) => !hasLocalId(item) || !patchIds.has(item.localId));
+  return [...kept, ...patch];
+};
+
+const mergeArrayByModuleId = (
+  base: readonly unknown[],
+  patch: readonly unknown[],
+): readonly unknown[] => {
+  const patchIds = new Set(patch.filter(hasModuleId).map((item) => item.moduleId));
+  const kept = base.filter((item) => !hasModuleId(item) || !patchIds.has(item.moduleId));
+  return [...kept, ...patch];
+};
+
+/**
+ * Merger dédié aux patches d'`OnboardingDraft` : concatène les arrays
+ * d'objets identifiés (roles, categories, channels par `localId` ;
+ * modules par `moduleId` ; permissionBindings concat brut), écrase
+ * les scalaires (`locale`). Préserve les objets préexistants non
+ * mentionnés dans le patch.
+ */
+export function mergeOnboardingDraftPatch(
+  base: Readonly<Record<string, unknown>>,
+  patch: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+  for (const [key, next] of Object.entries(patch)) {
+    const current = result[key];
+    if (Array.isArray(current) && Array.isArray(next)) {
+      if (ARRAY_KEYS_WITH_LOCAL_ID.has(key)) {
+        result[key] = mergeArrayByLocalId(current, next);
+      } else if (ARRAY_KEYS_WITH_MODULE_ID.has(key)) {
+        result[key] = mergeArrayByModuleId(current, next);
+      } else if (ARRAY_KEYS_UNKEYED.has(key)) {
+        result[key] = [...current, ...next];
+      } else {
+        result[key] = next;
+      }
+    } else {
+      result[key] = next;
+    }
+  }
+  return result;
+}
+
 /** Factory d'`OnboardingActionContext` injectée au registre des routes. */
 export type OnboardingActionContextFactory = (args: {
   readonly guildId: GuildId;
@@ -115,6 +191,14 @@ export interface RegisterOnboardingRoutesOptions<D extends DbDriver> {
   readonly scheduler?: SchedulerService;
   /** Logger pour le handler auto-expire. Requis si `scheduler` est fourni. */
   readonly schedulerLogger?: Logger;
+  /**
+   * AuditService pour tracer les transitions lifecycle (créée,
+   * appliquée, défaite, expirée, échec). Optionnel — omettre désactive
+   * silencieusement l'écriture (utile pour les tests). Quand fourni,
+   * chaque transition écrit une entrée scope `core` avec actor=user
+   * (admin) ou system (auto-expire au boot ou à l'échéance).
+   */
+  readonly audit?: AuditService;
 }
 
 /** Clé de job utilisée pour `scheduler.at` + `scheduler.cancel`. */
@@ -225,6 +309,7 @@ export const buildAutoExpireHandler = <D extends DbDriver>(
   client: DbClient<D>,
   sessionId: Ulid,
   logger: Logger,
+  audit?: AuditService,
 ): (() => Promise<void>) => {
   return async () => {
     const row = await findSessionById(client, sessionId);
@@ -232,6 +317,20 @@ export const buildAutoExpireHandler = <D extends DbDriver>(
     if (row.status !== 'applied') return;
     await updateSession(client, sessionId, { status: 'expired' });
     logger.info('session onboarding auto-expirée', { sessionId });
+    if (audit) {
+      await audit.log({
+        guildId: row.guildId,
+        action: 'onboarding.session.expired' as ActionId,
+        actor: { type: 'system' },
+        severity: 'info',
+        metadata: {
+          sessionId,
+          presetId: row.presetId,
+          appliedAt: row.appliedAt,
+          expiresAt: row.expiresAt,
+        },
+      });
+    }
   };
 };
 
@@ -239,7 +338,8 @@ export function registerOnboardingRoutes<D extends DbDriver>(
   app: FastifyInstance,
   options: RegisterOnboardingRoutesOptions<D>,
 ): void {
-  const { client, discord, executor, actionContextFactory, scheduler, schedulerLogger } = options;
+  const { client, discord, executor, actionContextFactory, scheduler, schedulerLogger, audit } =
+    options;
   const rollbackWindowMs = options.rollbackWindowMs ?? DEFAULT_ROLLBACK_WINDOW_MS;
   const presetById = new Map<string, PresetDefinition>();
   for (const preset of options.presetCatalog ?? []) {
@@ -308,6 +408,20 @@ export function registerOnboardingRoutes<D extends DbDriver>(
         draft,
         aiInvocationId,
       });
+      if (audit) {
+        await audit.log({
+          guildId: guildId as GuildId,
+          action: 'onboarding.session.created' as ActionId,
+          actor: { type: 'user', id: session.userId as UserId },
+          severity: 'info',
+          metadata: {
+            sessionId: inserted.id,
+            presetSource: parsed.data.source,
+            presetId,
+            ...(aiInvocationId !== null ? { aiInvocationId } : {}),
+          },
+        });
+      }
       void reply.status(201);
       return toDto(inserted);
     },
@@ -480,7 +594,7 @@ export function registerOnboardingRoutes<D extends DbDriver>(
       }
 
       const body = (request.body ?? {}) as Readonly<Record<string, unknown>>;
-      const merged = deepMerge(session.draft, body);
+      const merged = mergeOnboardingDraftPatch(session.draft, body);
       const validated = onboardingDraftSchema.safeParse(merged);
       if (!validated.success) {
         throw httpError(
@@ -592,11 +706,40 @@ export function registerOnboardingRoutes<D extends DbDriver>(
           expiresAt,
         });
         if (scheduler && schedulerLogger) {
-          const handler = buildAutoExpireHandler(client, sessionId, schedulerLogger);
+          const handler = buildAutoExpireHandler(client, sessionId, schedulerLogger, audit);
           await scheduler.at(expiresAt, autoExpireJobKey(sessionId), handler);
+        }
+        if (audit) {
+          await audit.log({
+            guildId: guildId as GuildId,
+            action: 'onboarding.session.applied' as ActionId,
+            actor: { type: 'user', id: adminSession.userId as UserId },
+            severity: 'info',
+            metadata: {
+              sessionId,
+              presetId: session.presetId,
+              appliedCount: result.appliedCount,
+              expiresAt: expiresAt.toISOString(),
+            },
+          });
         }
       } else {
         await updateSession(client, sessionId, { status: 'failed' });
+        if (audit) {
+          await audit.log({
+            guildId: guildId as GuildId,
+            action: 'onboarding.session.apply_failed' as ActionId,
+            actor: { type: 'user', id: adminSession.userId as UserId },
+            severity: 'error',
+            metadata: {
+              sessionId,
+              presetId: session.presetId,
+              appliedCount: result.appliedCount,
+              ...(result.failedAt !== undefined ? { failedAt: result.failedAt } : {}),
+              ...(result.error !== undefined ? { error: result.error } : {}),
+            },
+          });
+        }
       }
 
       return {
@@ -653,6 +796,37 @@ export function registerOnboardingRoutes<D extends DbDriver>(
         if (scheduler) {
           await scheduler.cancel(autoExpireJobKey(sessionId));
         }
+        if (audit) {
+          await audit.log({
+            guildId: guildId as GuildId,
+            action: 'onboarding.session.rolled_back' as ActionId,
+            actor: { type: 'user', id: adminSession.userId as UserId },
+            severity: 'info',
+            metadata: {
+              sessionId,
+              presetId: session.presetId,
+              undoneCount: result.undoneCount,
+              skippedCount: result.skippedCount,
+            },
+          });
+        }
+      } else if (audit) {
+        // Échec : on ne mute PAS le status (l'admin peut retry — la
+        // session reste `applied` jusqu'à expiration). On trace
+        // l'échec pour visibilité opérateur.
+        await audit.log({
+          guildId: guildId as GuildId,
+          action: 'onboarding.session.rollback_failed' as ActionId,
+          actor: { type: 'user', id: adminSession.userId as UserId },
+          severity: 'error',
+          metadata: {
+            sessionId,
+            presetId: session.presetId,
+            undoneCount: result.undoneCount,
+            skippedCount: result.skippedCount,
+            ...(result.error !== undefined ? { error: result.error } : {}),
+          },
+        });
       }
 
       return {

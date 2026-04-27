@@ -111,16 +111,36 @@ const presetProposalResponseSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.5),
 });
 
+const suggestionItemSchema = z.object({
+  label: z.string().min(1).max(200),
+  patch: z.record(z.string(), z.unknown()),
+  rationale: z.string().min(1).max(500),
+});
+
+/**
+ * Accepte les deux formes classiques pour les LLMs derrière
+ * `response_format: { type: 'json_object' }` :
+ *
+ * - Array direct `[{...}, {...}]` (idéal, mais certains providers
+ *   refusent car ils imposent un object racine).
+ * - Object wrapper `{ suggestions: [...] }` ou `{ completions: [...] }`
+ *   ou `{ items: [...] }` (variantes les plus courantes renvoyées par
+ *   les modèles qui exigent un object racine).
+ *
+ * Les trois variantes sont normalisées en array via `.transform`.
+ */
 const suggestionArrayResponseSchema = z
-  .array(
-    z.object({
-      label: z.string().min(1).max(200),
-      patch: z.record(z.string(), z.unknown()),
-      rationale: z.string().min(1).max(500),
-    }),
-  )
-  .min(1)
-  .max(5);
+  .union([
+    z.array(suggestionItemSchema).min(1).max(5),
+    z
+      .object({ suggestions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.suggestions),
+    z
+      .object({ completions: z.array(suggestionItemSchema).min(1).max(5) })
+      .transform((o) => o.completions),
+    z.object({ items: z.array(suggestionItemSchema).min(1).max(5) }).transform((o) => o.items),
+  ])
+  .transform((arr) => arr as readonly z.infer<typeof suggestionItemSchema>[]);
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -220,7 +240,16 @@ export function createOpenAICompatibleProvider(
     ...extraHeaders,
   });
 
-  const chat = async (messages: readonly ChatMessage[]): Promise<{ readonly content: string }> => {
+  const chat = async (
+    messages: readonly ChatMessage[],
+    opts: { readonly jsonMode?: boolean } = {},
+  ): Promise<{ readonly content: string }> => {
+    // `jsonMode` est par défaut le `useJsonMode` du constructeur (true).
+    // Permet à `classify` de désactiver le mode JSON par-call : OpenAI
+    // refuse une requête `response_format=json_object` si le prompt ne
+    // contient pas le mot "JSON", ce qui faisait silencieusement
+    // échouer la classification automod.
+    const jsonMode = opts.jsonMode ?? useJsonMode;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -228,7 +257,8 @@ export function createOpenAICompatibleProvider(
         model,
         messages,
       };
-      if (useJsonMode) {
+      if (jsonMode) {
+        // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access (TS4111)
         body['response_format'] = { type: 'json_object' };
       }
       const response = await fetchImpl(`${baseUrl}/chat/completions`, {
@@ -311,6 +341,29 @@ export function createOpenAICompatibleProvider(
       const prompt = buildSuggestCompletionPrompt(input);
       const data = await chatForJson(prompt, suggestionArrayResponseSchema, 'suggestCompletion');
       return data;
+    },
+
+    async classify(text, labels) {
+      // Prompt simple : on attend un label brut hors JSON. JSON mode
+      // explicitement désactivé — OpenAI 400 sur `response_format=json_object`
+      // si le prompt ne mentionne pas "JSON". Erreurs du provider remontées
+      // au caller (automod logge + retombe sur `null` côté `classifyAgainst`).
+      const labelList = labels.join(', ');
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content: `You are a Discord content classifier. The user message may be in any language (French, English, Spanish, etc.). You receive a message and a list of categories. Reply with EXACTLY ONE of the listed labels, lowercase, no quotes, no explanation, no punctuation. Allowed categories: ${labelList}.`,
+        },
+        { role: 'user', content: text.slice(0, 2000) },
+      ];
+      const { content } = await chat(messages, { jsonMode: false });
+      const trimmed = content.trim().toLowerCase();
+      for (const label of labels) {
+        if (trimmed === label.toLowerCase() || trimmed.includes(label.toLowerCase())) {
+          return label;
+        }
+      }
+      return labels.includes('safe') ? 'safe' : (labels[0] ?? 'safe');
     },
 
     async testConnection(): Promise<ProviderInfo> {

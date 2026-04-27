@@ -2,6 +2,12 @@ import { forwardRef, type HTMLAttributes } from 'react';
 
 import { cn } from '../lib/cn.js';
 
+/**
+ * Card neutre — fond `--card`, bordure subtile, ombre `--shadow-sm`
+ * pour un léger relief Discord-marketing. Pas de hover par défaut :
+ * les cards interactives doivent porter `interactive-lift` ou un
+ * comportement custom au composant parent.
+ */
 export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div

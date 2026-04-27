@@ -1,4 +1,8 @@
-import type { DiscordPermissionOverwrite, OnboardingActionDefinition } from '@varde/contracts';
+import type {
+  DiscordPermissionOverwrite,
+  OnboardingActionContext,
+  OnboardingActionDefinition,
+} from '@varde/contracts';
 import { z } from 'zod';
 
 /**
@@ -292,6 +296,60 @@ export interface PatchModuleConfigResult {
   readonly previous: Readonly<Record<string, unknown>> | null;
 }
 
+/**
+ * Pattern d'un placeholder de référence à un `localId` créé en amont
+ * dans la séquence d'actions onboarding. Le préfixe (`role`,
+ * `channel`, `category`, `user`) est purement informatif côté
+ * lecteur — `ctx.resolveLocalId` n'a pas de notion de kind, le
+ * mapping `localId → snowflake` est plat.
+ *
+ * Exemples valides :
+ *   `@role:role-mod`
+ *   `@channel:chan-logs`
+ *   `@category:cat-info`
+ *
+ * Toute string config qui ne matche pas est laissée intacte.
+ */
+const REF_PATTERN = /^@(role|channel|category|user):(.+)$/;
+
+/**
+ * Walk récursif sur la config du module : remplace toute string
+ * `'@<kind>:<localId>'` par le snowflake résolu via
+ * `ctx.resolveLocalId`. Préserve les structures (arrays, objets
+ * imbriqués, primitives non-string).
+ *
+ * Si une référence ne résout pas (création en amont absente ou
+ * orpheline), jette une `Error` explicite — l'executor rollback la
+ * séquence onboarding au lieu de persister un placeholder cassé.
+ */
+const resolveConfigRefs = (value: unknown, ctx: OnboardingActionContext, path: string): unknown => {
+  if (typeof value === 'string') {
+    const match = REF_PATTERN.exec(value);
+    if (match) {
+      const localId = match[2] as string;
+      const resolved = ctx.resolveLocalId(localId);
+      if (resolved === null) {
+        throw new Error(
+          `core.patchModuleConfig : localId "${localId}" référencé en "${path}" non résolu (action upstream manquante ou orpheline)`,
+        );
+      }
+      return resolved;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v, i) => resolveConfigRefs(v, ctx, `${path}[${i}]`));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = resolveConfigRefs(v, ctx, path === '' ? k : `${path}.${k}`);
+    }
+    return out;
+  }
+  return value;
+};
+
 export const patchModuleConfigAction: OnboardingActionDefinition<
   PatchModuleConfigPayload,
   PatchModuleConfigResult
@@ -300,8 +358,11 @@ export const patchModuleConfigAction: OnboardingActionDefinition<
   schema: patchModuleConfigPayloadSchema,
   canUndo: false,
   apply: async (ctx, payload) => {
+    const resolved = resolveConfigRefs(payload.config, ctx, '') as Readonly<
+      Record<string, unknown>
+    >;
     await ctx.configPatch({
-      modules: { [payload.moduleId]: payload.config },
+      modules: { [payload.moduleId]: resolved },
     });
     return { previous: null };
   },
@@ -309,6 +370,52 @@ export const patchModuleConfigAction: OnboardingActionDefinition<
     // canUndo=false : ce no-op n'est jamais appelé par l'executor
     // tant qu'on respecte le contrat. Présent pour satisfaire
     // l'obligation "undo est toujours défini" (R8).
+  },
+};
+
+// ─── bindPermission ────────────────────────────────────────────────
+
+const bindPermissionPayloadSchema = z.object({
+  permissionId: z.string().min(1),
+  roleLocalId: z.string().min(1),
+});
+export type BindPermissionPayload = z.infer<typeof bindPermissionPayloadSchema>;
+export interface BindPermissionResult {
+  /** Snowflake Discord du rôle lié, capturé à l'apply pour l'undo. */
+  readonly roleId: string;
+}
+
+/**
+ * Lie une permission applicative à un rôle Discord. `apply` résout le
+ * `roleLocalId` via `ctx.resolveLocalId` (rôle créé plus tôt dans la
+ * séquence d'onboarding par un `core.createRole`), puis appelle
+ * `ctx.permissions.bind` qui écrit dans `permission_bindings`.
+ *
+ * Idempotence : `permissions.bind` est idempotent côté core (insert
+ * ignoré si la ligne existe déjà — cf. service). `undo` supprime
+ * uniquement la ligne `(guildId, permissionId, roleId)` exacte, ce
+ * qui n'interfère pas avec un binding posé à la main par l'admin
+ * entre l'apply et le rollback (ADR 0008 § invariant).
+ */
+export const bindPermissionAction: OnboardingActionDefinition<
+  BindPermissionPayload,
+  BindPermissionResult
+> = {
+  type: 'core.bindPermission',
+  schema: bindPermissionPayloadSchema,
+  canUndo: true,
+  apply: async (ctx, payload) => {
+    const roleId = ctx.resolveLocalId(payload.roleLocalId);
+    if (roleId === null) {
+      throw new Error(
+        `core.bindPermission : roleLocalId "${payload.roleLocalId}" non résolu (action createRole manquante ou orpheline)`,
+      );
+    }
+    await ctx.permissions.bind(payload.permissionId, roleId);
+    return { roleId };
+  },
+  undo: async (ctx, payload, previousResult) => {
+    await ctx.permissions.unbind(payload.permissionId, previousResult.roleId);
   },
 };
 
@@ -321,4 +428,5 @@ export const CORE_ACTIONS = [
   createCategoryAction,
   createChannelAction,
   patchModuleConfigAction,
+  bindPermissionAction,
 ] as const;

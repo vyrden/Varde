@@ -1,16 +1,20 @@
 import type { ZodType } from 'zod';
 
-import type { CoreEvent, CoreEventType } from './events.js';
+import type { AuditLogRecord, Iso8601DateTime } from './db-records.js';
+import type { CoreEvent, CoreEventType, Emoji } from './events.js';
 import type {
   ActionId,
   ChannelId,
   GuildId,
+  MessageId,
   ModuleId,
   PermissionId,
   RoleId,
   UserId,
 } from './ids.js';
 import type { OnboardingActionDefinition } from './onboarding.js';
+import type { UIAttachment, UIEmbed } from './ui.js';
+import type { Ulid } from './ulid.js';
 
 /**
  * Interfaces des services exposés aux modules via `ctx`. Types
@@ -62,10 +66,60 @@ export interface AuditEntry {
   readonly guildId?: GuildId;
 }
 
-/** Service d'audit log. Append-only, écriture unique. */
+/**
+ * Filtre de lecture audit_log exposé aux modules. Par rapport à
+ * `CoreAuditService.query`, le `moduleId` n'est PAS exposé : la
+ * factory l'injecte automatiquement à l'`id` du module appelant
+ * pour empêcher un module de lire les entrées d'un autre module
+ * (règle ADR 0001 : isolation par module).
+ *
+ * Pour `/infractions @user`, un module passera typiquement
+ * `{ guildId, targetType: 'user', targetId: userId }` et récupérera
+ * uniquement ses propres entrées (auto-filtré par moduleId).
+ */
+export interface ModuleAuditQuery {
+  readonly guildId?: GuildId;
+  /** Action exacte (ex. `moderation.case.warn`). Pour un préfixe, faire plusieurs appels. */
+  readonly action?: ActionId;
+  /** Filtre sur le type de cible (`user` / `channel` / `role` / `message`). */
+  readonly targetType?: AuditTarget['type'];
+  /** Snowflake / id de la cible (à combiner avec `targetType`). */
+  readonly targetId?: string;
+  readonly actorType?: AuditActor['type'];
+  readonly severity?: AuditSeverity;
+  readonly since?: Date | Iso8601DateTime;
+  readonly until?: Date | Iso8601DateTime;
+  /** Limite de lignes (défaut 50, max 100 côté impl). */
+  readonly limit?: number;
+  /** Pagination cursor : retourne les lignes strictement plus anciennes que cet ULID. */
+  readonly cursor?: Ulid;
+}
+
+/**
+ * Service d'audit log exposé aux modules.
+ *
+ * - `log` : écrit une entrée (append-only).
+ * - `query` : lit les entrées de **ce module uniquement** (filtre
+ *   `moduleId` auto-injecté). Permet par exemple l'historique des
+ *   sanctions d'un user pour `/infractions @user`.
+ * - `get` : lookup direct par ULID, scopé au module appelant.
+ *
+ * Les modules ne peuvent pas lire les entrées des autres modules.
+ * Le dashboard a sa propre route `GET /guilds/:id/audit` qui passe
+ * par `CoreAuditService` (sans restriction de scope) côté API.
+ */
 export interface AuditService {
   readonly log: (entry: AuditEntry) => Promise<void>;
+  readonly query: (options: ModuleAuditQuery) => Promise<readonly AuditLogRecord[]>;
+  readonly get: (id: Ulid) => Promise<AuditLogRecord | null>;
 }
+
+/**
+ * Raison d'un refus de `DiscordService.canModerate`. Stable enum —
+ * les modules s'en servent pour brancher des messages d'erreur
+ * localisés.
+ */
+export type ModerationCheckReason = 'self' | 'bot' | 'owner' | 'rank' | 'unknown';
 
 /** Service de permissions applicatives. */
 export interface PermissionService {
@@ -109,6 +163,49 @@ export interface I18nService {
   readonly t: (key: string, params?: Record<string, string | number>) => string;
 }
 
+/**
+ * Entrée d'une interaction de type bouton Discord. Produit par le bot
+ * (cf. `apps/bot`) au moment d'un click utilisateur sur un message
+ * porteur de composants (`message.components`). Les modules y accèdent
+ * via les handlers enregistrés sur `ctx.interactions.onButton`.
+ *
+ * `customId` est la chaîne posée à la création du bouton : c'est sur
+ * elle que le routing s'appuie (préfixe `<moduleId>:`). Le handler
+ * peut la parser pour récupérer ses arguments encodés.
+ */
+export interface ButtonInteractionInput {
+  readonly guildId: GuildId;
+  readonly channelId: ChannelId;
+  readonly messageId: MessageId;
+  readonly userId: UserId;
+  readonly customId: string;
+}
+
+/**
+ * Handler d'une interaction bouton. Retourne un `UIMessage` rendu en
+ * réponse éphémère (visible uniquement par l'utilisateur qui a cliqué)
+ * ou `null`/`void` pour ne rien renvoyer. Le bot accuse toujours
+ * réception côté Discord pour éviter le spinner « cette interaction a
+ * échoué » même quand le handler ne renvoie rien.
+ */
+export type ButtonHandler = (
+  input: ButtonInteractionInput,
+) => Promise<UIMessage | null | undefined> | UIMessage | null | undefined;
+
+/**
+ * Service d'enregistrement de handlers pour les interactions bouton.
+ *
+ * Le routage par module se fait par préfixe de `customId` :
+ *   `ctx.interactions.onButton('rr:', handler)`
+ * matche tout `customId` qui commence par `rr:`. Le préfixe doit être
+ * unique dans le runtime — un conflit lève une erreur explicite à
+ * l'enregistrement. La fonction de désouscription retournée est
+ * idempotente.
+ */
+export interface InteractionsService {
+  readonly onButton: (customIdPrefix: string, handler: ButtonHandler) => () => void;
+}
+
 /** Service d'accès au keystore chiffré. */
 export interface KeystoreService {
   readonly put: (guildId: GuildId, key: string, value: string) => Promise<void>;
@@ -124,6 +221,258 @@ export interface KeystoreService {
  */
 export interface DiscordService {
   readonly sendMessage: (channelId: ChannelId, content: string) => Promise<void>;
+  /**
+   * Envoi proactif d'un `UIMessage` de kind `'embed'` dans un salon.
+   * Lève `TypeError` si `message.kind !== 'embed'` (fail fast,
+   * pas de no-op).
+   *
+   * Mapping des échecs vers `DiscordSendError.reason` :
+   * - `channel-not-found` : le salon n'existe pas ou le bot n'y a
+   *   pas accès au niveau guild.
+   * - `missing-permission` : le bot n'a pas `SendMessages` ou
+   *   `EmbedLinks` sur le salon.
+   * - `rate-limit-exhausted` : les tentatives de retry ont été
+   *   épuisées.
+   * - `unknown` : toute autre erreur réseau / API.
+   */
+  readonly sendEmbed: (channelId: ChannelId, message: UIMessage) => Promise<void>;
+
+  /**
+   * Pose une réaction du bot sur un message.
+   * `emoji` est un Emoji (unicode ou custom).
+   * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'message-not-found' | 'missing-permission' | 'emoji-not-found' | 'rate-limit-exhausted' | 'unknown'`.
+   */
+  readonly addReaction: (channelId: ChannelId, messageId: MessageId, emoji: Emoji) => Promise<void>;
+
+  /**
+   * Retire la réaction d'un user spécifique sur un message (nécessite ManageMessages).
+   * Utilisé par le mode Unique de reaction-roles pour basculer d'un rôle à un autre.
+   */
+  readonly removeUserReaction: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    userId: UserId,
+    emoji: Emoji,
+  ) => Promise<void>;
+
+  /**
+   * Retire la propre réaction du bot sur un message (raccourci pour
+   * removeUserReaction(..., botUserId, ...) — le bot n'a pas besoin de
+   * connaître son userId).
+   */
+  readonly removeOwnReaction: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    emoji: Emoji,
+  ) => Promise<void>;
+
+  /**
+   * Ajoute un rôle Discord à un membre du serveur (nécessite ManageRoles).
+   * Utilisé par reaction-roles pour attribuer un rôle sur réaction.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly addMemberRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<void>;
+
+  /**
+   * Retire un rôle Discord d'un membre du serveur (nécessite ManageRoles).
+   * Utilisé par reaction-roles en mode unique pour retirer le rôle précédent.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly removeMemberRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<void>;
+
+  /**
+   * Vérifie si un membre possède un rôle donné.
+   * Retourne `false` si le membre ou le rôle n'existe pas.
+   * Utilisé par reaction-roles en mode unique pour détecter le rôle courant.
+   */
+  readonly memberHasRole: (guildId: GuildId, userId: UserId, roleId: RoleId) => Promise<boolean>;
+
+  /**
+   * Poste un message texte dans un salon et retourne son identifiant.
+   * Variante de `sendMessage` qui expose le `messageId` pour les modules
+   * qui doivent persister une référence au message posté (reaction-roles).
+   *
+   * `options.files` permet d'attacher une ou plusieurs pièces jointes
+   * (carte d'accueil pour le module welcome). `options.embeds` accepte
+   * des embeds Discord encodés en JSON brut. `options.components`
+   * accepte des `ActionRow` Discord encodées en JSON brut — utilisé par
+   * reaction-roles V2 pour publier des boutons cliquables.
+   *
+   * Lève `DiscordSendError` avec `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly postMessage: (
+    channelId: ChannelId,
+    content: string,
+    options?: {
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+      readonly components?: ReadonlyArray<unknown>;
+    },
+  ) => Promise<{ readonly id: MessageId }>;
+
+  /**
+   * Crée un rôle dans une guild. Retourne le `roleId` pour que le module
+   * appelant puisse persister la référence. Requiert la permission
+   * ManageRoles côté bot.
+   *
+   * Lève `DiscordSendError('missing-permission')` si le bot n'a pas les droits,
+   * `DiscordSendError('unknown')` sinon.
+   */
+  readonly createRole: (
+    guildId: GuildId,
+    params: {
+      readonly name: string;
+      readonly mentionable?: boolean;
+      readonly hoist?: boolean;
+      /** Couleur RGB encodée en entier (0x000000 à 0xFFFFFF). */
+      readonly color?: number;
+    },
+  ) => Promise<{ readonly id: RoleId }>;
+
+  /**
+   * Envoie un message privé à un utilisateur. Échoue silencieusement
+   * (résout en `false`) si l'utilisateur a désactivé les DMs venant
+   * du serveur ; les autres erreurs lèvent `DiscordSendError`.
+   *
+   * `options.files` / `options.embeds` ont la même sémantique que
+   * pour `postMessage`.
+   */
+  readonly sendDirectMessage: (
+    userId: UserId,
+    content: string,
+    options?: {
+      readonly files?: ReadonlyArray<{ readonly name: string; readonly data: Buffer }>;
+      readonly embeds?: ReadonlyArray<unknown>;
+    },
+  ) => Promise<boolean>;
+
+  /**
+   * Supprime un message Discord. Idempotent côté API : si le message
+   * a déjà été supprimé manuellement, lève
+   * `DiscordSendError('message-not-found')` que l'appelant peut traiter
+   * comme un succès silencieux.
+   */
+  readonly deleteMessage: (channelId: ChannelId, messageId: MessageId) => Promise<void>;
+
+  /**
+   * Édite le contenu d'un message Discord posté par le bot.
+   * `options.components` permet de remplacer la barre de boutons sans
+   * toucher au texte (utile pour ajouter / retirer un bouton après
+   * édition de la config reaction-roles).
+   *
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'message-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly editMessage: (
+    channelId: ChannelId,
+    messageId: MessageId,
+    content: string,
+    options?: {
+      readonly components?: ReadonlyArray<unknown>;
+    },
+  ) => Promise<void>;
+
+  /**
+   * Kick un membre d'une guild. Utilisé par le module welcome pour
+   * appliquer le filtre comptes neufs.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly kickMember: (guildId: GuildId, userId: UserId, reason?: string) => Promise<void>;
+
+  /**
+   * Bannit un membre d'une guild. `deleteMessageDays` est converti en
+   * `deleteMessageSeconds` côté implémentation discord.js v14 (le champ
+   * `days` est déprécié). Plage `[0, 7]` côté Discord ; pas de clamp
+   * dans le contrat — laissé aux handlers V1.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly banMember: (
+    guildId: GuildId,
+    userId: UserId,
+    reason?: string,
+    deleteMessageDays?: number,
+  ) => Promise<void>;
+
+  /**
+   * Lève le bannissement d'un utilisateur. Utilisé par `/unban` et
+   * l'expiration d'un tempban.
+   * Lève `DiscordSendError` avec `reason: 'missing-permission' | 'unknown'`.
+   */
+  readonly unbanMember: (guildId: GuildId, userId: UserId, reason?: string) => Promise<void>;
+
+  /**
+   * Supprime en masse `count` messages dans un salon textuel. Plage
+   * Discord `[1, 100]` ; les messages > 14 jours sont silencieusement
+   * exclus (limite Discord). Le retour `deleted` permet à l'appelant
+   * d'informer l'admin du delta éventuel.
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly bulkDeleteMessages: (
+    channelId: ChannelId,
+    count: number,
+  ) => Promise<{ readonly deleted: number }>;
+
+  /**
+   * Configure le slowmode d'un salon textuel. `seconds` ∈ `[0, 21600]`
+   * (6h, limite Discord). 0 = désactivé. Pas de clamp dans le contrat.
+   * Lève `DiscordSendError` avec
+   * `reason: 'channel-not-found' | 'missing-permission' | 'unknown'`.
+   */
+  readonly setChannelSlowmode: (channelId: ChannelId, seconds: number) => Promise<void>;
+
+  /**
+   * Vérifie qu'un modérateur peut sanctionner une cible. Encapsule
+   * les règles de hiérarchie Discord côté serveur :
+   *
+   * - `self` : le mod cible lui-même → refus.
+   * - `bot` : la cible est le bot Discord → refus.
+   * - `owner` : la cible est le propriétaire de la guild → refus.
+   * - `rank` : le rôle le plus haut du mod (ou du bot) ne dépasse
+   *   pas celui de la cible → refus.
+   * - `unknown` : guild non en cache → refus défensif.
+   *
+   * Si la cible n'est pas membre (ban préventif sur snowflake
+   * externe), aucune contrainte de hiérarchie ne s'applique → `ok`.
+   *
+   * Pas d'effet de bord : pas de log audit, pas de DM, pas de
+   * mutation Discord. C'est au handler d'appeler ce check avant la
+   * mutation et de produire un `ctx.ui.error` adapté en cas de refus.
+   */
+  readonly canModerate: (
+    guildId: GuildId,
+    modUserId: UserId,
+    targetUserId: UserId,
+  ) => Promise<
+    { readonly ok: true } | { readonly ok: false; readonly reason: ModerationCheckReason }
+  >;
+
+  /**
+   * Retourne le nombre de membres d'une guild si elle est en cache,
+   * `null` sinon. Pas d'appel réseau.
+   */
+  readonly getMemberCount: (guildId: GuildId) => number | null;
+
+  /**
+   * Retourne les informations d'affichage d'un utilisateur (nom,
+   * tag, URL d'avatar). Source : cache discord.js puis fetch si manquant.
+   * Retourne `null` si l'utilisateur n'a pas pu être résolu.
+   */
+  readonly getUserDisplayInfo: (userId: UserId) => Promise<{
+    readonly username: string;
+    readonly tag: string;
+    readonly avatarUrl: string;
+    readonly accountCreatedAt: number;
+  } | null>;
+
+  /** Retourne le nom de la guild si elle est en cache, `null` sinon. */
+  readonly getGuildName: (guildId: GuildId) => string | null;
+
+  /**
+   * Retourne le nom d'un rôle si la guild et le rôle sont en cache,
+   * `null` sinon. Pas d'appel réseau.
+   */
+  readonly getRoleName: (guildId: GuildId, roleId: RoleId) => string | null;
 }
 
 /** Query exposée par un module et appelable par un autre via `ctx.modules.query`. */
@@ -193,11 +542,36 @@ export interface AIService {
 /** Type de message UI normalisé. */
 export type UIMessageKind = 'embed' | 'success' | 'error' | 'confirm';
 
-/** Message UI normalisé, retourné par le module au handler d'interaction. */
-export interface UIMessage {
-  readonly kind: UIMessageKind;
-  readonly payload: unknown;
+/** Payload "message simple" (success, error). */
+export interface UITextPayload {
+  readonly message: string;
 }
+
+/** Payload d'une demande de confirmation interactive. */
+export interface UIConfirmPayload {
+  readonly message: string;
+  readonly confirmLabel: string;
+  readonly cancelLabel: string;
+}
+
+/**
+ * Message UI normalisé. Union discriminée par `kind`. Les consommateurs
+ * narrow avec un `switch (message.kind)` ou un `if (message.kind === ...)`
+ * et obtiennent le type concret du payload sans cast.
+ *
+ * Le kind `'embed'` accepte des attachments optionnels pour les cas où
+ * un contenu utilisateur trop long ne rentre pas dans l'embed (cf.
+ * `UIAttachment` et le module `logs`).
+ */
+export type UIMessage =
+  | {
+      readonly kind: 'embed';
+      readonly payload: UIEmbed;
+      readonly attachments?: readonly UIAttachment[];
+    }
+  | { readonly kind: 'success'; readonly payload: UITextPayload }
+  | { readonly kind: 'error'; readonly payload: UITextPayload }
+  | { readonly kind: 'confirm'; readonly payload: UIConfirmPayload };
 
 /**
  * Factory d'UI standard (embeds, réponses, confirmations). Seule
@@ -206,10 +580,13 @@ export interface UIMessage {
  * comme violation (prod).
  */
 export interface UIService {
-  readonly embed: (options: {
-    readonly title?: string;
-    readonly description?: string;
-  }) => UIMessage;
+  /**
+   * Construit un `UIMessage` de kind `'embed'`. Rétro-compatible
+   * avec l'ancien appel `ctx.ui.embed({ title, description })` — les
+   * nouveaux champs (color, fields, author, footer, attachments) sont
+   * optionnels.
+   */
+  readonly embed: (options: UIEmbed, attachments?: readonly UIAttachment[]) => UIMessage;
   readonly success: (message: string) => UIMessage;
   readonly error: (message: string) => UIMessage;
   readonly confirm: (options: {
@@ -250,6 +627,26 @@ export interface ModuleContext {
   readonly modules: ModulesService;
   readonly keystore: KeystoreService;
   readonly ai: AIService | null;
+  /**
+   * Résout l'`AIService` configuré pour une guild donnée. À utiliser
+   * depuis un handler d'event (`guild.messageCreate`, etc.) pour
+   * retomber sur la config IA de la guild courante — `ctx.ai` est
+   * fixé à l'instant du `onLoad` (sans guildId connu) et vaut donc
+   * `null` pour les modules qui n'ont pas de scope guild au load.
+   *
+   * Retourne `null` si aucun provider IA n'est configuré pour cette
+   * guild. Le coût d'un appel est négligeable (cache mémoïsé côté
+   * runtime), mais le résultat n'est valable que jusqu'au prochain
+   * `config.changed` de la guild — le runtime invalide alors le cache.
+   */
+  readonly aiFor: (guildId: GuildId) => AIService | null;
   readonly ui: UIService;
   readonly onboarding: OnboardingService;
+  /**
+   * Service d'enregistrement de handlers pour les interactions bouton
+   * (Discord message components). Permet aux modules de réagir à un
+   * click utilisateur sur un bouton en répondant éphémère — un
+   * comportement impossible avec les réactions emoji classiques.
+   */
+  readonly interactions: InteractionsService;
 }

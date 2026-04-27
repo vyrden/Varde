@@ -95,9 +95,14 @@ export function PreviewStep({ session }: PreviewStepProps): ReactElement {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {actions === null ? 'Chargement...' : `${actions.length} actions prévues`}
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle>{actions === null ? 'Chargement...' : 'Actions prévues'}</CardTitle>
+            {actions !== null ? (
+              <Badge variant={actions.length > 0 ? 'active' : 'inactive'}>
+                {actions.length} action{actions.length > 1 ? 's' : ''}
+              </Badge>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
           {actions === null ? (
