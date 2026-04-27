@@ -316,12 +316,40 @@ une régression majeure ; pas des SLA.
   api 76.49 % / 78.34 %. Plancher anti-régression appliqué via
   `pnpm coverage` (configuré dans `vitest.config.ts` de chaque
   package, exécuté en CI).
-- **API p95** : pas encore de bench automatisé (jalon 5 PR à venir).
-  Mesure manuelle ad-hoc via `autocannon` recommandée si suspicion
-  de dégradation. Cible indicative : < 200 ms p95 sur les routes
-  hors LLM.
-- **Bot stabilité** : à valider en simulation 24 h sous burst Discord.
-  Pas encore d'outil de bench dédié.
+- **API p95** : cible indicative < 200 ms hors LLM (les routes
+  `/onboarding/ai/*` ont une latence dominée par le provider LLM,
+  hors scope). Mesure ad-hoc via `npx autocannon@latest` — pas de
+  bench automatisé en V1, l'overhead de tooling ne se justifie que
+  si on observe une dégradation. Procédure manuelle :
+
+  ```sh
+  # 1. Lancer le bot+API en local : pnpm --filter @varde/server start
+  # 2. Récupérer un cookie de session valide via le dashboard.
+  # 3. Bench une route représentative (1000 req, 10 conn, sans LLM) :
+  npx autocannon@latest \
+    -c 10 -d 30 -m GET \
+    -H "cookie: varde.session=<JWT>" \
+    "http://localhost:4000/guilds/<guildId>/audit?limit=50"
+  ```
+
+  Lire la ligne `Latency ... 99%` dans la sortie autocannon. Si
+  > 200 ms : profile via `clinic.js doctor` ou `0x` pour identifier
+  le hot path. Si DB-bound, vérifier les index Drizzle ; si CPU-bound
+  (rare en V1), vérifier les sérialisations JSON volumineuses.
+
+- **Bot stabilité 24 h** : à valider en simulation manuelle pré-
+  release (jalon 6). Procédure :
+  1. Lancer le bot connecté à un serveur Discord de staging.
+  2. Vérifier 24 h plus tard : `ps aux | grep "dist/bin"` montre
+     le PID toujours vivant ; `top -p <pid>` montre RSS stable
+     (croissance < 50 MB sur la fenêtre).
+  3. Inspecter les logs Pino : aucune entrée `discord shard
+     disconnect` non suivie d'un `shard ready` / `shard resume`
+     (PR 5.9 a posé les listeners qui rendent ces incidents
+     visibles). Aucun `error` sans contexte.
+  4. Critères d'échec : OOM, processus tué par OOM-killer Linux,
+     mémoire en croissance linéaire, plus de 3 disconnects sans
+     resume sur la fenêtre.
 
 ### Audit ponctuel de l'instance (checklist opérateur)
 
