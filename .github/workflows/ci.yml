@@ -67,5 +67,13 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Couverture avec seuils anti-régression (jalon 5 PR 5.7).
+      # Aujourd'hui appliqué sur `@varde/api` et `@varde/core` (les
+      # deux packages dans le critère de sortie >75 %). `vitest run
+      # --coverage` fail dès qu'un package configuré passe sous son
+      # plancher défini dans `vitest.config.ts#coverageThresholds`.
+      - name: Coverage
+        run: pnpm coverage
+
       - name: Build
         run: pnpm build
