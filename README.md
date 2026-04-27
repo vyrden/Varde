@@ -104,10 +104,23 @@ Paquets livrés à ce jour :
   d'extension onboarding : contribue une action custom et un hint
   via `ctx.onboarding.*` (PR 3.13).
 
-Reste à livrer avant V1.0.0 : polish jalon 5 (internationalisation
-FR/EN du dashboard, documentation utilisateur, guide module tiers,
-compose production, tests Playwright, changelog). Pas encore de
-release tagguée.
+Reste à livrer avant V1.0.0 :
+
+- **Jalon 5 — sécurité béton + polish technique** : audit auth /
+  autorisation / secrets, headers HTTP (CSP, HSTS, X-Frame-Options),
+  rate limiting API, validation aux frontières, supply chain
+  (`pnpm audit`, `gitleaks` en CI), hygiène code (zéro warning
+  évitable, audit `any`, dead code), performance (bundle dashboard,
+  bot stable 24 h), robustesse pannes (DB / Redis / Discord),
+  couverture tests > 75 %, doc procédure (rotation master key,
+  révocation token bot compromis).
+- **Jalon 6 — polish V1** : internationalisation FR/EN du dashboard,
+  documentation utilisateur, guide création de module tiers,
+  compose production, tests Playwright sur parcours critiques,
+  changelog. Critère de sortie : V1.0.0 publiable.
+
+Tag `v0.4.0` publié pour la fin du jalon 4 ; pas encore de release
+V1.0.0.
 
 ## Pourquoi un bot de plus
 
