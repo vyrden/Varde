@@ -178,7 +178,22 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
     }));
   }
 
-  app.get('/me', async (request) => ensureSession(request));
+  // GET /me — identité de l'admin courant. **Redaction explicite**
+  // de `accessToken` (jalon 5 PR 5.10) : le token Discord OAuth
+  // sert exclusivement aux appels server-to-server (API → Discord
+  // pour `/users/@me/guilds`), il ne doit jamais transiter dans une
+  // réponse exposée au client. La SessionData en mémoire le porte ;
+  // l'endpoint en retourne une projection nettoyée.
+  app.get('/me', async (request) => {
+    const session = await ensureSession(request);
+    // Whitelist explicite — toute future addition au JWT (ex. role,
+    // permissions précompilées) doit être réfléchie ici, pas leakée
+    // par un spread implicite.
+    return {
+      userId: session.userId,
+      ...(session.username !== undefined ? { username: session.username } : {}),
+    };
+  });
 
   return app;
 }

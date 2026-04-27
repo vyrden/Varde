@@ -199,6 +199,47 @@ Si tu soupçonnes que `VARDE_DISCORD_TOKEN` a fuité :
    centralisé (`/guilds/:id/audit` côté dashboard) pour reconstituer
    l'impact serveur par serveur.
 
+### Rotation du secret JWT (`VARDE_AUTH_SECRET`)
+
+`VARDE_AUTH_SECRET` est le secret HS256 partagé entre Auth.js
+(dashboard, signature) et l'API Fastify (vérification). Il est
+posé en variable d'environnement et n'est jamais persisté en DB.
+Le faire tourner invalide **tous** les cookies de session en cours
+— c'est l'unique mécanisme de logout-all-sessions disponible vu
+qu'Auth.js v5 stratégie JWT n'a pas de blacklist serveur.
+
+À faire en cas de :
+
+- Suspicion qu'un cookie de session valide a été exfiltré.
+- Compromission soupçonnée du host hébergeant l'app (les variables
+  d'environnement étaient lisibles).
+- Rotation préventive trimestrielle (recommandé, cf. checklist
+  opérateur ci-dessous).
+
+Procédure :
+
+1. Générer un nouveau secret 32 octets :
+
+   ```sh
+   openssl rand -base64 32
+   ```
+
+2. Mettre à jour `VARDE_AUTH_SECRET` dans le secret manager du
+   serveur (ou `.env.local` en dev) avec la nouvelle valeur.
+3. Redémarrer **simultanément** dashboard (Next.js) et API
+   (Fastify) — sinon les deux côtés vérifient avec des secrets
+   différents et toute requête authentifiée renvoie 401.
+4. Conséquence visible : tous les admins connectés sont
+   déconnectés, devront re-login via Discord. Aucune action
+   d'admin requise côté Discord (pas de re-grant OAuth tant que
+   les scopes inchangés).
+5. Vérifier les logs : flux de `401 unauthenticated` côté API
+   pendant ~15 min puis redescente normale.
+
+**Critère de réussite :** anciens cookies refusés (curl avec un
+ancien cookie sur `/me` → 401), nouveaux cookies acceptés après
+re-login.
+
 ### Révocation d'une clé API IA fuitée
 
 1. Révoquer la clé chez le provider (OpenAI dashboard, OpenRouter,
@@ -208,6 +249,56 @@ Si tu soupçonnes que `VARDE_DISCORD_TOKEN` a fuité :
    au repos).
 3. Vérifier dans `ai_invocations` qu'il n'y a pas eu d'appels
    non-attendus avec la clé compromise.
+
+### Audit du flow d'authentification (réalisé jalon 5 PR 5.10)
+
+État du flow auth dashboard ↔ API au 2026-04-27. À rejouer à
+chaque passe de polish technique récurrente (cf. mémoire interne).
+
+- **Stratégie Auth.js v5** : JWT (pas DB session), HS256 signé avec
+  `VARDE_AUTH_SECRET`. Cookie `varde.session` posé par le dashboard,
+  vérifié par l'API via `jose.jwtVerify` (whitelist d'algorithmes).
+  L'API n'a pas `next-auth` en dépendance — seulement `jose`.
+- **Cookie flags** : `httpOnly: true` (XSS ne lit pas le cookie),
+  `sameSite: 'lax'` (CSRF basique : navigation top-level autorisée,
+  cross-site POST refusé), `secure: true` en `NODE_ENV=production`.
+  `path: '/'`. Pas de `domain` posé → cookie restreint au host.
+- **Claims minimum** dans le JWT : `sub` (user Discord ID, requis),
+  `username`, `accessToken` (Discord OAuth pour appels API → Discord
+  uniquement), plus métadonnées d'avatar pour l'UI. Pas de
+  permissions précompilées dans le JWT — recalculées par requête
+  côté API via `requireGuildAdmin` qui interroge Discord.
+- **Pas de leak `accessToken` côté client** : le callback `session`
+  d'Auth.js construit explicitement `session.user` par whitelist
+  des champs publics (id, name, globalName, image, decoration), sans
+  spread implicite du JWT. La route `/me` côté API redacte aussi
+  `accessToken` avant de répondre (test d'isolation dans
+  `apps/api/tests/unit/server.test.ts`).
+- **Expiration** : 7 jours (`maxAge` sur la session JWT). Pas de
+  refresh token implémenté — l'admin re-login après expiration.
+  Discord access_token : Auth.js le rafraîchit automatiquement si
+  l'événement OAuth survient ; sinon expiration côté Discord
+  (typiquement 7 jours) → 401 sur l'appel `/users/@me/guilds` →
+  l'admin doit re-login.
+- **Logout serveur** : Auth.js v5 stratégie JWT n'a pas de blacklist
+  côté serveur. Un cookie volé reste valide jusqu'à expiration. Le
+  seul mécanisme « logout-all-sessions » est la rotation de
+  `VARDE_AUTH_SECRET` (procédure ci-dessus). Documenté comme
+  acceptable V1, à reconsidérer si on bascule en stratégie session
+  DB (ADR à écrire).
+- **CSRF** : double couche.
+  1. `SameSite=Lax` empêche les requêtes cross-site avec cookies
+     sauf navigations top-level GET.
+  2. CORS strict côté API (`@fastify/cors` configuré via
+     `corsOrigin`, autorise uniquement l'origine du dashboard ;
+     `credentials: true` ne s'applique que sur cette origine).
+  Les routes mutantes API n'ont pas de CSRF token explicite — le
+  combo SameSite + CORS + cookie HttpOnly est la défense V1. Un
+  attaquant doit voler le cookie (XSS bloqué par CSP + HttpOnly) OU
+  contrôler l'origine dashboard pour exécuter une mutation.
+- **Algorithmes acceptés** : `algorithms: ['HS256']` whitelisté
+  côté `jose.jwtVerify`. Pas de fallback `alg: none` ni RS256 —
+  pas de surface CVE classique JWT.
 
 ### Baselines de performance (jalon 5)
 
@@ -253,6 +344,10 @@ une régression majeure ; pas des SLA.
       jetable dans le mois écoulé.
 - [ ] `VARDE_KEYSTORE_MASTER_KEY` rotée dans les 12 derniers mois,
       ou rotation planifiée et tracée dans le calendrier opérateur.
+- [ ] `VARDE_AUTH_SECRET` rotée dans les 3 derniers mois (déconnecte
+      tous les admins — opération courte mais visible). Procédure
+      ci-dessus. Si plus de 6 mois sans rotation, **planifier
+      immédiatement**.
 
 ## Safe harbor
 

@@ -98,6 +98,33 @@ describe('createApiServer — /me', () => {
     expect(response.json()).toEqual({ userId: '42', username: 'alice' });
   });
 
+  it("ne fuite jamais l'accessToken Discord, même quand la session en porte un (jalon 5 PR 5.10)", async () => {
+    // Une session avec accessToken peuplé : si la route le retourne
+    // tel quel, le token Discord OAuth devient visible côté client.
+    // La redaction explicite dans `/me` doit le filtrer.
+    const response = await app.inject({
+      method: 'GET',
+      url: '/me',
+      headers: {
+        'x-test-session': JSON.stringify({
+          userId: '42',
+          username: 'alice',
+          accessToken: 'discord-oauth-secret',
+        }),
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as Record<string, unknown>;
+    expect(body['accessToken']).toBeUndefined();
+    expect(body['userId']).toBe('42');
+    expect(body['username']).toBe('alice');
+    // Au cas où une refacto introduirait un spread implicite — on
+    // vérifie aussi par scan de la chaîne sérialisée.
+    const serialized = response.body;
+    expect(serialized).not.toContain('discord-oauth-secret');
+    expect(serialized).not.toContain('accessToken');
+  });
+
   it('renvoie 401 si la session est présente mais malformée (JSON invalide)', async () => {
     const response = await app.inject({
       method: 'GET',
