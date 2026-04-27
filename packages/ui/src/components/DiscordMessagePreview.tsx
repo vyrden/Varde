@@ -198,6 +198,84 @@ export function substituteVariables(
 }
 
 /**
+ * Parse une ligne candidate à un item de liste non-ordonnée Markdown
+ * (`- foo` ou `* foo`). Implémentation par parcours linéaire plutôt
+ * que par regex pour éliminer toute ambiguïté ReDoS face aux
+ * scanners de sécurité (les scanners flagguent par paranoïa toute
+ * regex multi-quantifiers, même bornée par `^...$`).
+ *
+ * Contrat : retourne le contenu après le marker + le whitespace,
+ * ou `null` si la ligne ne matche pas le pattern. Whitespace
+ * obligatoire après le marker (`-foo` ne matche pas, conforme à
+ * la spec Discord et à l'ancien comportement regex).
+ */
+const parseUnorderedListItem = (line: string): string | null => {
+  if (line.length === 0) return null;
+  const first = line.charCodeAt(0);
+  // 0x2D = '-', 0x2A = '*'
+  if (first !== 0x2d && first !== 0x2a) return null;
+  let i = 1;
+  // Au moins un whitespace requis. Bornage défensif : on s'arrête
+  // au premier non-whitespace, donc même une ligne `- ` suivie de
+  // 100 KB d'espaces se résout en O(n) sans backtracking.
+  let consumed = 0;
+  while (i < line.length) {
+    const c = line.charCodeAt(i);
+    // \t (0x09), \n (0x0a), \v (0x0b), \f (0x0c), \r (0x0d), space (0x20)
+    if (c === 0x20 || (c >= 0x09 && c <= 0x0d)) {
+      i += 1;
+      consumed += 1;
+      continue;
+    }
+    break;
+  }
+  if (consumed === 0) return null;
+  const rest = line.slice(i);
+  if (rest.length === 0) return null;
+  return rest;
+};
+
+/**
+ * Parse une ligne candidate à un item de liste ordonnée Markdown
+ * (`1. foo`). Même logique que `parseUnorderedListItem` :
+ * parcours linéaire, pas de regex. Borne explicite à 9 chiffres
+ * (jusqu'à 999_999_999 — Discord refuse déjà au-delà). Cette
+ * borne ferme aussi tout argument hypothétique de scanning
+ * pathologique sur le quantifier `\d+`.
+ */
+const parseOrderedListItem = (line: string): string | null => {
+  if (line.length === 0) return null;
+  let i = 0;
+  let digits = 0;
+  while (i < line.length && digits < 9) {
+    const c = line.charCodeAt(i);
+    // 0x30 = '0', 0x39 = '9'
+    if (c < 0x30 || c > 0x39) break;
+    i += 1;
+    digits += 1;
+  }
+  if (digits === 0) return null;
+  // Doit être suivi d'un point.
+  if (i >= line.length || line.charCodeAt(i) !== 0x2e) return null;
+  i += 1;
+  // Au moins un whitespace.
+  let consumed = 0;
+  while (i < line.length) {
+    const c = line.charCodeAt(i);
+    if (c === 0x20 || (c >= 0x09 && c <= 0x0d)) {
+      i += 1;
+      consumed += 1;
+      continue;
+    }
+    break;
+  }
+  if (consumed === 0) return null;
+  const rest = line.slice(i);
+  if (rest.length === 0) return null;
+  return rest;
+};
+
+/**
  * Renderer markdown ligne-par-ligne avec gestion basique des blocs
  * (code blocks ```, citations >, listes -/1.). Renvoie une chaîne
  * HTML composée de balises `<p>`, `<ul>`, `<ol>`, `<blockquote>`,
@@ -261,25 +339,25 @@ export function renderDiscordMarkdown(content: string): string {
     }
     void quoteMatch; // suppress unused
 
-    const ulMatch = /^[-*]\s+(.+)$/.exec(line);
-    if (ulMatch) {
+    const ulInner = parseUnorderedListItem(line);
+    if (ulInner !== null) {
       if (state.kind !== 'ul') {
         closeOpenBlock();
         out.push('<ul class="list-disc pl-5">');
         state = { kind: 'ul' };
       }
-      out.push(`<li>${renderInlineMarkdown(ulMatch[1] ?? '')}</li>`);
+      out.push(`<li>${renderInlineMarkdown(ulInner)}</li>`);
       continue;
     }
 
-    const olMatch = /^\d+\.\s+(.+)$/.exec(line);
-    if (olMatch) {
+    const olInner = parseOrderedListItem(line);
+    if (olInner !== null) {
       if (state.kind !== 'ol') {
         closeOpenBlock();
         out.push('<ol class="list-decimal pl-5">');
         state = { kind: 'ol' };
       }
-      out.push(`<li>${renderInlineMarkdown(olMatch[1] ?? '')}</li>`);
+      out.push(`<li>${renderInlineMarkdown(olInner)}</li>`);
       continue;
     }
 
