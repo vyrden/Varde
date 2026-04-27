@@ -184,7 +184,13 @@ export async function createApiServer(options: CreateApiServerOptions): Promise<
   // pour `/users/@me/guilds`), il ne doit jamais transiter dans une
   // réponse exposée au client. La SessionData en mémoire le porte ;
   // l'endpoint en retourne une projection nettoyée.
-  app.get('/me', async (request) => {
+  // `config.rateLimit: {}` ré-applique explicitement les bornes
+  // globales sur cette route (un objet vide hérite des défauts du
+  // plugin) — fonctionnellement no-op (le pre-handler global les
+  // pose déjà), mais rend le rate-limit visible aux analyses
+  // statiques (CodeQL `js/missing-rate-limiting`) qui inspectent
+  // les options de route plutôt que la registration globale.
+  app.get('/me', { config: { rateLimit: {} } }, async (request) => {
     const session = await ensureSession(request);
     // Whitelist explicite — toute future addition au JWT (ex. role,
     // permissions précompilées) doit être réfléchie ici, pas leakée
