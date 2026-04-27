@@ -77,3 +77,49 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Anti-régression bundle (jalon 5 PR 5.8). Vérifie que les chunks
+      # client du dashboard restent sous les plafonds convenus.
+      # Mesure courante au commit : ~1170 KB uncompressed, ~355 KB
+      # gzipped. Plafonds avec slack ~30 % au-dessus, à relever
+      # explicitement (avec note dans SECURITY.md) si une PR fait
+      # gonfler le bundle pour une raison légitime.
+      - name: Bundle size check
+        env:
+          MAX_UNCOMPRESSED_KB: 1700
+          MAX_GZIPPED_KB: 500
+          CHUNKS_DIR: apps/dashboard/.next/static/chunks
+        run: |
+          if [[ ! -d "$CHUNKS_DIR" ]]; then
+            echo "❌ $CHUNKS_DIR introuvable — le step Build doit avoir échoué" >&2
+            exit 1
+          fi
+          total_uncompressed=$(find "$CHUNKS_DIR" -name "*.js" -type f -exec du -b {} + 2>/dev/null \
+            | awk '{s+=$1} END {print s+0}')
+          total_uncompressed_kb=$(( total_uncompressed / 1024 ))
+          total_gzipped=0
+          while IFS= read -r f; do
+            size=$(gzip -c "$f" | wc -c)
+            total_gzipped=$(( total_gzipped + size ))
+          done < <(find "$CHUNKS_DIR" -name "*.js" -type f)
+          total_gzipped_kb=$(( total_gzipped / 1024 ))
+          echo "Bundle dashboard — chunks client"
+          echo "  Total uncompressed : ${total_uncompressed_kb} KB / plafond ${MAX_UNCOMPRESSED_KB} KB"
+          echo "  Total gzipped      : ${total_gzipped_kb} KB / plafond ${MAX_GZIPPED_KB} KB"
+          failed=0
+          if (( total_uncompressed_kb > MAX_UNCOMPRESSED_KB )); then
+            echo "❌ Plafond uncompressed dépassé" >&2
+            failed=1
+          fi
+          if (( total_gzipped_kb > MAX_GZIPPED_KB )); then
+            echo "❌ Plafond gzipped dépassé" >&2
+            failed=1
+          fi
+          if (( failed == 1 )); then
+            echo "" >&2
+            echo "Si l'inflation est légitime, ajuste MAX_UNCOMPRESSED_KB" >&2
+            echo "et MAX_GZIPPED_KB dans .github/workflows/ci.yml et" >&2
+            echo "documente la nouvelle baseline dans SECURITY.md." >&2
+            exit 1
+          fi
+          echo "✓ Bundle sous les plafonds."

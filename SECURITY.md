@@ -209,6 +209,29 @@ Si tu soupçonnes que `VARDE_DISCORD_TOKEN` a fuité :
 3. Vérifier dans `ai_invocations` qu'il n'y a pas eu d'appels
    non-attendus avec la clé compromise.
 
+### Baselines de performance (jalon 5)
+
+Mesures observées au 2026-04-27. Servent de référence pour détecter
+une régression majeure ; pas des SLA.
+
+- **Bundle client dashboard** : ~1170 KB uncompressed total
+  (toutes routes confondues), ~355 KB gzipped. Plafond de
+  régression appliqué dans `.github/workflows/ci.yml` step
+  « Bundle size check » : 1700 KB uncompressed, 500 KB gzipped
+  (slack ~30 %). Mesure manuelle après
+  `pnpm --filter @varde/dashboard build` :
+  `find apps/dashboard/.next/static/chunks -name '*.js' -exec du -b {} + | awk '{s+=$1} END {print s/1024 " KB"}'`.
+- **Couverture tests** : core 80.91 % / 81.83 % (statements / lines),
+  api 76.49 % / 78.34 %. Plancher anti-régression appliqué via
+  `pnpm coverage` (configuré dans `vitest.config.ts` de chaque
+  package, exécuté en CI).
+- **API p95** : pas encore de bench automatisé (jalon 5 PR à venir).
+  Mesure manuelle ad-hoc via `autocannon` recommandée si suspicion
+  de dégradation. Cible indicative : < 200 ms p95 sur les routes
+  hors LLM.
+- **Bot stabilité** : à valider en simulation 24 h sous burst Discord.
+  Pas encore d'outil de bench dédié.
+
 ### Audit ponctuel de l'instance (checklist opérateur)
 
 À faire à chaque mise en production majeure ou tous les 3 mois :
