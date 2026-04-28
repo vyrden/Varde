@@ -37,9 +37,12 @@ import type { FetchLike } from '../discord-client.js';
  * - `POST /setup/system-check`  — DB + master key canary + Discord HEAD
  * - `POST /setup/discord-app`   — valide via `/applications/{id}/rpc`,
  *                                 persiste appId + publicKey
+ * - `POST /setup/bot-token`     — valide via `/users/@me`, déduit
+ *                                 les intents manquants depuis
+ *                                 `/applications/@me.flags`,
+ *                                 persiste le token chiffré
  *
- * Routes restant à ajouter : `bot-token`, `oauth`, `identity`,
- * `complete`.
+ * Routes restant à ajouter : `oauth`, `identity`, `complete`.
  */
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -178,6 +181,85 @@ const rpcResponseSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
 });
+
+/** Body wire de `POST /setup/bot-token`. */
+const botTokenBodySchema = z.object({
+  /** Token bot Discord (long opaque, validé côté Discord). */
+  token: z.string().min(20, 'token bot Discord trop court'),
+});
+
+/** Forme minimale de `GET /users/@me` côté Discord pour notre besoin. */
+const botUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  discriminator: z.string().optional(),
+  avatar: z.string().nullable().optional(),
+});
+
+/** DTO bot user retourné au client wizard. */
+export interface BotUserDto {
+  readonly id: string;
+  readonly username: string;
+  readonly discriminator?: string;
+  readonly avatar?: string | null;
+}
+
+/** Forme minimale de `GET /applications/@me` (champs `flags` uniquement). */
+const applicationInfoSchema = z.object({
+  flags: z.number().int(),
+});
+
+/** Nom canonique des trois intents privilégiés Discord. */
+export type PrivilegedIntentName = 'PRESENCE' | 'GUILD_MEMBERS' | 'MESSAGE_CONTENT';
+
+/**
+ * Bits de `Application.flags` qui matérialisent l'activation d'un
+ * intent privilégié dans le portail Developer. Chaque intent peut
+ * être posé via deux flags distincts :
+ *
+ * - `*_LIMITED` : bot non-vérifié (< 75 serveurs). C'est ce qu'on
+ *   voit dès qu'on coche la case dans le portail.
+ * - `*` (sans LIMITED) : bot vérifié, après revue Discord.
+ *
+ * Il suffit qu'un des deux soit posé pour considérer l'intent
+ * activé. Voir https://discord.com/developers/docs/resources/application#application-object-application-flags.
+ */
+const INTENT_FLAGS: Readonly<Record<PrivilegedIntentName, readonly number[]>> = {
+  PRESENCE: [1 << 12, 1 << 13],
+  GUILD_MEMBERS: [1 << 14, 1 << 15],
+  MESSAGE_CONTENT: [1 << 18, 1 << 19],
+};
+
+/**
+ * Calcule la liste des intents privilégiés non activés dans
+ * `Application.flags`. Algorithme : pour chaque intent, si aucun
+ * des deux bits associés n'est posé, l'intent est listé comme
+ * manquant.
+ */
+const computeMissingIntents = (flags: number): readonly PrivilegedIntentName[] => {
+  const missing: PrivilegedIntentName[] = [];
+  for (const [name, bits] of Object.entries(INTENT_FLAGS) as readonly [
+    PrivilegedIntentName,
+    readonly number[],
+  ][]) {
+    if (!bits.some((bit) => (flags & bit) !== 0)) {
+      missing.push(name);
+    }
+  }
+  return missing;
+};
+
+/** Réponse de `POST /setup/bot-token`. */
+export type BotTokenResponse =
+  | {
+      readonly valid: true;
+      readonly botUser: BotUserDto;
+      readonly missingIntents: readonly PrivilegedIntentName[];
+    }
+  | {
+      readonly valid: false;
+      readonly reason: 'invalid_token';
+    };
 
 /**
  * Erreur HTTP typée pour les routes du wizard. Fastify détecte
@@ -347,6 +429,124 @@ export function registerSetupRoutes(
       await instanceConfig.setStep(3, { discordAppId: appId, discordPublicKey: publicKey });
 
       return { appName: rpc.data.name };
+    },
+  );
+
+  // public-route: wizard de setup initial — voir justification au-dessus de /setup/system-check
+  app.post(
+    '/setup/bot-token',
+    {
+      config: { rateLimit: setupRateLimit },
+      preHandler: requireUnconfigured,
+    },
+    async (request): Promise<BotTokenResponse> => {
+      const parsed = botTokenBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+      }
+      const { token } = parsed.data;
+      const authHeader = `Bot ${token}`;
+
+      // Étape 1 — `/users/@me` : confirme que le token est accepté
+      // par Discord. 401/403 → token invalide (pas d'écriture en
+      // DB). Tout autre échec réseau → 502 propagé.
+      let meResponse: Response;
+      try {
+        meResponse = await fetchImpl(`${discordBaseUrl}/users/@me`, {
+          method: 'GET',
+          headers: { authorization: authHeader, accept: 'application/json' },
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+
+      if (meResponse.status === 401 || meResponse.status === 403) {
+        return { valid: false, reason: 'invalid_token' };
+      }
+      if (!meResponse.ok) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${meResponse.status} sur /users/@me.`,
+        );
+      }
+
+      let meBody: unknown;
+      try {
+        meBody = await meResponse.json();
+      } catch {
+        throw httpError(502, 'discord_unreachable', 'Réponse Discord non parseable.');
+      }
+      const meParsed = botUserSchema.safeParse(meBody);
+      if (!meParsed.success) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          'Réponse Discord inattendue : forme `/users/@me` invalide.',
+        );
+      }
+
+      // Étape 2 — `/applications/@me` : lit `flags` pour déduire
+      // quels intents privilégiés sont activés dans le portail
+      // Developer. C'est l'équivalent fiable et léger d'une
+      // tentative de connexion gateway — Discord renvoie un close
+      // code 4014 sur intents refusés, mais établir un websocket
+      // pour le découvrir est lourd et flaky. Les flags exposent
+      // exactement la même information.
+      let appResponse: Response;
+      try {
+        appResponse = await fetchImpl(`${discordBaseUrl}/applications/@me`, {
+          method: 'GET',
+          headers: { authorization: authHeader, accept: 'application/json' },
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+      if (!appResponse.ok) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${appResponse.status} sur /applications/@me.`,
+        );
+      }
+      let appBody: unknown;
+      try {
+        appBody = await appResponse.json();
+      } catch {
+        throw httpError(502, 'discord_unreachable', 'Réponse Discord non parseable.');
+      }
+      const appParsed = applicationInfoSchema.safeParse(appBody);
+      if (!appParsed.success) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          'Réponse Discord inattendue : `flags` manquant sur /applications/@me.',
+        );
+      }
+      const missingIntents = computeMissingIntents(appParsed.data.flags);
+
+      // Persistance chiffrée. setStep est monotone — l'étape « Token »
+      // est la 4 dans le wireframe (welcome=1, system-check=2,
+      // discord-app=3, bot-token=4).
+      await instanceConfig.setStep(4, { discordBotToken: token });
+
+      const botUser: BotUserDto = {
+        id: meParsed.data.id,
+        username: meParsed.data.username,
+        ...(meParsed.data.discriminator !== undefined
+          ? { discriminator: meParsed.data.discriminator }
+          : {}),
+        ...(meParsed.data.avatar !== undefined ? { avatar: meParsed.data.avatar } : {}),
+      };
+      return { valid: true, botUser, missingIntents };
     },
   );
 }

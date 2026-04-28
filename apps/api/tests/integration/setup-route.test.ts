@@ -445,3 +445,261 @@ describe('POST /setup/discord-app', () => {
     }
   });
 });
+
+describe('POST /setup/bot-token', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  const TOKEN = 'NjAwAAAAAAAAAA.OOOOOO.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  // Tous les bits intents privilégiés activés :
+  // PRESENCE_LIMITED (1<<13) | GUILD_MEMBERS_LIMITED (1<<15) | MESSAGE_CONTENT_LIMITED (1<<19)
+  const ALL_INTENTS_FLAGS = (1 << 13) | (1 << 15) | (1 << 19);
+
+  // Implémentation `fetchImpl` qui route selon l'URL : `/users/@me`,
+  // `/applications/@me`, etc. Permet d'exprimer les scénarios de
+  // façon lisible dans chaque test.
+  type RouteHandler = (init?: RequestInit) => Promise<Response> | Response;
+  const routedFetch = (handlers: Record<string, RouteHandler>): FetchLike =>
+    vi.fn(async (input: string, init?: RequestInit) => {
+      for (const [pattern, handler] of Object.entries(handlers)) {
+        if (input.includes(pattern)) {
+          return handler(init);
+        }
+      }
+      throw new Error(`fetch non mocké: ${input}`);
+    });
+
+  const meOkResponse = (): Response =>
+    new Response(
+      JSON.stringify({
+        id: '111111111111111111',
+        username: 'varde-bot',
+        discriminator: '0000',
+        avatar: null,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  const appOkResponse = (flags = ALL_INTENTS_FLAGS): Response =>
+    new Response(JSON.stringify({ id: '111111111111111111', flags }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('200 sur token valide + intents complets : valid=true, missingIntents=[], botUser présent', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse(),
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        valid: boolean;
+        botUser?: { id: string; username: string };
+        missingIntents?: string[];
+      };
+      expect(body.valid).toBe(true);
+      expect(body.botUser).toMatchObject({ id: '111111111111111111', username: 'varde-bot' });
+      expect(body.missingIntents).toEqual([]);
+
+      // Token persisté chiffré, déchiffrable via getConfig.
+      const config = await instanceConfig.getConfig();
+      expect(config.discordBotToken).toBe(TOKEN);
+      expect(config.setupStep).toBeGreaterThanOrEqual(4);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('appelle Discord avec Authorization: Bot <token>', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse(),
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://discord.com/api/v10/users/@me',
+        expect.objectContaining({
+          headers: expect.objectContaining({ authorization: `Bot ${TOKEN}` }),
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('200 valid=false si /users/@me retourne 401 — rien persisté', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => new Response('unauthorized', { status: 401 }),
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { valid: boolean; reason?: string };
+      expect(body.valid).toBe(false);
+      expect(body.reason).toBe('invalid_token');
+
+      const config = await instanceConfig.getConfig();
+      expect(config.discordBotToken).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('missingIntents liste PRESENCE quand le bit n est pas posé', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse((1 << 15) | (1 << 19)), // sans PRESENCE
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      const body = res.json() as { valid: boolean; missingIntents?: string[] };
+      expect(body.valid).toBe(true);
+      expect(body.missingIntents).toEqual(['PRESENCE']);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('missingIntents liste les 3 quand aucun bit privilégié n est posé', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse(0),
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      const body = res.json() as { valid: boolean; missingIntents?: string[] };
+      expect(body.valid).toBe(true);
+      expect(body.missingIntents).toEqual(['PRESENCE', 'GUILD_MEMBERS', 'MESSAGE_CONTENT']);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('accepte aussi les bits non-LIMITED (bots vérifiés)', async () => {
+    // PRESENCE = 1<<12, GUILD_MEMBERS = 1<<14, MESSAGE_CONTENT = 1<<18
+    const flags = (1 << 12) | (1 << 14) | (1 << 18);
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse(flags),
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      const body = res.json() as { valid: boolean; missingIntents?: string[] };
+      expect(body.valid).toBe(true);
+      expect(body.missingIntents).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si /users/@me retourne 5xx', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => new Response('ko', { status: 503 }),
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.json()).toMatchObject({ error: 'discord_unreachable' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si fetch lève (réseau cassé)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => {
+      throw new Error('ENETUNREACH');
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(res.statusCode).toBe(502);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur body invalide (token manquant)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => meOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: {},
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'invalid_body' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 quand la setup est terminée', async () => {
+    const fetchImpl = routedFetch({
+      '/users/@me': () => meOkResponse(),
+      '/applications/@me': () => appOkResponse(),
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await instanceConfig.setStep(7, { discordBotToken: 'old' });
+      await instanceConfig.complete();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/bot-token',
+        payload: { token: TOKEN },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
