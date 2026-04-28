@@ -22,6 +22,7 @@ import {
   registerModulesRoutes,
   registerOnboardingRoutes,
   registerReactionRolesRoutes,
+  registerSetupRoutes,
   registerUnboundPermissionsRoutes,
   registerWelcomeRoutes,
   type WelcomeUploadsService,
@@ -52,6 +53,7 @@ import {
   createConfigService,
   createCtxFactory,
   createEventBus,
+  createInstanceConfigService,
   createKeystoreService,
   createLogger,
   createOnboardingExecutor,
@@ -60,6 +62,7 @@ import {
   createPluginLoader,
   createSchedulerService,
   type I18nMessages,
+  type InstanceConfigService,
   type OnboardingExecutor,
   type OnboardingHostService,
   type PluginLoader,
@@ -252,6 +255,13 @@ export interface CreateServerOptions<D extends DbDriver> {
    * côté `createCtxFactory` ; le fallback est toujours `'en'`.
    */
   readonly defaultLocale?: string;
+  /**
+   * URL d'accès au dashboard. Sert au wizard de setup pour dériver
+   * l'URI de redirection OAuth2 affichée à l'admin. Défaut
+   * `http://localhost:3000` (mode local solo). En LAN ou prod,
+   * passer la valeur effective lue depuis `VARDE_BASE_URL`.
+   */
+  readonly baseUrl?: string;
 }
 
 export interface ServerHandle<D extends DbDriver> {
@@ -266,6 +276,8 @@ export interface ServerHandle<D extends DbDriver> {
   readonly eventBus: EventBus;
   readonly client: DbClient<D>;
   readonly ctxBundle: CtxBundle;
+  /** Service de configuration globale de l'instance (jalon 7 PR 7.1). */
+  readonly instanceConfig: InstanceConfigService;
   readonly start: () => Promise<{ readonly address: string }>;
   readonly stop: () => Promise<void>;
 }
@@ -328,13 +340,28 @@ export async function createServer<D extends DbDriver>(
   // (l'admin a édité son provider depuis `/settings/ai`).
   const aiModuleId = 'core.ai' as ModuleId;
   await ensurePseudoModuleRegistered(client, aiModuleId);
+  // Master key partagée entre `aiKeystore` et `instanceConfig` — les deux
+  // chiffrent avec AES-256-GCM via le même contrat. Si l'appelant n'a
+  // pas fourni de clé (cas tests qui n'exercent pas le chiffrement),
+  // on en génère une aléatoire stable pour la durée de vie du serveur.
+  const masterKey = options.keystore?.masterKey ?? randomBytes(32);
   const aiKeystore = createKeystoreService({
     client,
     moduleId: aiModuleId,
-    masterKey: options.keystore?.masterKey ?? randomBytes(32),
+    masterKey,
     ...(options.keystore?.previousMasterKey
       ? { previousMasterKey: options.keystore.previousMasterKey }
       : {}),
+  });
+
+  // Service de configuration globale de l'instance (jalon 7 PR 7.1).
+  // Lecture du `setup_completed_at` au boot, écriture par les routes
+  // `/setup/*`, déclencheur de l'event `instance.ready` à la fin du
+  // wizard.
+  const instanceConfig = createInstanceConfigService({
+    client,
+    masterKey,
+    logger,
   });
 
   const aiServiceCache = new Map<GuildId, ReturnType<typeof createGuildAiService>>();
@@ -651,6 +678,10 @@ export async function createServer<D extends DbDriver>(
     schedulerLogger,
     audit,
   });
+  registerSetupRoutes(api, {
+    instanceConfig,
+    baseUrl: options.baseUrl ?? 'http://localhost:3000',
+  });
 
   await reconcileOnboardingSessions({
     client,
@@ -688,6 +719,7 @@ export async function createServer<D extends DbDriver>(
     eventBus,
     client,
     ctxBundle,
+    instanceConfig,
     start,
     stop,
   };

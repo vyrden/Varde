@@ -50,7 +50,7 @@ import {
   registerSlashCommandsForGuild,
 } from '@varde/bot';
 import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
-import { createInstanceConfigService, createLogger } from '@varde/core';
+import { createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
 import { logs, locales as logsLocales } from '@varde/module-logs';
@@ -505,6 +505,7 @@ async function main(): Promise<void> {
           logger,
           locales: MODULE_LOCALES,
           defaultLocale: 'fr',
+          baseUrl,
           onboardingBridge: discordAttachment.bridge,
           discordService: discordAttachment.discordService,
           listGuildTextChannels: discordAttachment.listGuildTextChannels,
@@ -519,6 +520,7 @@ async function main(): Promise<void> {
           logger,
           locales: MODULE_LOCALES,
           defaultLocale: 'fr',
+          baseUrl,
           onboardingBridge: discordAttachment.bridge,
           discordService: discordAttachment.discordService,
           listGuildTextChannels: discordAttachment.listGuildTextChannels,
@@ -556,16 +558,11 @@ async function main(): Promise<void> {
 
   await seedFromEnv(handle, seedIds, logger);
 
-  // Service `instance_config` (jalon 7 PR 7.1). Source de vérité pour
-  // les credentials Discord persistés via le wizard de setup. Utilisé
-  // ici pour décider si le bot doit se connecter au boot et pour
-  // brancher un listener `onReady` qui prendra le relais quand le
-  // wizard se terminera.
-  const instanceConfig = createInstanceConfigService({
-    client: handle.client,
-    masterKey: keystoreMasterKey,
-    logger,
-  });
+  // Service `instance_config` (jalon 7 PR 7.1). Construit par
+  // `createServer()` et exposé via le handle, ce qui garantit que
+  // les routes `/setup/*` et le boot logic ci-dessous partagent la
+  // même instance (et donc le même cache).
+  const instanceConfig = handle.instanceConfig;
   const config = await instanceConfig.getConfig();
   const plan = decideLoginPlan({
     configured: config.setupCompletedAt !== null,

@@ -81,6 +81,10 @@ export {
   registerReactionRolesRoutes,
 } from './routes/reaction-roles.js';
 export {
+  type RegisterSetupRoutesOptions,
+  registerSetupRoutes,
+} from './routes/setup.js';
+export {
   type RegisterUnboundPermissionsRoutesOptions,
   registerUnboundPermissionsRoutes,
 } from './routes/unbound-permissions.js';
