@@ -108,6 +108,45 @@
     --duration-slow: 260ms;
 
     /*
+     * Échelle d'espacement (4px-base). Utilisable en CSS via
+     * `var(--space-*)` ou directement via les utilitaires Tailwind
+     * (`p-2` = 8px, `gap-3` = 12px, etc., qui partagent la même base).
+     * Documentée ici pour donner une référence unique côté revue UI.
+     */
+    --space-1: 0.25rem; /* 4px */
+    --space-2: 0.5rem;  /* 8px */
+    --space-3: 0.75rem; /* 12px */
+    --space-4: 1rem;    /* 16px */
+    --space-5: 1.25rem; /* 20px */
+    --space-6: 1.5rem;  /* 24px */
+    --space-8: 2rem;    /* 32px */
+    --space-10: 2.5rem; /* 40px */
+    --space-12: 3rem;   /* 48px */
+
+    /*
+     * Échelle typographique. `--font-size-*` accompagnés des
+     * `--line-height-*` correspondants pour ne pas avoir à recalculer
+     * à la main à chaque usage. Mêmes valeurs que les utilitaires
+     * Tailwind (`text-xs`, `text-sm`, …) — exposés en variables pour
+     * les contextes hors-classes (CSS bruts, modules tiers).
+     */
+    --font-size-xs: 0.75rem;   /* 12px */
+    --font-size-sm: 0.875rem;  /* 14px */
+    --font-size-base: 1rem;    /* 16px */
+    --font-size-lg: 1.125rem;  /* 18px */
+    --font-size-xl: 1.25rem;   /* 20px */
+    --font-size-2xl: 1.5rem;   /* 24px */
+    --font-size-3xl: 1.875rem; /* 30px */
+
+    --line-height-xs: 1rem;       /* 16px */
+    --line-height-sm: 1.25rem;    /* 20px */
+    --line-height-base: 1.5rem;   /* 24px */
+    --line-height-lg: 1.75rem;    /* 28px */
+    --line-height-xl: 1.75rem;    /* 28px */
+    --line-height-2xl: 2rem;      /* 32px */
+    --line-height-3xl: 2.25rem;   /* 36px */
+
+    /*
      * Police principale — Noto Sans (substitut public à gg sans Discord).
      * Le consommateur (apps/dashboard) injecte la variable
      * `--font-noto-sans` via `next/font/google` ; le fallback couvre
@@ -121,11 +160,30 @@
       monospace;
   }
 
-  /* Pas de bascule mode clair en V1 — la classe `.dark` reste pour
-     ne pas casser un éventuel toggle, mais elle hérite des mêmes
-     valeurs que :root. */
+  /*
+   * Mécanique mode clair / sombre.
+   *
+   * V1 : dark-only. Les valeurs de `:root` ci-dessus correspondent au
+   * thème sombre, qui est le seul rendu actuellement par le dashboard.
+   *
+   * Préparation V1.x (PR 7.4) : un éventuel mode clair s'activera via
+   * `[data-theme="light"]` posé sur `<html>`, qui réécrira chacune
+   * des variables ci-dessus avec les valeurs claires correspondantes.
+   * Aucun composant ne doit faire d'hypothèse sur "il fait sombre" :
+   * lire les tokens via `var(--*)` rend le code automatiquement
+   * compatible quand le mode clair sera réellement câblé.
+   *
+   * La classe `.dark` historique (héritée de shadcn/ui) reste exposée
+   * pour ne pas casser un usage tiers, mais elle n'a plus d'effet
+   * différenciant (le dark est déjà le défaut).
+   */
   .dark {
     color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    /* Override des tokens pour le mode clair — à remplir en PR 7.4. */
   }
 
   html,
