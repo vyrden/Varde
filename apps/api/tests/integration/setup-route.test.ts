@@ -703,3 +703,204 @@ describe('POST /setup/bot-token', () => {
     }
   });
 });
+
+describe('POST /setup/oauth', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  const APP_ID = '987654321098765432';
+  const CLIENT_SECRET = 'aZbYcXdW1234567890_-secret_value';
+
+  const tokenOkResponse = (): Response =>
+    new Response(
+      JSON.stringify({
+        access_token: 'mock-access-token',
+        token_type: 'Bearer',
+        expires_in: 604_800,
+        scope: 'identify',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  // Helper : seed l'appId via instanceConfig pour simuler que
+  // l'étape « discord-app » a été franchie. Sans ça, /setup/oauth
+  // ne peut pas construire le `client_id` de la requête token.
+  const seedAppId = async (
+    instanceConfig: ReturnType<typeof createInstanceConfigService>,
+  ): Promise<void> => {
+    await instanceConfig.setStep(3, {
+      discordAppId: APP_ID,
+      discordPublicKey: '0'.repeat(64),
+    });
+  };
+
+  it('200 sur secret valide : valid=true, clientSecret persisté', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => tokenOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ valid: true });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.discordClientSecret).toBe(CLIENT_SECRET);
+      expect(config.setupStep).toBeGreaterThanOrEqual(5);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('appelle Discord en POST avec Basic auth + body form-urlencoded grant_type=client_credentials', async () => {
+    const fetchImpl = vi.fn(async () => tokenOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      const expectedAuth = `Basic ${Buffer.from(`${APP_ID}:${CLIENT_SECRET}`).toString('base64')}`;
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://discord.com/api/v10/oauth2/token',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            authorization: expectedAuth,
+            'content-type': 'application/x-www-form-urlencoded',
+          }),
+          body: expect.stringContaining('grant_type=client_credentials'),
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('200 valid=false si Discord retourne 401 (invalid_client) — rien persisté', async () => {
+    const fetchImpl: FetchLike = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: 'invalid_client' }), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ valid: false, reason: 'invalid_secret' });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.discordClientSecret).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 missing_app_id si l étape discord-app n a pas été franchie', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => tokenOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      // Pas de seedAppId : l'instance_config est vierge.
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'missing_app_id' });
+      // Et pas d'appel à Discord puisque la précondition manque.
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si Discord répond 5xx', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => new Response('ko', { status: 503 }));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.json()).toMatchObject({ error: 'discord_unreachable' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si fetch lève (réseau cassé)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => {
+      throw new Error('ENETUNREACH');
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(502);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur body invalide (clientSecret manquant)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => tokenOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: {},
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'invalid_body' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 quand la setup est terminée', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => tokenOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedAppId(instanceConfig);
+      await instanceConfig.setStep(7, { discordBotToken: 'tok' });
+      await instanceConfig.complete();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/oauth',
+        payload: { clientSecret: CLIENT_SECRET },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});

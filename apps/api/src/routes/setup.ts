@@ -41,8 +41,12 @@ import type { FetchLike } from '../discord-client.js';
  *                                 les intents manquants depuis
  *                                 `/applications/@me.flags`,
  *                                 persiste le token chiffré
+ * - `POST /setup/oauth`         — valide le client secret via
+ *                                 `client_credentials` sur
+ *                                 `/oauth2/token`, persiste le
+ *                                 secret chiffré
  *
- * Routes restant à ajouter : `oauth`, `identity`, `complete`.
+ * Routes restant à ajouter : `identity`, `complete`.
  */
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -260,6 +264,17 @@ export type BotTokenResponse =
       readonly valid: false;
       readonly reason: 'invalid_token';
     };
+
+/** Body wire de `POST /setup/oauth`. */
+const oauthBodySchema = z.object({
+  /** Client Secret OAuth2 Discord (long opaque). */
+  clientSecret: z.string().min(8, 'clientSecret trop court'),
+});
+
+/** Réponse de `POST /setup/oauth`. */
+export type OAuthResponse =
+  | { readonly valid: true }
+  | { readonly valid: false; readonly reason: 'invalid_secret' };
 
 /**
  * Erreur HTTP typée pour les routes du wizard. Fastify détecte
@@ -547,6 +562,80 @@ export function registerSetupRoutes(
         ...(meParsed.data.avatar !== undefined ? { avatar: meParsed.data.avatar } : {}),
       };
       return { valid: true, botUser, missingIntents };
+    },
+  );
+
+  // public-route: wizard de setup initial — voir justification au-dessus de /setup/system-check
+  app.post(
+    '/setup/oauth',
+    {
+      config: { rateLimit: setupRateLimit },
+      preHandler: requireUnconfigured,
+    },
+    async (request): Promise<OAuthResponse> => {
+      const parsed = oauthBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+      }
+      const { clientSecret } = parsed.data;
+
+      // Précondition : `discordAppId` doit avoir été persisté à
+      // l'étape 3. Sans lui on ne peut pas construire le `client_id`
+      // de la requête OAuth2 — autant l'expliciter au lieu de
+      // forwarder un appel cassé.
+      const config = await instanceConfig.getConfig();
+      if (config.discordAppId === null) {
+        throw httpError(
+          400,
+          'missing_app_id',
+          "Application ID absent : passez d'abord l'étape « Discord App » du wizard.",
+        );
+      }
+      const clientId = config.discordAppId;
+
+      // Échange `client_credentials` côté Discord (RFC 6749 §4.4) :
+      // Basic auth = base64(client_id:client_secret), corps form-urlencoded.
+      // Si le secret est invalide, Discord répond 401 invalid_client.
+      const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+      const body = new URLSearchParams({
+        grant_type: 'client_credentials',
+        scope: 'identify',
+      }).toString();
+
+      let response: Response;
+      try {
+        response = await fetchImpl(`${discordBaseUrl}/oauth2/token`, {
+          method: 'POST',
+          headers: {
+            authorization: `Basic ${basicAuth}`,
+            'content-type': 'application/x-www-form-urlencoded',
+            accept: 'application/json',
+          },
+          body,
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+
+      if (response.status === 401) {
+        return { valid: false, reason: 'invalid_secret' };
+      }
+      if (!response.ok) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${response.status} sur /oauth2/token.`,
+        );
+      }
+
+      // Persiste le secret chiffré. setStep monotone — l'étape OAuth
+      // est la 5 dans le wireframe.
+      await instanceConfig.setStep(5, { discordClientSecret: clientSecret });
+      return { valid: true };
     },
   );
 }
