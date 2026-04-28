@@ -101,9 +101,11 @@ Une interface web complète permet de :
 | 3 | Moteur d'onboarding (presets, prévisualisation, application, rollback) | ✅ Livré (22/04/2026) |
 | 4 | Cinq modules officiels V1 (logs, accueil, rôles, modération, presets) | ✅ Livré (27/04/2026) |
 | 5 | Sécurité béton et polissage technique | ✅ Livré (27/04/2026) |
-| 6 | Polissage V1 : traduction FR/EN, doc utilisateur, guide module tiers, tests E2E | 🚧 En cours |
+| 6 | Production-ready (Docker, compose, doc utilisateur et dev) | ✅ Livré (28/04/2026) |
+| 7 | Refonte UI/UX, simplification de l'installation, i18n, tests E2E | 🚧 À venir |
+| 8 | Modules V1.1 additionnels | ⏳ Prévu |
 
-> 📌 Versions publiées : **v0.4.0** (fin jalon 4) et **v0.5.0** (fin jalon 5). La V1.0.0 sortira à la fin du jalon 6.
+> 📌 Versions publiées : **v0.4.0** (fin jalon 4), **v0.5.0** (fin jalon 5), **v0.6.0** (fin jalon 6). La **V1.0.0** sortira à la clôture du jalon 7, quand l'UI/UX sera stabilisée.
 >
 > 🔁 Le jalon 5 (sécurité + polissage technique) sera **rejoué tous les 4 à 5 jalons** par la suite, pour ne jamais laisser la dette technique s'accumuler.
 

@@ -14,10 +14,13 @@ le suivant.
 | 3 | Moteur d'onboarding (presets, prévisualisation, application, rollback) | ✅ Livré | 2026-04-22 |
 | 4 | Cinq modules officiels V1 | ✅ Livré | 2026-04-27 |
 | 5 | Sécurité béton et polish technique | ✅ Livré | 2026-04-27 |
-| 6 | Polish V1 (i18n, doc, compose prod, E2E, release) | 🚧 En cours | — |
+| 6 | Production-ready (compose Docker, image, doc utilisateur et dev) | ✅ Livré | 2026-04-28 |
+| 7 | Refonte UI/UX, simplification de l'installation, i18n, E2E | 🚧 À venir | — |
+| 8 | Modules V1.1 additionnels | ⏳ Prévu | — |
 
-> Versions publiées : **v0.4.0** (fin du jalon 4) et **v0.5.0** (fin
-> du jalon 5). La V1.0.0 sortira à la clôture du jalon 6.
+> Versions publiées : **v0.4.0** (fin du jalon 4), **v0.5.0** (fin
+> du jalon 5), **v0.6.0** (fin du jalon 6). La **V1.0.0** sortira
+> à la clôture du jalon 7, quand l'UI/UX sera stabilisée.
 
 ---
 
@@ -172,36 +175,86 @@ en CI.
 
 ---
 
-## Jalon 6 — polish V1
+## Jalon 6 — production-ready
 
-**Objectif :** rendre l'instance installable, exploitable et
-contribuable par un inconnu.
+**Objectif :** rendre l'instance installable et exploitable par
+un inconnu, et donner aux développeurs tiers un point d'entrée
+clair pour écrire leur propre module.
 
-Scope :
+Livré :
 
-- 🌍 Internationalisation FR / EN du dashboard.
-- 📚 Documentation utilisateur complète (côté admin de communauté).
-- 🧩 Guide de création de module tiers avec un exemple minimal
-  pas-à-pas.
-- 🐳 Compose de production, image Docker, variables d'environnement
-  documentées exhaustivement.
-- 🎭 Tests Playwright sur les parcours critiques du dashboard.
+- 🐳 Compose de production avec quatre services (`bot`, `dashboard`,
+  `postgres`, `redis`), images Docker multi-stages (Node 24 LTS,
+  user non-root, healthchecks chaînés), volumes persistants pour
+  la base et les uploads, service utilitaire de migration.
+- 🔐 `.env.example` exhaustif, généré à partir de l'audit du code,
+  avec toutes les variables d'environnement consommées.
+- 📖 Guide de déploiement pas-à-pas (`docs/DEPLOYMENT.md`) :
+  pré-requis, création de l'application Discord, premier `up`,
+  smoke test, mise en place d'un reverse-proxy Caddy pour le
+  HTTPS, sauvegardes, mise à jour, troubleshooting.
+- 📚 Guide utilisateur (`docs/USER-GUIDE.md`) destiné aux admins de
+  communauté Discord — usage du dashboard, des cinq modules, du
+  journal d'audit, des permissions, du branchement IA optionnel.
+- 🧩 Guide de création de module (`docs/MODULE-AUTHORING.md`)
+  pas-à-pas, accompagné d'un module exemple fonctionnel
+  (`modules/example-counter/`).
+- 🛡️ Documentation publique de tous les fichiers `docs/` du projet
+  qui n'étaient jusque-là accessibles qu'en interne (architecture,
+  conventions, ADR, scope, roadmap, opérations, tests, assets).
+
+**Critère de sortie atteint** : compose prod fonctionnel et
+documenté, doc admin et doc dev publiées, instance prête à
+tourner 24/24 sur une machine fraîche en moins de 5 minutes
+après la première installation.
+
+> ✂️ **Reportés au jalon 7** : l'internationalisation FR/EN du
+> dashboard et les tests E2E Playwright. Ces deux chantiers
+> dépendent fortement de l'UI actuelle, qui va être refondue au
+> jalon 7 — coder l'i18n ou des sélecteurs Playwright maintenant
+> serait du travail jeté.
+
+---
+
+## Jalon 7 — refonte UI/UX et simplification de l'installation
+
+**Objectif :** rendre la mise en place et l'usage quotidien
+nettement plus simples, à la fois pour l'admin qui installe et
+pour la modératrice qui utilise au jour le jour.
+
+Scope (axes principaux, à détailler dans le plan d'exécution) :
+
+- 🎨 Refonte UI/UX du dashboard (cohérence visuelle, parcours
+  simplifiés, retours utilisateurs intégrés).
+- 🧰 Simplification de l'installation et de la première
+  configuration (assistants intégrés, défauts plus pertinents,
+  diagnostic de configuration).
+- 🌍 Internationalisation FR/EN du dashboard, posée sur l'UI
+  refondue.
+- 🎭 Tests Playwright sur les parcours critiques, posés une fois
+  l'UI stabilisée.
 - 📜 Changelog complet, tag `v1.0.0`, release GitHub.
 
 **Critère de sortie :** V1.0.0 publiable.
 
 ---
 
-## Après la V1
+## Jalon 8 — modules V1.1 additionnels
+
+**Objectif :** étendre le catalogue des modules officiels en
+s'appuyant sur le contrat plugin stabilisé.
+
+Le périmètre exact sera arrêté à l'ouverture du jalon en
+fonction des retours utilisateurs sur la V1. Pistes prévues :
+modules de niveaux et progression, tickets de support, annonces
+programmées, alertes de sources externes (Twitch / YouTube / RSS).
+
+---
+
+## Au-delà — pistes V1.2 et V2
 
 Liste indicative, à réévaluer selon les retours des premières
 instances en production.
-
-### V1.1 — modules officiels additionnels
-
-- `leveling` : XP, rangs, rôles de récompense.
-- `tickets` : support avec salons privés, transcripts, assignation.
-- `announcements` : annonces programmées, rappels.
 
 ### V1.2 — amélioration de l'infrastructure
 

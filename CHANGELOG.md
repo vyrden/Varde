@@ -7,6 +7,204 @@ Les versions adhèrent à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+Aucun changement non publié pour le moment. Les chantiers du
+**jalon 7** (refonte UI/UX, simplification de l'installation,
+internationalisation FR/EN, tests Playwright) atterriront ici
+au fil des PR.
+
+## [0.6.0] — 2026-04-28
+
+### Jalon 6 — production-ready
+
+Une instance Varde s'installe désormais sur une machine fraîche
+avec un seul `docker compose up`, configuration en variables
+d'environnement, doc utilisateur et doc dev publiées.
+
+**Ajouté :**
+
+- `docker/Dockerfile.bot` et `docker/Dockerfile.dashboard` :
+  images multi-stages basées sur Node 24 LTS slim, user non-root
+  (uid 10001), healthchecks via `curl /health` et `curl /`.
+  L'image dashboard s'appuie sur `next build` en mode
+  `output: 'standalone'`.
+- `docker/docker-compose.prod.yml` : pile complète à quatre
+  services (`bot`, `dashboard`, `postgres`, `redis`) plus un
+  service utilitaire de migration. Healthchecks chaînés via
+  `depends_on.condition: service_healthy`. Volumes persistants
+  pour Postgres, Redis et les uploads. Postgres et Redis ne sont
+  pas exposés sur le host.
+- `packages/db/src/cli/migrate-pg.ts` : runner CLI de migration
+  Postgres compilé (sans `tsx`), invocable directement depuis
+  l'image bot via le service `migrate`.
+- `apps/dashboard/next.config.mjs` : `output: 'standalone'` et
+  `outputFileTracingRoot` pointé sur la racine du monorepo, pour
+  que le standalone trace correctement les paquets workspace.
+- `.dockerignore` à la racine du repo : ramène le contexte de
+  build de plusieurs centaines de Mo à quelques Mo.
+- `.env.example` exhaustif, audité contre les variables
+  réellement consommées par le code (ajout de
+  `VARDE_UPLOADS_DIR`, `VARDE_KEYSTORE_PREVIOUS_MASTER_KEY` ;
+  retrait de `VARDE_ENV` non consommé).
+- `docs/DEPLOYMENT.md` réécrit en parcours pas-à-pas : pré-requis
+  matériels, création de l'application Discord, génération des
+  secrets via `openssl rand`, premier `docker compose up`, smoke
+  test, mise en place d'un reverse-proxy Caddy, sauvegardes,
+  procédure de mise à jour, troubleshooting des erreurs courantes.
+- `docs/USER-GUIDE.md` : guide pour les administrateurs et
+  modératrices de communauté Discord. Couvre le dashboard, le
+  parcours d'onboarding, les cinq modules officiels, le journal
+  d'audit, le mappage permissions ↔ rôles Discord, le branchement
+  optionnel d'une IA, les pièges fréquents (hiérarchie de rôles,
+  intents, faux positifs automod).
+- `docs/MODULE-AUTHORING.md` : guide pas-à-pas pour écrire un
+  module Varde. Anatomie, manifeste, configuration (Zod +
+  configUi), souscription d'événements, slash-commands typées,
+  persistance, audit / i18n / logger, tests, distribution,
+  conventions.
+- `modules/example-counter/` : module exemple fonctionnel utilisé
+  comme référence dans le guide. Compte les messages par membre,
+  expose `/count`, illustre le contrat plugin sans charger trop
+  de complexité (stockage en mémoire, limite assumée et expliquée
+  comme tremplin vers `ctx.db`).
+- Documentation publique de l'ensemble du dossier `docs/` : les
+  fichiers d'architecture, conventions, ADR, scope, roadmap,
+  opérations, tests et assets sont désormais accessibles depuis
+  le repo public, à l'exception des sections explicitement
+  internes (`docs/plans/`, `docs/modules/`, `docs/DA/`,
+  `docs/ETAT-DU-PROJET.md`).
+
+**Modifié :**
+
+- `docs/ROADMAP.md` réécrit en version synthétique, sans les
+  spécifications internes de modules, avec un tableau de
+  synthèse jalon par jalon.
+- `docs/OPERATIONS.md` rafraîchi : retrait des mentions « V0 /
+  pas de tag », ajout des tags publiés, pointeur vers
+  `SECURITY.md` pour les procédures opérateur.
+- `docs/ONBOARDING.md` : section « à trancher » remplacée par les
+  décisions effectivement prises au jalon 3.
+- `README.md` : section « Documentation détaillée » réorganisée
+  par audience (administrateurs / développeurs / référence).
+
+**Sécurité :**
+
+- Faux positif CodeQL `js/missing-rate-limiting` fermé sur
+  `GET /me` en réappliquant explicitement la config globale via
+  `{ config: { rateLimit: {} } }` (no-op fonctionnel, le
+  pre-handler global posait déjà les bornes).
+- Parsers de listes Markdown du composant `DiscordMessagePreview`
+  remplacés par des analyseurs caractère par caractère, en
+  remplacement des regex avec quantifiers — ferme les
+  signalements ReDoS des scanners statiques (faux positifs
+  bornés mais visibles), garantit une borne O(n) sur la taille
+  de l'entrée.
+
+> **Reportés au jalon 7** : internationalisation FR/EN du
+> dashboard et tests Playwright. Ces deux chantiers dépendent
+> fortement de l'UI actuelle, qui sera refondue au jalon 7.
+
+## [0.5.0] — 2026-04-27
+
+### Jalon 5 — sécurité béton et polish technique
+
+Audit complet de la surface d'attaque et durcissement, mise en
+place des procédures opérateur pour les rotations de secrets,
+couverture de tests poussée au-delà de 75 % sur le cœur et
+l'API.
+
+**Sécurité :**
+
+- `pnpm audit` clean (zéro CRITICAL/HIGH), audit bloquant en CI.
+- Headers de sécurité (CSP, HSTS, X-Frame-Options,
+  X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+  sur 100 % des réponses HTTP côté API (`@fastify/helmet`) et
+  dashboard (`next.config.mjs#headers()`).
+- Rate limiting global API à 300 req/min/IP (`@fastify/rate-limit`),
+  plafond serré à 10 req/min/IP sur les routes IA coûteuses
+  (`/onboarding/ai/*`).
+- Vérification des magic bytes sur les uploads d'images
+  (cartes welcome) en plus du `Content-Type`.
+- Test statique qui parse les fichiers de routes et vérifie
+  que toute route mutante appelle `requireGuildAdmin` —
+  empêche toute future route d'oublier le contrôle d'accès.
+- Audit complet du flow Auth.js v5, redaction explicite de
+  l'access token Discord côté client sur `/me`.
+- `SECURITY.md` enrichi : modèle de menaces V1, procédures
+  opérateur (rotation de la master key du keystore, rotation
+  du secret de session, révocation du token bot, révocation
+  d'une clé API IA, bench p95, validation 24 h pré-release).
+
+**Robustesse :**
+
+- Observabilité du gateway Discord : listeners sur `error`,
+  `shardError`, `shardDisconnect`, `shardReconnecting`,
+  `shardReady`, `shardResume`, `warn`.
+- Résilience DB validée : graceful 5xx, pas de crash process
+  sur perte de connexion.
+- Rotation de la master key du keystore testée bout-en-bout
+  (génération nouvelle clé, déclaration `previousMasterKey`,
+  re-chiffrement transparent à la prochaine écriture).
+
+**Hygiène :**
+
+- Couverture de tests `core` et `api` poussée au-delà de 75 %,
+  plancher anti-régression en CI (`coverageThresholds` dans la
+  config Vitest partagée).
+- Bundle dashboard sous plafond (~355 Ko gzipped), check CI.
+- Overrides pnpm pour fermer deux vulnérabilités modérées
+  transitives (`uuid >= 11.1.0`, `postcss >= 8.5.10`).
+
+## [0.4.0] — 2026-04-27
+
+### Jalon 4 — modules officiels V1
+
+Les cinq capacités V1 livrées avec exactement la même API que
+les modules tiers (« aucun privilège officiel »).
+
+**Modules ajoutés :**
+
+- `modules/logs` : audit Discord routé par type d'événement
+  (~30 événements natifs : arrivées / départs, modifications
+  rôles / salons, suppressions de messages, etc.). Mode simple
+  (un seul salon, cases à cocher par famille) ou mode avancé
+  (N routes nommées, chacune sur un sous-ensemble d'événements
+  et son salon). Bufferisation des routes cassées avec bouton
+  « Rejouer ».
+- `modules/welcome` : accueil et départs configurables,
+  destination salon ou DM, carte d'avatar 700×250 PNG générée
+  via `@napi-rs/canvas` (avatar circulaire, fond couleur ou
+  image custom uploadée, polices intégrées et système),
+  auto-rôle avec délai configurable, filtre comptes neufs
+  (kick ou quarantaine).
+- `modules/reaction-roles` : auto-attribution de rôles par
+  réaction emoji ou par bouton Discord, mélangeables sur le
+  même message. Trois modes : `normal` (toggle), `unique` (un
+  seul rôle parmi plusieurs), `vérificateur`. Picker d'emojis
+  tabbé (Unicode curé, emojis du serveur, emojis d'autres
+  serveurs où le bot est invité). Six templates prêts à
+  l'emploi.
+- `modules/moderation` : slash-commands manuelles (`/ban`,
+  `/kick`, `/mute`, `/tempban`, `/tempmute`, `/unban`,
+  `/unmute`, `/warn`, `/clear`, `/slowmode`, `/case`,
+  `/infractions`) et automod multi-règles (12 types : blacklist,
+  regex, mots-clés multilingues, anti-flood, classification IA,
+  invitations, liens, majuscules, emojis, spoilers, mentions,
+  zalgo) avec actions composables (`delete`, `warn`, `mute`),
+  rôles bypass, salons restreints.
+- `onboarding-presets` (livré en API plutôt qu'en module bot,
+  voir ADR 0010) : catalogue de 5 presets éditables avec
+  apply / rollback Discord.
+
+**UX dashboard :**
+
+- Refonte single-page sur les quatre pages module (logs,
+  welcome, reaction-roles, moderation).
+- Primitives partagées dans `@varde/ui` : `StickyActionBar`,
+  `CollapsibleSection`, `EntityMultiPicker`,
+  `DiscordMessagePreview`, `useDirtyExitGuard`.
+
+## [Avant 0.4.0]
+
 ### Jalon 3 — moteur d'onboarding (2026-04-22)
 
 Clos. Critère de sortie ROADMAP vérifié : avec un module témoin
