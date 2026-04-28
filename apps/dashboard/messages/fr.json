@@ -1,0 +1,9 @@
+{
+  "auth": {
+    "signIn": {
+      "title": "Bienvenue sur Varde",
+      "description": "Connectez-vous avec Discord pour accéder à la configuration des serveurs sur lesquels vous avez les droits d'administration.",
+      "button": "Se connecter avec Discord"
+    }
+  }
+}

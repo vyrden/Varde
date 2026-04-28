@@ -1,0 +1,9 @@
+{
+  "auth": {
+    "signIn": {
+      "title": "Welcome to Varde",
+      "description": "Sign in with Discord to manage the servers on which you have administrator rights.",
+      "button": "Sign in with Discord"
+    }
+  }
+}

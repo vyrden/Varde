@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Noto_Sans } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import type { ReactElement, ReactNode } from 'react';
 
 import './globals.css';
@@ -22,10 +24,23 @@ export const metadata: Metadata = {
   description: 'Dashboard du projet Varde.',
 };
 
-export default function RootLayout({ children }: { readonly children: ReactNode }): ReactElement {
+export default async function RootLayout({
+  children,
+}: {
+  readonly children: ReactNode;
+}): Promise<ReactElement> {
+  // La locale est résolue par `i18n/request.ts` à partir du cookie
+  // `NEXT_LOCALE` ou de l'en-tête `Accept-Language`. `getMessages`
+  // charge le JSON correspondant côté serveur.
+  const locale = await getLocale();
+  const messages = await getMessages();
   return (
-    <html lang="fr" className={`${notoSans.variable} dark`}>
-      <body className="font-sans antialiased">{children}</body>
+    <html lang={locale} className={`${notoSans.variable} dark`}>
+      <body className="font-sans antialiased">
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
     </html>
   );
 }

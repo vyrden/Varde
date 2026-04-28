@@ -1,4 +1,5 @@
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@varde/ui';
+import { getTranslations } from 'next-intl/server';
 import type { ReactElement } from 'react';
 
 import { signIn } from '../auth';
@@ -15,16 +16,14 @@ import { signIn } from '../auth';
  * token d'Auth.js automatiquement et redirige vers `/` après
  * consent Discord.
  */
-export function SignInCard(): ReactElement {
+export async function SignInCard(): Promise<ReactElement> {
+  const t = await getTranslations('auth.signIn');
   return (
     <div className="mx-auto mt-20 max-w-md">
       <Card>
         <CardHeader>
-          <CardTitle>Bienvenue sur Varde</CardTitle>
-          <CardDescription>
-            Connectez-vous avec Discord pour accéder à la configuration des serveurs sur lesquels
-            vous avez les droits d'administration.
-          </CardDescription>
+          <CardTitle>{t('title')}</CardTitle>
+          <CardDescription>{t('description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
@@ -34,7 +33,7 @@ export function SignInCard(): ReactElement {
             }}
           >
             <Button type="submit" className="w-full">
-              Se connecter avec Discord
+              {t('button')}
             </Button>
           </form>
         </CardContent>

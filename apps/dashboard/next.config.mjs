@@ -1,7 +1,13 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import createNextIntlPlugin from 'next-intl/plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Plugin next-intl : pointe vers la config serveur (`i18n/request.ts`)
+// qui résout la locale active à partir du cookie `NEXT_LOCALE` ou
+// de l'en-tête `Accept-Language`. Voir `i18n/README.md`.
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 
 /** @type {import('next').NextConfig} */
 
@@ -118,4 +124,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);
