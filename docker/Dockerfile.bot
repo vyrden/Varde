@@ -1,0 +1,114 @@
+# syntax=docker/dockerfile:1.7
+
+# Image bot + API : un seul process Node qui héberge le bot Discord
+# et l'API HTTP du dashboard (apps/server, ADR 0004).
+#
+# Build : depuis la racine du repo,
+#   docker build -f docker/Dockerfile.bot -t varde/bot:dev .
+# Run : assuré par docker/docker-compose.prod.yml.
+
+# ---------------------------------------------------------------------
+# Stage 1 — base : Node 24 LTS + corepack pour activer pnpm.
+# ---------------------------------------------------------------------
+FROM node:24-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    NODE_ENV=production
+RUN corepack enable
+
+# ---------------------------------------------------------------------
+# Stage 2 — builder : install dev + build TypeScript du monorepo.
+#
+# Strategy pnpm + Docker :
+#   1. Copier d'abord pnpm-lock.yaml + tous les package.json pour
+#      maximiser le cache Docker. Tant que les manifests ne changent
+#      pas, on évite de réinstaller à chaque modif de code.
+#   2. `pnpm install --frozen-lockfile` (devDeps incluses : on a
+#      besoin de tsc et des types pour build).
+#   3. Copier le reste de la source et builder.
+# ---------------------------------------------------------------------
+FROM base AS builder
+WORKDIR /repo
+
+# Copy de tous les manifests pour résolution workspace pnpm.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/bot/package.json ./apps/bot/
+COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/server/package.json ./apps/server/
+COPY packages/ai/package.json ./packages/ai/
+COPY packages/config/package.json ./packages/config/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/core/package.json ./packages/core/
+COPY packages/db/package.json ./packages/db/
+COPY packages/presets/package.json ./packages/presets/
+COPY packages/testing/package.json ./packages/testing/
+COPY packages/ui/package.json ./packages/ui/
+COPY modules/hello-world/package.json ./modules/hello-world/
+COPY modules/logs/package.json ./modules/logs/
+COPY modules/moderation/package.json ./modules/moderation/
+COPY modules/onboarding-test/package.json ./modules/onboarding-test/
+COPY modules/reaction-roles/package.json ./modules/reaction-roles/
+COPY modules/welcome/package.json ./modules/welcome/
+
+# Install : on garde NODE_ENV=production mais on force --prod=false
+# pour récupérer aussi les devDependencies (tsc, @types, vitest).
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod=false
+
+# Source complète et build.
+COPY apps ./apps
+COPY packages ./packages
+COPY modules ./modules
+
+# Build : pnpm résout l'ordre topologique grâce à `--filter ...` qui
+# inclut les dépendances workspace transitives. `--workspace-concurrency`
+# laissé au défaut (parallèle) — turbo apporte peu sur ce graphe.
+RUN pnpm --filter @varde/server... build
+
+# ---------------------------------------------------------------------
+# Stage 3 — deploy : pnpm deploy isole apps/server avec ses node_modules
+# de prod uniquement, dans un dossier autonome qu'on copie en runtime.
+# ---------------------------------------------------------------------
+FROM builder AS deploy
+# `--legacy` : depuis pnpm 10, deploy exige `inject-workspace-packages`
+# ou ce flag pour assembler un dossier autonome avec les workspace deps
+# matérialisées (pas de symlinks).
+RUN pnpm --filter=@varde/server --legacy deploy --prod /deploy
+
+# ---------------------------------------------------------------------
+# Stage 4 — runtime : image minimale, user non-root, healthcheck.
+# ---------------------------------------------------------------------
+FROM node:24-bookworm-slim AS runtime
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--enable-source-maps"
+
+# Healthcheck via curl (5 KB) — pas de wget ou autre.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# User non-root (uid/gid 10001 explicites pour reproductibilité).
+RUN groupadd --system --gid 10001 varde \
+    && useradd --system --uid 10001 --gid varde --create-home --home-dir /home/varde varde
+
+WORKDIR /app
+COPY --from=deploy --chown=varde:varde /deploy ./
+
+# Volume pour les uploads (cartes welcome, polices custom). Doit être
+# monté sur un volume persistant en compose prod.
+RUN mkdir -p /var/lib/varde/uploads && chown -R varde:varde /var/lib/varde
+ENV VARDE_UPLOADS_DIR=/var/lib/varde/uploads
+
+USER varde
+EXPOSE 4000
+
+# Healthcheck : /health du Fastify répond 200 dès que l'API écoute.
+# Délai de 30 s avant la première vérification pour laisser au bot
+# le temps de se connecter à Postgres et au gateway Discord.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:4000/health || exit 1
+
+# Lecture directe de l'env passé par compose (pas de --env-file qui
+# pointerait vers un .env.local du host inexistant en image).
+CMD ["node", "dist/bin.js"]

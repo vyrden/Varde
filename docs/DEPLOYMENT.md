@@ -1,145 +1,347 @@
-# Déploiement
+# Installer Varde sur votre machine
 
-Ce document décrit comment installer, configurer et exploiter une
-instance Varde en production auto-hébergée. Il est découpé en sections
-indépendantes, à parcourir dans l'ordre la première fois puis à
-consulter séparément.
+Ce guide vous accompagne pas à pas pour faire tourner Varde sur
+votre serveur. Comptez **15 à 20 minutes** la première fois si Docker
+est déjà installé. Pas besoin d'être développeur — il faut juste
+être à l'aise avec un terminal Linux.
 
-Document en cours de construction pendant le jalon 0. Des sections
-seront étoffées au fur et à mesure que les composants concernés
-arrivent (keystore au jalon 1, migrations au jalon 1, etc.).
+> 💡 **Une instance = un serveur Discord, ou plusieurs ?** Une seule
+> instance peut gérer autant de serveurs Discord que vous voulez,
+> à condition d'inviter le bot sur chacun. Vous n'avez pas besoin
+> de relancer Varde pour chaque communauté.
 
-## Prérequis
+## 📋 Sommaire
 
-- Machine Linux (x86_64 ou arm64) avec Docker 24+ et Docker Compose v2.
-- Accès sortant vers `discord.com` et `gateway.discord.gg`.
-- 2 GB de RAM minimum pour une instance modeste, 4 GB recommandés
-  dès qu'un module d'audit avec rétention active tourne.
-- Stockage : 5 GB minimum pour la base et les logs, à dimensionner
-  selon le volume réel.
+1. [Avant de commencer](#avant-de-commencer)
+2. [Créer l'application Discord](#créer-lapplication-discord)
+3. [Récupérer le code](#récupérer-le-code)
+4. [Préparer la configuration](#préparer-la-configuration)
+5. [Premier démarrage](#premier-démarrage)
+6. [Vérifier que tout fonctionne](#vérifier-que-tout-fonctionne)
+7. [Mettre Varde derrière un domaine HTTPS](#mettre-varde-derrière-un-domaine-https)
+8. [Sauvegardes](#sauvegardes)
+9. [Mettre à jour Varde](#mettre-à-jour-varde)
+10. [Procédures de sécurité](#procédures-de-sécurité)
+11. [En cas de problème](#en-cas-de-problème)
 
-Pour la création d'une application Discord et les identifiants
-associés : voir [../CONTRIBUTING.md](../CONTRIBUTING.md) section
-"Créer une application Discord de test". Les étapes sont identiques
-en prod ; seuls l'URL de redirection OAuth2 et la gestion des secrets
-diffèrent.
+---
 
-## Docker compose de référence
+## Avant de commencer
 
-Un fichier `docker/docker-compose.prod.yml` sera fourni au jalon 5
-(polish V1), avec cinq services : `bot`, `api`, `dashboard`, `postgres`,
-`redis`.
+### Ce qu'il vous faut côté machine
 
-À renseigner par l'admin :
+| Ressource | Minimum | Recommandé |
+| --- | --- | --- |
+| 💻 OS | Linux (x86_64 ou arm64) | Debian 12, Ubuntu 22.04 / 24.04 |
+| 🧠 RAM | 2 GB | 4 GB |
+| 💾 Disque | 5 GB libres | 20 GB |
+| 🌐 Réseau | Sortie autorisée vers `discord.com` et `gateway.discord.gg` | Pareil + un domaine pointant sur la machine si vous voulez du HTTPS |
+| 📦 Docker | Docker Engine 24+ | Idem + Docker Compose v2 |
 
-- Variables d'environnement via un `.env` à côté du compose
-  (jamais committé).
-- Volumes de données nommés (par défaut `varde_postgres_data`,
-  `varde_redis_data`).
-- Exposition des ports : dashboard seul exposé en frontal, bot et API
-  écoutent en interne.
+> 🐳 **Pas encore Docker ?** Suivez le guide officiel
+> [docs.docker.com/engine/install](https://docs.docker.com/engine/install/),
+> puis vérifiez avec `docker --version` et `docker compose version`.
 
-## Variables d'environnement
+### Comptes nécessaires
 
-La liste exhaustive est dans [`.env.example`](../.env.example).
-Variables obligatoires au démarrage :
+- Un **compte Discord** sous lequel l'application bot sera créée.
+- Un **terminal SSH** sur la machine où vous installez Varde.
 
-- `VARDE_DISCORD_TOKEN`
-- `VARDE_DISCORD_CLIENT_ID`
-- `VARDE_DISCORD_CLIENT_SECRET`
-- `VARDE_DATABASE_URL`
-- `VARDE_REDIS_URL` (sauf mode dégradé — voir ADR 0003)
-- `VARDE_SESSION_SECRET` (≥ 32 octets aléatoires)
-- `VARDE_KEYSTORE_MASTER_KEY` (32 octets en base64)
+---
 
-Les variables manquantes font échouer le démarrage avec un message
-explicite (principe « fail fast »).
+## Créer l'application Discord
 
-## Migrations
+Vous allez d'abord déclarer le bot sur le Developer Portal de
+Discord. Cette étape ne touche pas à votre serveur Varde.
 
-Les migrations ne sont **jamais** appliquées automatiquement en prod.
-Elles sont exécutées explicitement par l'admin :
+1. **Aller sur** [discord.com/developers/applications](https://discord.com/developers/applications)
+   et cliquer sur **« New Application »**.
+2. Choisir un nom (par ex. `Varde`), accepter les conditions, créer.
+3. **Onglet `OAuth2`** :
+   - Noter le **Client ID** et révéler le **Client Secret** :
+     ce seront `VARDE_DISCORD_CLIENT_ID` et
+     `VARDE_DISCORD_CLIENT_SECRET`.
+   - Section « Redirects », ajouter :
+     `https://votre-domaine.com/api/auth/callback/discord`
+     (ou, en dev local : `http://localhost:3000/api/auth/callback/discord`).
+4. **Onglet `Bot`** :
+   - Cliquer **« Reset Token »** et copier le token affiché —
+     c'est `VARDE_DISCORD_TOKEN`. Vous ne le reverrez plus, donc
+     mettez-le tout de suite en lieu sûr.
+   - Activer **« Server Members Intent »** et **« Message
+     Content Intent »** (Varde en a besoin pour les modules
+     `welcome` et `moderation`).
+
+> ⚠️ **Le token bot est un secret aussi sensible qu'un mot de passe
+> maître.** S'il fuit, n'importe qui peut prendre le contrôle de
+> votre bot. Voir [SECURITY.md](../SECURITY.md) pour la procédure de
+> révocation rapide.
+
+---
+
+## Récupérer le code
 
 ```sh
-docker compose -f docker/docker-compose.prod.yml exec bot pnpm db:migrate
+git clone https://github.com/vyrden/Varde.git varde
+cd varde
 ```
 
-Lire la section migration du `CHANGELOG.md` avant chaque upgrade.
+Pour rester sur une version stable, basculez sur le dernier tag :
 
-Détails de la stratégie dans [ARCHITECTURE.md](./ARCHITECTURE.md)
-section Migrations DB.
+```sh
+git fetch --tags
+git checkout v0.5.0   # ou la version la plus récente publiée
+```
 
-## Sauvegarde et restauration
+> 📦 Une image Docker pré-publiée arrive avec la V1.0.0. En attendant,
+> les Dockerfiles sont buildés depuis les sources lors du premier
+> `docker compose up` (comptez 3 à 5 minutes la première fois).
+
+---
+
+## Préparer la configuration
+
+1. **Copier le modèle de variables d'environnement** :
+
+   ```sh
+   cp .env.example docker/.env
+   ```
+
+2. **Générer les secrets cryptographiques** :
+
+   ```sh
+   echo "VARDE_AUTH_SECRET=$(openssl rand -base64 32)" >> docker/.env
+   echo "VARDE_KEYSTORE_MASTER_KEY=$(openssl rand -base64 32)" >> docker/.env
+   ```
+
+3. **Éditer `docker/.env`** et compléter :
+
+   | Variable | Valeur attendue |
+   | --- | --- |
+   | `VARDE_DISCORD_TOKEN` | Le token de l'étape précédente. |
+   | `VARDE_DISCORD_CLIENT_ID` | Client ID OAuth2. |
+   | `VARDE_DISCORD_CLIENT_SECRET` | Client Secret OAuth2. |
+   | `VARDE_DASHBOARD_URL` | `https://votre-domaine.com` (ou `http://localhost:3000` en dev). |
+   | `VARDE_POSTGRES_PASSWORD` | Un mot de passe long, généré aléatoirement. |
+   | `VARDE_LOG_LEVEL` | `info` en prod, `debug` pour investiguer. |
+
+   > 🔐 Stockez `VARDE_KEYSTORE_MASTER_KEY` dans un gestionnaire de
+   > secrets séparé (Bitwarden, 1Password, KeePass…) en plus du
+   > fichier sur la machine. Sans cette clé, vous ne pourrez plus
+   > déchiffrer les clés API IA stockées en base si la machine
+   > meurt.
+
+---
+
+## Premier démarrage
+
+Tout passe par Docker Compose à partir d'ici.
+
+1. **Construire les images et démarrer la pile** :
+
+   ```sh
+   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --build
+   ```
+
+   Quatre conteneurs vont démarrer : `varde-postgres`, `varde-redis`,
+   `varde-bot`, `varde-dashboard`.
+
+2. **Appliquer les migrations de base de données** (à faire une seule
+   fois, après le tout premier `up`) :
+
+   ```sh
+   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env --profile migrate run --rm migrate
+   ```
+
+   Vous devriez voir `[db] migrations Postgres appliquées`.
+
+3. **Inviter le bot sur votre serveur Discord** : ouvrez l'URL
+   suivante dans un navigateur, en remplaçant `CLIENT_ID` :
+
+   ```text
+   https://discord.com/oauth2/authorize?client_id=CLIENT_ID&permissions=8&scope=bot+applications.commands
+   ```
+
+   `permissions=8` correspond à « Administrator », recommandé en
+   première installation pour que tous les modules fonctionnent
+   sans blocage de permissions. Vous pourrez restreindre plus tard.
+
+---
+
+## Vérifier que tout fonctionne
+
+```sh
+# Le dashboard répond ?
+curl -fsS http://localhost:3000/ -o /dev/null && echo "✅ dashboard OK"
+
+# L'API interne répond ? (depuis l'hôte Docker)
+docker compose -f docker/docker-compose.prod.yml exec bot \
+  curl -fsS http://127.0.0.1:4000/health
+# → {"status":"ok",...}
+
+# Le bot a-t-il rejoint le gateway Discord ?
+docker compose -f docker/docker-compose.prod.yml logs bot | grep "Client Discord ready"
+# → ... "tag":"VotreBot#1234","guilds":1 ...
+```
+
+Ouvrez ensuite **`http://localhost:3000`** dans votre navigateur
+(ou votre domaine HTTPS) et connectez-vous avec votre compte Discord.
+
+---
+
+## Mettre Varde derrière un domaine HTTPS
+
+En production, n'exposez jamais le port 3000 directement à Internet —
+mettez un **reverse-proxy** devant pour gérer le TLS. Le plus simple
+est **Caddy**, qui obtient automatiquement un certificat Let's Encrypt.
+
+Sur la même machine que Varde, installez Caddy
+([caddyserver.com/docs/install](https://caddyserver.com/docs/install))
+puis créez `/etc/caddy/Caddyfile` :
+
+```caddy
+votre-domaine.com {
+    reverse_proxy localhost:3000
+}
+```
+
+Rechargez : `sudo systemctl reload caddy`. C'est tout — Caddy
+demande le certificat à Let's Encrypt et redirige `:80 → :443`.
+
+> 🛡️ Avec un reverse-proxy, vérifiez que votre `.env` contient
+> bien l'URL **HTTPS** dans `VARDE_DASHBOARD_URL`, et que le redirect
+> OAuth2 dans le Discord Developer Portal pointe vers
+> `https://votre-domaine.com/api/auth/callback/discord`.
+
+---
+
+## Sauvegardes
 
 ### Postgres
 
+Sauvegarde quotidienne recommandée. Dans un `cron` :
+
 ```sh
-docker compose exec postgres pg_dump -U varde -Fc varde > backup-$(date +%F).dump
+0 3 * * * docker compose -f /chemin/vers/varde/docker/docker-compose.prod.yml \
+  exec -T postgres pg_dump -U varde -Fc varde \
+  > /var/backups/varde/db-$(date +\%F).dump
 ```
 
 Restauration :
 
 ```sh
-docker compose exec -T postgres pg_restore -U varde -d varde < backup.dump
+docker compose -f docker/docker-compose.prod.yml \
+  exec -T postgres pg_restore -U varde -d varde --clean < backup.dump
 ```
 
-### SQLite (mode petit déploiement)
+### Uploads (cartes welcome, polices custom)
 
-Utiliser la commande `.backup` de `sqlite3`, pas une copie brute du
-fichier :
+Le volume Docker `varde_prod_bot_uploads` contient les images
+uploadées par les admins. Sauvegardez-le :
 
 ```sh
-sqlite3 /var/lib/varde/varde.db ".backup /var/lib/varde/backup-$(date +%F).db"
+docker run --rm \
+  -v varde_prod_bot_uploads:/data:ro \
+  -v $(pwd):/backup \
+  alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
 ```
 
-Fréquence recommandée pour un serveur actif : quotidienne, rétention
-30 jours. À adapter selon volumétrie.
+---
 
-## Rotation du keystore
+## Mettre à jour Varde
 
-Le keystore stocke les secrets tiers (tokens d'intégrations, etc.)
-chiffrés par `VARDE_KEYSTORE_MASTER_KEY` (AES-256-GCM).
+```sh
+# Récupérer la nouvelle version
+git fetch --tags
+git checkout v0.6.0   # ou la cible souhaitée
 
-Rotation à effectuer tous les 12 mois ou après suspicion de fuite. La
-procédure complète sera documentée lors de l'implémentation du module
-keystore (jalon 1). Principe : clé `NEXT` configurée en parallèle,
-commande de réencryption, bascule.
+# Lire le CHANGELOG entre votre version actuelle et la nouvelle
+cat CHANGELOG.md
 
-## Bascule Postgres ↔ SQLite
+# Rebuilder et relancer
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env up -d --build
 
-SQLite est accepté pour les petits déploiements. Au-delà d'un certain
-seuil (quelques centaines de serveurs actifs, écritures fréquentes),
-Postgres devient nécessaire. Une procédure de migration des données
-sera documentée post-V1 si un besoin concret émerge.
+# Appliquer les nouvelles migrations s'il y en a
+docker compose -f docker/docker-compose.prod.yml --env-file docker/.env \
+  --profile migrate run --rm migrate
+```
 
-## Mode dégradé sans Redis
+> 📋 **Lisez toujours le `CHANGELOG.md`** avant une mise à jour.
+> Les variables d'environnement ajoutées y sont signalées, comme
+> les éventuelles migrations manuelles à faire.
 
-Voir [adr/0003-mode-degrade-redis.md](./adr/0003-mode-degrade-redis.md).
-Section dédiée à ajouter ici au jalon 5 avec les commandes et
-observations exploitables.
+---
 
-## Checklist de mise en production
+## Procédures de sécurité
 
-- Application Discord créée, intents activés, scopes déclarés.
-- `.env` renseigné, toutes les variables `VARDE_*` obligatoires
-  présentes.
-- `KEYSTORE_MASTER_KEY` stockée dans un gestionnaire de secrets
-  indépendant du repo et des sauvegardes applicatives.
-- Volumes Docker montés sur disque persistant, pas éphémère.
-- Domaine du dashboard configuré, TLS terminé en amont via reverse
-  proxy.
-- `/health/ready` surveillé, alerte configurée.
-- Sauvegarde Postgres planifiée et restauration éprouvée au moins une
-  fois.
-- Rotation des logs déléguée à l'hébergeur.
-- Bannière "Mode dégradé actif" absente (si Redis attendu).
+Les procédures sensibles (rotation de la master key, révocation du
+token bot, rotation du secret de session) sont décrites pas à pas
+dans **[SECURITY.md](../SECURITY.md)**. À garder sous la main avant
+qu'un incident arrive, pas après.
 
-## Observabilité
+---
 
-Détails dans [ARCHITECTURE.md](./ARCHITECTURE.md) section
-Observabilité. Points clés à documenter ici au fil des jalons :
+## En cas de problème
 
-- Format des logs Pino et champs stables.
-- Tableau de métriques Prometheus exposées sur `/metrics` et
-  recommandations d'agrégation.
-- Endpoints `/health/live` et `/health/ready` et leurs sémantiques.
+### `pg_isready` ne passe pas, le bot reste en `unhealthy`
+
+Le conteneur Postgres met du temps au premier démarrage (init de la
+base, healthcheck en attente). Vérifiez les logs :
+
+```sh
+docker compose -f docker/docker-compose.prod.yml logs postgres | tail
+```
+
+Si vous voyez `database system is ready to accept connections`,
+patientez — le bot retentera la connexion automatiquement.
+
+### Le dashboard répond 500 au login OAuth
+
+Vérifiez :
+
+1. Le redirect URI déclaré dans le Discord Developer Portal
+   correspond **exactement** (à la barre oblique près) à
+   `${VARDE_DASHBOARD_URL}/api/auth/callback/discord`.
+2. `VARDE_AUTH_SECRET` est bien défini et ≥ 32 octets.
+3. `VARDE_DASHBOARD_URL` est en `https://` si vous êtes derrière un
+   reverse-proxy.
+
+### Le bot ne voit pas son serveur
+
+Si vous voyez `guilds:0` dans les logs juste après l'invitation, c'est
+normal pendant quelques secondes — le bot reçoit l'événement
+`GuildCreate` puis l'inscrit en base. Si ça persiste plus de 30 s,
+relancez le bot :
+
+```sh
+docker compose -f docker/docker-compose.prod.yml restart bot
+```
+
+### Erreurs `EADDRINUSE` au démarrage
+
+Un autre processus utilise déjà le port 3000. Soit tuez ce
+processus, soit changez la valeur de `VARDE_DASHBOARD_PORT` dans
+`docker/.env`.
+
+### Logs détaillés pour investiguer
+
+```sh
+# Tous les services en suivi continu
+docker compose -f docker/docker-compose.prod.yml logs -f
+
+# Un seul service
+docker compose -f docker/docker-compose.prod.yml logs -f bot
+
+# Niveau debug à la volée (puis restart)
+echo "VARDE_LOG_LEVEL=debug" >> docker/.env
+docker compose -f docker/docker-compose.prod.yml up -d
+```
+
+---
+
+> 🆘 **Toujours bloqué·e ?** Ouvrez une issue avec :
+>
+> - votre version de Varde (`git describe --tags`),
+> - votre OS (`uname -a`),
+> - le bout de log pertinent (sans tokens ni secrets),
+> - ce que vous avez essayé.

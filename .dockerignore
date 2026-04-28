@@ -1,0 +1,40 @@
+# Exclusions du contexte de build Docker. Réduit le contexte envoyé
+# au daemon de plusieurs centaines de MB à quelques MB.
+
+# Dépendances et builds locaux
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/.tsbuildinfo
+
+# Outils et IDE
+.git
+.github
+.githooks
+.vscode
+.idea
+.claude
+.superpowers
+.worktrees
+
+# Fichiers locaux
+.env
+.env.local
+.env.*.local
+
+# Notes internes (les Dockerfiles n'en ont pas besoin)
+docs/plans
+docs/modules
+docs/DA
+docs/ETAT-DU-PROJET.md
+scripts
+
+# Tests E2E (l'image runtime n'a pas besoin de Playwright)
+**/playwright-report
+**/test-results
+
+# Uploads et artefacts runtime
+uploads
+*.log
