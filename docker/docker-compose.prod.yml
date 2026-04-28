@@ -23,7 +23,6 @@ name: varde-prod
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: varde-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${VARDE_POSTGRES_USER:?required}
@@ -45,7 +44,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: varde-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -64,7 +62,6 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.bot
     image: varde/bot:latest
-    container_name: varde-bot
     restart: unless-stopped
     depends_on:
       postgres:
@@ -96,7 +93,6 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.dashboard
     image: varde/dashboard:latest
-    container_name: varde-dashboard
     restart: unless-stopped
     depends_on:
       bot:
@@ -120,7 +116,6 @@ services:
   # Usage : docker compose -f docker/docker-compose.prod.yml run --rm migrate
   migrate:
     image: varde/bot:latest
-    container_name: varde-migrate
     profiles: ["migrate"]
     depends_on:
       postgres:
@@ -128,7 +123,7 @@ services:
     environment:
       VARDE_DATABASE_URL: postgres://${VARDE_POSTGRES_USER}:${VARDE_POSTGRES_PASSWORD}@postgres:5432/${VARDE_POSTGRES_DB}
     command:
-      ["node", "node_modules/@varde/db/dist/migrate-pg.js"]
+      ["node", "node_modules/@varde/db/dist/cli/migrate-pg.js"]
     networks:
       - varde
 
