@@ -681,6 +681,8 @@ export async function createServer<D extends DbDriver>(
   registerSetupRoutes(api, {
     instanceConfig,
     baseUrl: options.baseUrl ?? 'http://localhost:3000',
+    client,
+    masterKey,
   });
 
   await reconcileOnboardingSessions({

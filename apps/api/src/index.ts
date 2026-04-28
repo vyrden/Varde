@@ -83,6 +83,8 @@ export {
 export {
   type RegisterSetupRoutesOptions,
   registerSetupRoutes,
+  type SystemCheckResponse,
+  type SystemCheckResult,
 } from './routes/setup.js';
 export {
   type RegisterUnboundPermissionsRoutesOptions,

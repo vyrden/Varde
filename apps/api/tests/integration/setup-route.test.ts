@@ -2,11 +2,12 @@ import { randomBytes } from 'node:crypto';
 
 import { createInstanceConfigService, createLogger } from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient } from '@varde/db';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type Authenticator,
   createApiServer,
+  type FetchLike,
   registerSetupRoutes,
   type SessionData,
 } from '../../src/index.js';
@@ -22,8 +23,13 @@ const setupClient = async (): Promise<DbClient<'sqlite'>> => {
   return client;
 };
 
+const okResponse = (): Response =>
+  new Response(null, { status: 200, headers: { 'content-type': 'text/plain' } });
+
 interface BuildOptions {
   readonly baseUrl?: string;
+  readonly fetchImpl?: FetchLike;
+  readonly masterKey?: Buffer;
 }
 
 const build = async (
@@ -33,7 +39,7 @@ const build = async (
   app: Awaited<ReturnType<typeof createApiServer>>;
   instanceConfig: ReturnType<typeof createInstanceConfigService>;
 }> => {
-  const masterKey = randomBytes(32);
+  const masterKey = buildOptions.masterKey ?? randomBytes(32);
   const instanceConfig = createInstanceConfigService({
     client,
     masterKey,
@@ -48,6 +54,9 @@ const build = async (
   registerSetupRoutes(app, {
     instanceConfig,
     baseUrl: buildOptions.baseUrl ?? 'http://localhost:3000',
+    client,
+    masterKey,
+    ...(buildOptions.fetchImpl ? { fetchImpl: buildOptions.fetchImpl } : {}),
   });
   return { app, instanceConfig };
 };
@@ -180,6 +189,97 @@ describe('routes /setup/* — auth publique', () => {
     try {
       const res = await app.inject({ method: 'GET', url: '/setup/status' });
       expect(res.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('POST /setup/system-check', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it('200 sur tout vert (DB ok, master key ok, Discord joignable)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => okResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({ method: 'POST', url: '/setup/system-check' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        checks: { name: string; ok: boolean }[];
+        detectedBaseUrl: string;
+      };
+      expect(body.detectedBaseUrl).toBe('http://localhost:3000');
+      const byName = Object.fromEntries(body.checks.map((c) => [c.name, c]));
+      expect(byName['database']?.ok).toBe(true);
+      expect(byName['master_key']?.ok).toBe(true);
+      expect(byName['discord_connectivity']?.ok).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('appelle Discord en HEAD sur /gateway', async () => {
+    const fetchImpl = vi.fn(async () => okResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      await app.inject({ method: 'POST', url: '/setup/system-check' });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://discord.com/api/v10/gateway',
+        expect.objectContaining({ method: 'HEAD' }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('marque discord_connectivity ok=false avec un detail si fetch lève', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => {
+      throw new Error('ENETUNREACH');
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({ method: 'POST', url: '/setup/system-check' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { checks: { name: string; ok: boolean; detail?: string }[] };
+      const discord = body.checks.find((c) => c.name === 'discord_connectivity');
+      expect(discord?.ok).toBe(false);
+      expect(discord?.detail).toContain('ENETUNREACH');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reflète le baseUrl effectif dans detectedBaseUrl', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => okResponse());
+    const { app } = await build(client, {
+      fetchImpl,
+      baseUrl: 'https://varde.exemple.com',
+    });
+    try {
+      const res = await app.inject({ method: 'POST', url: '/setup/system-check' });
+      const body = res.json() as { detectedBaseUrl: string };
+      expect(body.detectedBaseUrl).toBe('https://varde.exemple.com');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 quand la setup est terminée', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => okResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await instanceConfig.setStep(7, { discordBotToken: 'tok' });
+      await instanceConfig.complete();
+      const res = await app.inject({ method: 'POST', url: '/setup/system-check' });
+      expect(res.statusCode).toBe(403);
     } finally {
       await app.close();
     }
