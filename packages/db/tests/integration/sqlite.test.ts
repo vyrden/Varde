@@ -35,7 +35,7 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
     await client.close();
   });
 
-  it('crée les 12 tables attendues (ADR 0001 + onboarding_actions_log d ADR 0007)', async () => {
+  it('crée les 13 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1)', async () => {
     const rows = await client.db.all<{ name: string }>(
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%' ORDER BY name`,
     );
@@ -45,6 +45,7 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
       'guild_config',
       'guild_modules',
       'guilds',
+      'instance_config',
       'keystore',
       'modules_registry',
       'onboarding_actions_log',
@@ -53,6 +54,30 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
       'permissions_registry',
       'scheduled_tasks',
     ]);
+  });
+
+  it('instance_config : CHECK rejette un id différent de "singleton" (jalon 7 PR 7.1)', async () => {
+    let caught: unknown;
+    try {
+      client.db.run(sql`INSERT INTO instance_config (id, setup_step) VALUES ('autre', 1)`);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    // SQLite remonte le nom de la contrainte dans `cause.message`,
+    // visible via le rootMessage déjà en place ailleurs dans ce
+    // fichier de test (sinon, on se contente de la présence d'une
+    // exception et du nom partiel "instance_config" qui est dans le
+    // message principal de Drizzle).
+    expect(String(caught)).toMatch(/instance_config|check/i);
+  });
+
+  it('instance_config : accepte une seule ligne avec id "singleton"', async () => {
+    client.db.run(sql`INSERT INTO instance_config (id, setup_step) VALUES ('singleton', 1)`);
+    const rows = await client.db.all<{ count: number }>(
+      sql`SELECT COUNT(*) as count FROM instance_config`,
+    );
+    expect(rows[0]?.count).toBe(1);
   });
 
   it('applique foreign_keys=ON et rejette une FK invalide', async () => {

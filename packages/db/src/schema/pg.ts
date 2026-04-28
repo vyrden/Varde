@@ -371,6 +371,41 @@ export const keystore = pgTable(
   (t) => [primaryKey({ columns: [t.guildId, t.moduleId, t.key] })],
 );
 
+/**
+ * Configuration globale de l'instance Varde — table singleton (une
+ * seule ligne, contrainte applicative `id = 'singleton'` + CHECK).
+ *
+ * Stocke les credentials Discord (token bot, OAuth client secret)
+ * chiffrés via le keystore (AES-256-GCM, master key en env), plus
+ * l'identité du bot et l'avancement du wizard de setup.
+ *
+ * Les colonnes `*Ciphertext` / `*Iv` / `*AuthTag` portent les trois
+ * pièces d'un blob AES-256-GCM. Toutes nullable tant que le wizard
+ * n'a pas atteint l'étape concernée.
+ */
+export const instanceConfig = pgTable(
+  'instance_config',
+  {
+    id: varchar('id', { length: 16 }).primaryKey().default('singleton'),
+    discordAppId: varchar('discord_app_id', { length: 20 }),
+    discordPublicKey: text('discord_public_key'),
+    discordBotTokenCiphertext: bytea('discord_bot_token_ciphertext'),
+    discordBotTokenIv: bytea('discord_bot_token_iv'),
+    discordBotTokenAuthTag: bytea('discord_bot_token_auth_tag'),
+    discordClientSecretCiphertext: bytea('discord_client_secret_ciphertext'),
+    discordClientSecretIv: bytea('discord_client_secret_iv'),
+    discordClientSecretAuthTag: bytea('discord_client_secret_auth_tag'),
+    botName: text('bot_name'),
+    botAvatarUrl: text('bot_avatar_url'),
+    botDescription: text('bot_description'),
+    setupStep: integer('setup_step').notNull().default(1),
+    setupCompletedAt: timestamp('setup_completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('instance_config_singleton_check', sql`${t.id} = 'singleton'`)],
+);
+
 /** Table union utile pour l'introspection. */
 export const pgSchema = {
   guilds,
@@ -385,6 +420,7 @@ export const pgSchema = {
   onboardingActionsLog,
   aiInvocations,
   keystore,
+  instanceConfig,
 } as const;
 
 export type PgSchema = typeof pgSchema;

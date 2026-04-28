@@ -334,6 +334,33 @@ export const keystore = sqliteTable(
   (t) => [primaryKey({ columns: [t.guildId, t.moduleId, t.key] })],
 );
 
+/**
+ * Configuration globale de l'instance Varde — table singleton.
+ * Miroir SQLite de `instance_config` PG. Voir doc dans `./pg.ts`.
+ */
+export const instanceConfig = sqliteTable(
+  'instance_config',
+  {
+    id: text('id').primaryKey().default('singleton'),
+    discordAppId: text('discord_app_id'),
+    discordPublicKey: text('discord_public_key'),
+    discordBotTokenCiphertext: blob('discord_bot_token_ciphertext', { mode: 'buffer' }),
+    discordBotTokenIv: blob('discord_bot_token_iv', { mode: 'buffer' }),
+    discordBotTokenAuthTag: blob('discord_bot_token_auth_tag', { mode: 'buffer' }),
+    discordClientSecretCiphertext: blob('discord_client_secret_ciphertext', { mode: 'buffer' }),
+    discordClientSecretIv: blob('discord_client_secret_iv', { mode: 'buffer' }),
+    discordClientSecretAuthTag: blob('discord_client_secret_auth_tag', { mode: 'buffer' }),
+    botName: text('bot_name'),
+    botAvatarUrl: text('bot_avatar_url'),
+    botDescription: text('bot_description'),
+    setupStep: integer('setup_step').notNull().default(1),
+    setupCompletedAt: text('setup_completed_at'),
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [check('instance_config_singleton_check', sql`${t.id} = 'singleton'`)],
+);
+
 export const sqliteSchema = {
   guilds,
   guildConfig,
@@ -347,6 +374,7 @@ export const sqliteSchema = {
   onboardingActionsLog,
   aiInvocations,
   keystore,
+  instanceConfig,
 } as const;
 
 export type SqliteSchema = typeof sqliteSchema;

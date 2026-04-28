@@ -43,6 +43,7 @@ const tablesInResetOrder = [
   'modules_registry',
   'guild_config',
   'guilds',
+  'instance_config',
 ] as const;
 
 /**
@@ -81,7 +82,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     }
   });
 
-  it('crée les 12 tables attendues (ADR 0001 + onboarding_actions_log d ADR 0007)', async () => {
+  it('crée les 13 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1)', async () => {
     const rows = await client.db.execute<{ table_name: string }>(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%' ORDER BY table_name`,
     );
@@ -91,6 +92,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'guild_config',
       'guild_modules',
       'guilds',
+      'instance_config',
       'keystore',
       'modules_registry',
       'onboarding_actions_log',
@@ -99,6 +101,32 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'permissions_registry',
       'scheduled_tasks',
     ]);
+  });
+
+  it('instance_config : CHECK rejette un id différent de "singleton" (jalon 7 PR 7.1)', async () => {
+    let caught: unknown;
+    try {
+      await client.db.execute(
+        sql`INSERT INTO instance_config (id, setup_step) VALUES ('autre', 1)`,
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeDefined();
+    // Postgres expose le détail dans `cause.message` quand Drizzle
+    // masque la requête en haut. Le message exact mentionne le
+    // nom de la contrainte CHECK.
+    expect(rootMessage(caught)).toMatch(/instance_config_singleton_check|check constraint/i);
+  });
+
+  it('instance_config : accepte une seule ligne avec id "singleton"', async () => {
+    await client.db.execute(
+      sql`INSERT INTO instance_config (id, setup_step) VALUES ('singleton', 1)`,
+    );
+    const rows = await client.db.execute<{ count: string }>(
+      sql`SELECT COUNT(*) as count FROM instance_config`,
+    );
+    expect(rows[0]?.count).toBe('1');
   });
 
   it('pose l index partiel idx_onboarding_expires avec WHERE status=applied (ADR 0007)', async () => {

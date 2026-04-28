@@ -51,13 +51,24 @@ const assertKey = (key: Buffer, label: string): void => {
   }
 };
 
-interface EncryptedBlob {
+/**
+ * Tuple AES-256-GCM produit par `encryptString` et consommé par
+ * `tryDecryptString`. Exposé pour les services qui veulent stocker
+ * des secrets dans leurs propres tables (ex. `instanceConfigService`)
+ * tout en partageant le contrat de chiffrement du keystore.
+ */
+export interface EncryptedBlob {
   readonly ciphertext: Buffer;
   readonly iv: Buffer;
   readonly authTag: Buffer;
 }
 
-const encrypt = (key: Buffer, value: string): EncryptedBlob => {
+/**
+ * Chiffre une chaîne UTF-8 avec une clé AES-256 (32 octets) via
+ * AES-256-GCM. L'IV est généré aléatoirement à chaque appel — ne
+ * jamais réutiliser un (key, IV) pour deux plaintexts différents.
+ */
+export const encryptString = (key: Buffer, value: string): EncryptedBlob => {
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
@@ -65,7 +76,13 @@ const encrypt = (key: Buffer, value: string): EncryptedBlob => {
   return { ciphertext, iv, authTag };
 };
 
-const tryDecrypt = (key: Buffer, blob: EncryptedBlob): string | null => {
+/**
+ * Déchiffre un blob AES-256-GCM. Retourne `null` si la clé ne
+ * correspond pas, si l'authTag est invalide, ou si le payload est
+ * corrompu — utile au keystore pour tenter `previousMasterKey` en
+ * fallback sans propager d'exception.
+ */
+export const tryDecryptString = (key: Buffer, blob: EncryptedBlob): string | null => {
   try {
     const decipher = createDecipheriv('aes-256-gcm', key, blob.iv);
     decipher.setAuthTag(blob.authTag);
@@ -75,6 +92,11 @@ const tryDecrypt = (key: Buffer, blob: EncryptedBlob): string | null => {
     return null;
   }
 };
+
+// Aliases internes au module keystore — préservent les call sites
+// existants sans renommer 50 lignes plus bas.
+const encrypt = encryptString;
+const tryDecrypt = tryDecryptString;
 
 interface StoredRow {
   readonly ciphertext: Buffer;

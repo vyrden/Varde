@@ -29,6 +29,9 @@ export {
 export {
   type CreateKeystoreServiceOptions,
   createKeystoreService,
+  type EncryptedBlob,
+  encryptString,
+  tryDecryptString,
 } from './keystore.js';
 export {
   type CreatePluginLoaderOptions,
