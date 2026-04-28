@@ -23,6 +23,15 @@ export {
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
+  type CreateInstanceConfigServiceOptions,
+  createInstanceConfigService,
+  type InstanceConfig,
+  type InstanceConfigPatch,
+  type InstanceConfigService,
+  type InstanceConfigStatus,
+  type InstanceReadyHandler,
+} from './instance-config.js';
+export {
   type CoreInteractionsRegistry,
   createInteractionsRegistry,
 } from './interactions.js';
