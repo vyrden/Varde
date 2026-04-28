@@ -193,8 +193,7 @@ Un noyau TypeScript strict expose un contrat typé à des modules découvrables,
 │   ├── hello-world/          Module témoin de l'API core
 │   └── onboarding-test/      Module témoin du contrat d'extension onboarding
 ├── docker/
-├── docs/
-└── scripts/
+└── docs/
 ```
 
 ### Paquets livrés à ce jour
@@ -237,15 +236,17 @@ Lire [`CONTRIBUTING.md`](./CONTRIBUTING.md) pour le setup local, le workflow de 
 
 ### Documentation détaillée
 
+- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — jalons V1 et au-delà
 - [`docs/SCOPE.md`](./docs/SCOPE.md) — périmètre V1 et hors-scope
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — stack, décisions, trade-offs
 - [`docs/PLUGIN-API.md`](./docs/PLUGIN-API.md) — contrat core / module
 - [`docs/ONBOARDING.md`](./docs/ONBOARDING.md) — spec de l'onboarding adaptatif
+- [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — installation et exploitation en production
 - [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) — conventions de code
 - [`docs/TESTING.md`](./docs/TESTING.md) — stratégie de test
 - [`docs/OPERATIONS.md`](./docs/OPERATIONS.md) — branches, CI, releases
+- [`docs/ASSETS.md`](./docs/ASSETS.md) — gestion des ressources statiques
 - [`docs/adr/`](./docs/adr/) — décisions d'architecture (ADR)
-- [`docs/plans/`](./docs/plans/) — plans détaillés par jalon
 
 </details>
 
