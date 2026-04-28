@@ -2,6 +2,7 @@ import { encryptString, type InstanceConfigService, tryDecryptString } from '@va
 import type { DbClient, DbDriver } from '@varde/db';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
 import type { FetchLike } from '../discord-client.js';
 
@@ -28,11 +29,17 @@ import type { FetchLike } from '../discord-client.js';
  *    client buggé ou malveillant ne peut pas marteler les vérifs
  *    Discord ni tester des tokens à la chaîne.
  *
- * Cette PR pose les routes en lecture (`status`, `redirect-uri`) et
- * la première route de validation (`system-check`). Les routes
- * d'écriture des credentials (`discord-app`, `bot-token`, `oauth`,
- * `identity`, `complete`) seront ajoutées dans des PR suivantes pour
- * rester reviewables.
+ * Routes implémentées (le wizard est livré progressivement, route par
+ * route, pour rester reviewable) :
+ *
+ * - `GET  /setup/status`        — étape courante, configured?
+ * - `GET  /setup/redirect-uri`  — URI OAuth2 dérivée de `baseUrl`
+ * - `POST /setup/system-check`  — DB + master key canary + Discord HEAD
+ * - `POST /setup/discord-app`   — valide via `/applications/{id}/rpc`,
+ *                                 persiste appId + publicKey
+ *
+ * Routes restant à ajouter : `bot-token`, `oauth`, `identity`,
+ * `complete`.
  */
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -146,6 +153,53 @@ const checkDiscordConnectivity = async (
   }
 };
 
+/** Body wire de `POST /setup/discord-app`. */
+const discordAppBodySchema = z.object({
+  /** Application ID Discord (snowflake 17-20 chiffres). */
+  appId: z.string().regex(/^\d{17,20}$/, 'appId doit être un snowflake Discord (17-20 chiffres)'),
+  /** Public Key Ed25519 hex (64 caractères). */
+  publicKey: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, 'publicKey doit être un hex Ed25519 sur 64 caractères'),
+});
+
+/** Réponse de `POST /setup/discord-app`. */
+export interface DiscordAppResponse {
+  /** Nom de l'application Discord, tel que retourné par `/applications/{id}/rpc`. */
+  readonly appName: string;
+}
+
+/**
+ * Forme minimale d'une réponse `GET /applications/{id}/rpc` côté
+ * Discord. La réponse complète est plus riche (icon, description,
+ * tags…) mais on n'utilise que `name` ici.
+ */
+const rpcResponseSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+});
+
+/**
+ * Erreur HTTP typée pour les routes du wizard. Fastify détecte
+ * `statusCode` et l'utilise comme code de réponse.
+ */
+const httpError = (
+  statusCode: number,
+  code: string,
+  message: string,
+  details?: unknown,
+): Error & { statusCode: number; code: string; details?: unknown } => {
+  const err = new Error(message) as Error & {
+    statusCode: number;
+    code: string;
+    details?: unknown;
+  };
+  err.statusCode = statusCode;
+  err.code = code;
+  if (details !== undefined) err.details = details;
+  return err;
+};
+
 /**
  * Enregistre les routes `/setup/*` sur l'instance Fastify fournie.
  */
@@ -222,6 +276,77 @@ export function registerSetupRoutes(
         checks: [databaseResult, masterKeyResult, discordResult],
         detectedBaseUrl: baseUrl,
       };
+    },
+  );
+
+  // public-route: wizard de setup initial — voir justification au-dessus de /setup/system-check
+  app.post(
+    '/setup/discord-app',
+    {
+      config: { rateLimit: setupRateLimit },
+      preHandler: requireUnconfigured,
+    },
+    async (request): Promise<DiscordAppResponse> => {
+      const parsed = discordAppBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+      }
+      const { appId, publicKey } = parsed.data;
+
+      // Validation côté Discord via l'endpoint public RPC. Pas d'auth
+      // requise — c'est précisément ce qui rend ce check sûr à faire
+      // depuis une route publique sans token bot.
+      let response: Response;
+      try {
+        response = await fetchImpl(`${discordBaseUrl}/applications/${appId}/rpc`, {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+
+      if (response.status === 404) {
+        throw httpError(
+          404,
+          'discord_app_not_found',
+          `Aucune application Discord trouvée pour l'ID ${appId}. Vérifiez l'Application ID dans le portail Developer.`,
+        );
+      }
+      if (!response.ok) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${response.status} sur /applications/${appId}/rpc.`,
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw httpError(502, 'discord_unreachable', 'Réponse Discord non parseable.');
+      }
+      const rpc = rpcResponseSchema.safeParse(body);
+      if (!rpc.success) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          'Réponse Discord inattendue : `name` manquant.',
+        );
+      }
+
+      // L'étape « Discord App » est la 3 dans le wireframe (welcome=1,
+      // system-check=2, discord-app=3). On bumpe `setupStep` à au
+      // moins 3 ; setStep est monotone, donc un retour-arrière dans
+      // le wizard ne fait pas reculer l'avancement.
+      await instanceConfig.setStep(3, { discordAppId: appId, discordPublicKey: publicKey });
+
+      return { appName: rpc.data.name };
     },
   );
 }

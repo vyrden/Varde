@@ -285,3 +285,163 @@ describe('POST /setup/system-check', () => {
     }
   });
 });
+
+describe('POST /setup/discord-app', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  const APP_ID = '987654321098765432';
+  const PUBLIC_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+  const rpcOkResponse = (name = 'Test App'): Response =>
+    new Response(JSON.stringify({ id: APP_ID, name }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('200 sur appId valide : retourne le nom et persiste appId + publicKey', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => rpcOkResponse('Varde Bot'));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ appName: 'Varde Bot' });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.discordAppId).toBe(APP_ID);
+      expect(config.discordPublicKey).toBe(PUBLIC_KEY);
+      expect(config.setupStep).toBeGreaterThanOrEqual(3);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('appelle Discord en GET sur /applications/{id}/rpc', async () => {
+    const fetchImpl = vi.fn(async () => rpcOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        `https://discord.com/api/v10/applications/${APP_ID}/rpc`,
+        expect.objectContaining({ method: 'GET' }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur body invalide (champs manquants)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => rpcOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: {},
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'invalid_body' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur appId mal formé (pas un snowflake)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => rpcOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: 'pas-un-snowflake', publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('404 si Discord retourne 404 (app inconnue) — rien persisté', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => new Response('not found', { status: 404 }));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'discord_app_not_found' });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.discordAppId).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si Discord répond 5xx', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => new Response('ko', { status: 503 }));
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.json()).toMatchObject({ error: 'discord_unreachable' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si fetch lève (réseau cassé)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => {
+      throw new Error('ENETUNREACH');
+    });
+    const { app } = await build(client, { fetchImpl });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(502);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 quand la setup est terminée', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => rpcOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await instanceConfig.setStep(7, { discordBotToken: 'tok' });
+      await instanceConfig.complete();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/discord-app',
+        payload: { appId: APP_ID, publicKey: PUBLIC_KEY },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
