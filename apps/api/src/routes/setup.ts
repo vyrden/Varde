@@ -45,8 +45,11 @@ import type { FetchLike } from '../discord-client.js';
  *                                 `client_credentials` sur
  *                                 `/oauth2/token`, persiste le
  *                                 secret chiffré
+ * - `POST /setup/identity`      — PATCH `/applications/@me` (partial),
+ *                                 persiste name/description et
+ *                                 l'URL CDN de l'avatar
  *
- * Routes restant à ajouter : `identity`, `complete`.
+ * Routes restant à ajouter : `complete`.
  */
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -275,6 +278,39 @@ const oauthBodySchema = z.object({
 export type OAuthResponse =
   | { readonly valid: true }
   | { readonly valid: false; readonly reason: 'invalid_secret' };
+
+/**
+ * Body wire de `POST /setup/identity`. Tous les champs sont
+ * optionnels — l'admin peut soumettre une mise à jour partielle, ou
+ * un body vide (skip de l'étape).
+ */
+const identityBodySchema = z.object({
+  name: z.string().min(1).max(32).optional(),
+  /** Data URI `data:image/...;base64,...`. Le dashboard fait l'encodage. */
+  avatar: z
+    .string()
+    .regex(/^data:image\/(png|jpe?g|gif);base64,/u, 'avatar doit être un data URI image')
+    .optional(),
+  description: z.string().max(400).optional(),
+});
+
+/** Réponse de `POST /setup/identity` — identité telle que persistée. */
+export interface IdentityResponse {
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly avatarUrl: string | null;
+}
+
+/**
+ * Forme minimale de la réponse `PATCH /applications/@me` côté Discord.
+ * Tous les champs intéressants sont retournés en cas de succès.
+ */
+const applicationPatchSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  avatar: z.string().nullable().optional(),
+});
 
 /**
  * Erreur HTTP typée pour les routes du wizard. Fastify détecte
@@ -636,6 +672,129 @@ export function registerSetupRoutes(
       // est la 5 dans le wireframe.
       await instanceConfig.setStep(5, { discordClientSecret: clientSecret });
       return { valid: true };
+    },
+  );
+
+  // public-route: wizard de setup initial — voir justification au-dessus de /setup/system-check
+  app.post(
+    '/setup/identity',
+    {
+      config: { rateLimit: setupRateLimit },
+      preHandler: requireUnconfigured,
+    },
+    async (request): Promise<IdentityResponse> => {
+      const parsed = identityBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+      }
+      const patch = parsed.data;
+      const hasAnyField =
+        patch.name !== undefined || patch.avatar !== undefined || patch.description !== undefined;
+
+      // Skip de l'étape (clic « Passer cette étape » côté wizard) :
+      // body vide → on bumpe juste le compteur, pas d'appel Discord.
+      if (!hasAnyField) {
+        await instanceConfig.setStep(6, {});
+        const config = await instanceConfig.getConfig();
+        return {
+          name: config.botName,
+          description: config.botDescription,
+          avatarUrl: config.botAvatarUrl,
+        };
+      }
+
+      const config = await instanceConfig.getConfig();
+      if (config.discordBotToken === null) {
+        throw httpError(
+          400,
+          'missing_bot_token',
+          "Token bot absent : passez d'abord l'étape « Token bot » du wizard.",
+        );
+      }
+      // discordAppId est forcément posé puisque le token est posé
+      // (l'ordre des étapes le garantit), mais on le revérifie en
+      // défense pour pouvoir construire l'URL CDN sans non-null.
+      if (config.discordAppId === null) {
+        throw httpError(
+          400,
+          'missing_app_id',
+          "Application ID absent : passez d'abord l'étape « Discord App » du wizard.",
+        );
+      }
+      const appId = config.discordAppId;
+
+      // PATCH /applications/@me — partial update : Discord met à
+      // jour uniquement les champs présents dans le body.
+      let response: Response;
+      try {
+        response = await fetchImpl(`${discordBaseUrl}/applications/@me`, {
+          method: 'PATCH',
+          headers: {
+            authorization: `Bot ${config.discordBotToken}`,
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify(patch),
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+
+      if (!response.ok) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${response.status} sur PATCH /applications/@me.`,
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw httpError(502, 'discord_unreachable', 'Réponse Discord non parseable.');
+      }
+      const patchResult = applicationPatchSchema.safeParse(body);
+      if (!patchResult.success) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          'Réponse Discord inattendue : forme PATCH /applications/@me invalide.',
+        );
+      }
+
+      // Compose l'URL CDN à partir du hash retourné par Discord —
+      // c'est ce que la dashboard affichera (le data URI brut serait
+      // énorme à stocker à long terme).
+      const avatarHash = patchResult.data.avatar;
+      const avatarUrl =
+        avatarHash != null
+          ? `https://cdn.discordapp.com/app-icons/${appId}/${avatarHash}.png`
+          : null;
+
+      // Persiste les seuls champs effectivement fournis. Les autres
+      // restent à leur valeur précédente — `setStep` ne touche pas un
+      // champ absent du patch.
+      const persistPatch: {
+        botName?: string;
+        botDescription?: string;
+        botAvatarUrl?: string;
+      } = {};
+      if (patch.name !== undefined) persistPatch.botName = patch.name;
+      if (patch.description !== undefined) persistPatch.botDescription = patch.description;
+      if (avatarUrl !== null) persistPatch.botAvatarUrl = avatarUrl;
+      await instanceConfig.setStep(6, persistPatch);
+
+      const after = await instanceConfig.getConfig();
+      return {
+        name: after.botName,
+        description: after.botDescription,
+        avatarUrl: after.botAvatarUrl,
+      };
     },
   );
 }

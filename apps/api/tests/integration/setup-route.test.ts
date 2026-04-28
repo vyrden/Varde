@@ -904,3 +904,243 @@ describe('POST /setup/oauth', () => {
     }
   });
 });
+
+describe('POST /setup/identity', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  const APP_ID = '987654321098765432';
+  const BOT_TOKEN = 'NjAwAAAAAAAAAA.OOOOOO.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const AVATAR_HASH = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4';
+  const AVATAR_DATA_URI =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+
+  const patchOkResponse = (overrides: Record<string, unknown> = {}): Response =>
+    new Response(
+      JSON.stringify({
+        id: APP_ID,
+        name: 'Varde Bot',
+        description: '',
+        avatar: null,
+        ...overrides,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+
+  // Helper : précondition « token bot persisté » (étape 4 franchie).
+  const seedToken = async (
+    instanceConfig: ReturnType<typeof createInstanceConfigService>,
+  ): Promise<void> => {
+    await instanceConfig.setStep(3, {
+      discordAppId: APP_ID,
+      discordPublicKey: '0'.repeat(64),
+    });
+    await instanceConfig.setStep(4, { discordBotToken: BOT_TOKEN });
+  };
+
+  it('200 sur name + description : PATCH /applications/@me, persiste, retourne identité', async () => {
+    const fetchImpl = vi.fn(async () =>
+      patchOkResponse({ name: 'Varde Bot', description: 'Bot communautaire' }),
+    );
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'Varde Bot', description: 'Bot communautaire' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        name: 'Varde Bot',
+        description: 'Bot communautaire',
+      });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.botName).toBe('Varde Bot');
+      expect(config.botDescription).toBe('Bot communautaire');
+      expect(config.setupStep).toBeGreaterThanOrEqual(6);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('avatar : PATCH avec data URI, persiste l URL CDN dérivée du hash retourné', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse({ avatar: AVATAR_HASH }));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { avatar: AVATAR_DATA_URI },
+      });
+      expect(res.statusCode).toBe(200);
+      const expectedUrl = `https://cdn.discordapp.com/app-icons/${APP_ID}/${AVATAR_HASH}.png`;
+      expect(res.json()).toMatchObject({ avatarUrl: expectedUrl });
+
+      const config = await instanceConfig.getConfig();
+      expect(config.botAvatarUrl).toBe(expectedUrl);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('appelle Discord en PATCH avec Authorization: Bot <token> et body JSON ciblé', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse({ name: 'NewName' }));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'NewName' },
+      });
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://discord.com/api/v10/applications/@me',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({
+            authorization: `Bot ${BOT_TOKEN}`,
+            'content-type': 'application/json',
+          }),
+          // Le body inclut uniquement les champs fournis — partial PATCH.
+          body: JSON.stringify({ name: 'NewName' }),
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('skip (body vide) : pas d appel Discord, bump setupStep à 6', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: {},
+      });
+      expect(res.statusCode).toBe(200);
+      expect(fetchImpl).not.toHaveBeenCalled();
+
+      const config = await instanceConfig.getConfig();
+      expect(config.setupStep).toBeGreaterThanOrEqual(6);
+      expect(config.botName).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 missing_bot_token si l étape bot-token n a pas été franchie', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse());
+    const { app } = await build(client, { fetchImpl });
+    try {
+      // Pas de seedToken : instance_config vierge.
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'X' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'missing_bot_token' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur name trop long (> 32)', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'X'.repeat(33) },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'invalid_body' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 sur description trop longue (> 400)', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { description: 'X'.repeat(401) },
+      });
+      expect(res.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si Discord répond 5xx', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => new Response('ko', { status: 503 }));
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'X' },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.json()).toMatchObject({ error: 'discord_unreachable' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('502 si fetch lève (réseau cassé)', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () => {
+      throw new Error('ENETUNREACH');
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'X' },
+      });
+      expect(res.statusCode).toBe(502);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 quand la setup est terminée', async () => {
+    const fetchImpl = vi.fn(async () => patchOkResponse());
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      await instanceConfig.complete();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'X' },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
