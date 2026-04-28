@@ -9,12 +9,22 @@
  *    port demandés.
  * 3. Enregistrer les modules officiels (V1 : uniquement
  *    `hello-world`) dans le `PluginLoader` puis `loadAll()`.
- * 4. Brancher un `Client` discord.js (si `VARDE_DISCORD_TOKEN` est
- *    fourni) via `attachDiscordClient`. Sur `guild.join` (mapping de
- *    `guildCreate`), insérer la guild dans la table `guilds` et
- *    activer hello-world — le seed manuel `VARDE_SEED_GUILD_IDS`
- *    devient un fallback pour le dev hors-Discord.
- * 5. `.start()` l'API Fastify, brancher SIGINT / SIGTERM sur un
+ * 4. Construire l'`instanceConfigService` (jalon 7 PR 7.1) à partir
+ *    de la table singleton `instance_config`. Le statut de setup
+ *    pilote la connexion Discord :
+ *    - `setup_completed_at` non-NULL + token chiffré présent en DB →
+ *      login avec ce token (chemin nominal post-wizard).
+ *    - sinon mais `VARDE_DISCORD_TOKEN` env présent → login legacy
+ *      (rétro-compatibilité dev pré-wizard).
+ *    - sinon → on ne se connecte pas, on log un message qui pointe
+ *      vers `${VARDE_BASE_URL}/setup`. Un listener `onReady` lance
+ *      le login dès que le wizard appelle `complete()` — pas de
+ *      redémarrage du process.
+ * 5. Sur `guild.join` (mapping de `guildCreate`), insérer la guild
+ *    dans la table `guilds` et activer hello-world — le seed manuel
+ *    `VARDE_SEED_GUILD_IDS` devient un fallback pour le dev
+ *    hors-Discord.
+ * 6. `.start()` l'API Fastify, brancher SIGINT / SIGTERM sur un
  *    shutdown gracieux (détache les listeners discord.js, destroy
  *    le Client, puis `handle.stop()`).
  *
@@ -40,7 +50,7 @@ import {
   registerSlashCommandsForGuild,
 } from '@varde/bot';
 import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
-import { createLogger } from '@varde/core';
+import { createInstanceConfigService, createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
 import { logs, locales as logsLocales } from '@varde/module-logs';
@@ -49,6 +59,7 @@ import { reactionRoles, locales as reactionRolesLocales } from '@varde/module-re
 import { welcome } from '@varde/module-welcome';
 import { ChannelType, Client, GatewayIntentBits, Partials } from 'discord.js';
 
+import { decideLoginPlan, resolveBaseUrl } from './boot.js';
 import { createServer } from './server.js';
 
 type ServerHandle = Awaited<ReturnType<typeof createServer>>;
@@ -458,7 +469,7 @@ async function main(): Promise<void> {
   const authSecret = readRequired('VARDE_AUTH_SECRET');
   const port = parsePort(readOptional('VARDE_API_PORT', '4000'), 'VARDE_API_PORT');
   const host = readOptional('VARDE_API_HOST', '127.0.0.1');
-  const corsOrigin = readOptional('VARDE_DASHBOARD_URL', 'http://localhost:3000');
+  const baseUrl = resolveBaseUrl(process.env['VARDE_BASE_URL']);
   const logLevel = readOptional('VARDE_LOG_LEVEL', 'info') as
     | 'trace'
     | 'debug'
@@ -467,53 +478,52 @@ async function main(): Promise<void> {
     | 'error'
     | 'fatal';
   const seedIds = seedGuildIds(readOptional('VARDE_SEED_GUILD_IDS', ''));
-  const discordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
+  const envDiscordToken = readOptionalRaw('VARDE_DISCORD_TOKEN');
   const keystoreMasterKey = readKeystoreMasterKey();
   const uploadsDir = resolvePath(readOptional('VARDE_UPLOADS_DIR', './uploads'));
   const welcomeUploads = createWelcomeUploadsService(uploadsDir);
 
   const logger = createLogger({ level: logLevel });
+  logger.info('VARDE_BASE_URL effective', { baseUrl });
 
   // Le Client discord.js + son bridge onboarding sont instanciés
-  // avant `createServer()` pour que les routes onboarding câblent
-  // directement le vrai bridge (PR 3.12d). `.login()` est repoussé
-  // jusqu'après `createServer()` pour que le dispatcher soit prêt à
-  // recevoir les events gateway.
-  const discordAttachment = discordToken !== null ? createDiscordAttachment(logger) : null;
+  // sans login. Le bridge ne capture pas de `guildId` à la
+  // construction et résout les guilds au call-time depuis le cache
+  // discord.js — créer le Client avant `login()` est explicitement
+  // supporté (cf. `apps/bot/src/onboarding-bridge.ts`). On peut donc
+  // brancher la PR 7.1 « connexion différée jusqu'au wizard » sans
+  // changer la composition de `createServer()`.
+  const discordAttachment = createDiscordAttachment(logger);
 
   const driver = pickDriver(databaseUrl);
   const handle =
     driver === 'pg'
       ? await createServer({
           database: { driver: 'pg', url: databaseUrl },
-          api: { port, host, corsOrigin, authSecret },
+          api: { port, host, corsOrigin: baseUrl, authSecret },
           keystore: { masterKey: keystoreMasterKey },
           logger,
           locales: MODULE_LOCALES,
           defaultLocale: 'fr',
-          ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
-          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
-          ...(discordAttachment
-            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
-            : {}),
-          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
-          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          onboardingBridge: discordAttachment.bridge,
+          discordService: discordAttachment.discordService,
+          listGuildTextChannels: discordAttachment.listGuildTextChannels,
+          listGuildRoles: discordAttachment.listGuildRoles,
+          listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
-          api: { port, host, corsOrigin, authSecret },
+          api: { port, host, corsOrigin: baseUrl, authSecret },
           keystore: { masterKey: keystoreMasterKey },
           logger,
           locales: MODULE_LOCALES,
           defaultLocale: 'fr',
-          ...(discordAttachment ? { onboardingBridge: discordAttachment.bridge } : {}),
-          ...(discordAttachment ? { discordService: discordAttachment.discordService } : {}),
-          ...(discordAttachment
-            ? { listGuildTextChannels: discordAttachment.listGuildTextChannels }
-            : {}),
-          ...(discordAttachment ? { listGuildRoles: discordAttachment.listGuildRoles } : {}),
-          ...(discordAttachment ? { listGuildEmojis: discordAttachment.listGuildEmojis } : {}),
+          onboardingBridge: discordAttachment.bridge,
+          discordService: discordAttachment.discordService,
+          listGuildTextChannels: discordAttachment.listGuildTextChannels,
+          listGuildRoles: discordAttachment.listGuildRoles,
+          listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
         });
 
@@ -541,19 +551,63 @@ async function main(): Promise<void> {
 
   let discord: DiscordBinding | null = null;
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
-    discord !== null && discordAttachment !== null ? discordAttachment.client : null,
+    discord !== null ? discordAttachment.client : null,
   );
 
   await seedFromEnv(handle, seedIds, logger);
 
-  if (discordAttachment !== null && discordToken !== null) {
+  // Service `instance_config` (jalon 7 PR 7.1). Source de vérité pour
+  // les credentials Discord persistés via le wizard de setup. Utilisé
+  // ici pour décider si le bot doit se connecter au boot et pour
+  // brancher un listener `onReady` qui prendra le relais quand le
+  // wizard se terminera.
+  const instanceConfig = createInstanceConfigService({
+    client: handle.client,
+    masterKey: keystoreMasterKey,
+    logger,
+  });
+  const config = await instanceConfig.getConfig();
+  const plan = decideLoginPlan({
+    configured: config.setupCompletedAt !== null,
+    dbToken: config.discordBotToken,
+    envToken: envDiscordToken,
+    baseUrl,
+  });
+
+  const performLogin = async (token: string): Promise<void> => {
     discord = attachDiscordToHandle(discordAttachment, handle, logger);
-    await discordAttachment.client.login(discordToken);
-  } else {
+    await discordAttachment.client.login(token);
+  };
+
+  if (plan.kind === 'db') {
+    await performLogin(plan.token);
+  } else if (plan.kind === 'env') {
     logger.warn(
-      'VARDE_DISCORD_TOKEN absent : la gateway Discord ne sera pas connectée. L API HTTP reste disponible pour le dashboard. Le bridge onboarding retombe sur un mode demo (logs, pas d appels Discord). Renseigner le token dans .env.local pour activer le bot.',
+      'VARDE_DISCORD_TOKEN env utilisé en mode legacy. Migrer via /setup pour persister le token chiffré en DB.',
     );
+    await performLogin(plan.token);
+  } else {
+    logger.warn(plan.message);
   }
+
+  // Listener qui prend le relais lorsque le wizard appelle `complete()`.
+  // Idempotent côté service (no-op si la setup est déjà terminée), et
+  // protégé ici par `discord !== null` au cas où l'instance serait
+  // déjà loggée via le chemin legacy.
+  const unsubscribeReady = instanceConfig.onReady(async () => {
+    if (discord !== null) {
+      return;
+    }
+    const updated = await instanceConfig.getConfig();
+    if (updated.discordBotToken === null) {
+      logger.error(
+        'instance.ready : token Discord absent en DB malgré setup_completed_at, login impossible.',
+      );
+      return;
+    }
+    logger.info('instance.ready : démarrage de la connexion gateway Discord.');
+    await performLogin(updated.discordBotToken);
+  });
 
   const { address } = await handle.start();
   logger.info('varde-server démarré', {
@@ -573,6 +627,7 @@ async function main(): Promise<void> {
         discord.detach();
         await discord.destroy();
       }
+      unsubscribeReady();
       unsubscribeAutoOnboard();
       await handle.stop();
       logger.info('varde-server : arrêt propre');

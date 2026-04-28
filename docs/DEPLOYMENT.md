@@ -121,7 +121,7 @@ git checkout v0.5.0   # ou la version la plus récente publiée
    | `VARDE_DISCORD_TOKEN` | Le token de l'étape précédente. |
    | `VARDE_DISCORD_CLIENT_ID` | Client ID OAuth2. |
    | `VARDE_DISCORD_CLIENT_SECRET` | Client Secret OAuth2. |
-   | `VARDE_DASHBOARD_URL` | `https://votre-domaine.com` (ou `http://localhost:3000` en dev). |
+   | `VARDE_BASE_URL` | `https://votre-domaine.com` (ou `http://localhost:3000` en dev — optionnelle, défaut `http://localhost:3000`). |
    | `VARDE_POSTGRES_PASSWORD` | Un mot de passe long, généré aléatoirement. |
    | `VARDE_LOG_LEVEL` | `info` en prod, `debug` pour investiguer. |
 
@@ -209,7 +209,7 @@ Rechargez : `sudo systemctl reload caddy`. C'est tout — Caddy
 demande le certificat à Let's Encrypt et redirige `:80 → :443`.
 
 > 🛡️ Avec un reverse-proxy, vérifiez que votre `.env` contient
-> bien l'URL **HTTPS** dans `VARDE_DASHBOARD_URL`, et que le redirect
+> bien l'URL **HTTPS** dans `VARDE_BASE_URL`, et que le redirect
 > OAuth2 dans le Discord Developer Portal pointe vers
 > `https://votre-domaine.com/api/auth/callback/discord`.
 
@@ -301,9 +301,9 @@ Vérifiez :
 
 1. Le redirect URI déclaré dans le Discord Developer Portal
    correspond **exactement** (à la barre oblique près) à
-   `${VARDE_DASHBOARD_URL}/api/auth/callback/discord`.
+   `${VARDE_BASE_URL}/api/auth/callback/discord`.
 2. `VARDE_AUTH_SECRET` est bien défini et ≥ 32 octets.
-3. `VARDE_DASHBOARD_URL` est en `https://` si vous êtes derrière un
+3. `VARDE_BASE_URL` est en `https://` si vous êtes derrière un
    reverse-proxy.
 
 ### Le bot ne voit pas son serveur

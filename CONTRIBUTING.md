@@ -104,7 +104,7 @@ En dev, ajouter dans **OAuth2 → Redirects** :
 - `http://localhost:3000/api/auth/callback/discord`
 
 L'URL exacte dépend du port et du provider Auth.js configuré. Elle est
-documentée dans `.env.example` via `VARDE_DASHBOARD_URL`.
+documentée dans `.env.example` via `VARDE_BASE_URL`.
 
 #### Serveur de test dédié
 
