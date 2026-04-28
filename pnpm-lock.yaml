@@ -261,6 +261,25 @@ importers:
         specifier: 4.1.4
         version: 4.1.4(@types/node@24.12.2)(@vitest/coverage-v8@4.1.4)(esbuild@0.27.7)(happy-dom@20.9.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  modules/example-counter:
+    dependencies:
+      '@varde/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      '@varde/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   modules/hello-world:
     dependencies:
       '@varde/contracts':

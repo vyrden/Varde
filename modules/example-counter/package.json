@@ -1,0 +1,25 @@
+{
+  "name": "@varde/module-example-counter",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Module exemple pédagogique : compte les messages par membre. Sert de référence à docs/MODULE-AUTHORING.md.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "dev": "tsc --watch --preserveWatchOutput"
+  },
+  "dependencies": {
+    "@varde/contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "@varde/config": "workspace:*",
+    "typescript": "6.0.3"
+  }
+}
