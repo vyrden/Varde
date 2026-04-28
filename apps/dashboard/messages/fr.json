@@ -20,5 +20,25 @@
     "title": "Page introuvable",
     "description": "La page demandée n'existe pas ou vous n'y avez pas accès.",
     "backHome": "Retour à mes serveurs"
+  },
+  "setup": {
+    "shell": {
+      "stepIndicator": "Étape {current} sur {total}",
+      "progressLabel": "Avancement de la configuration"
+    },
+    "actions": {
+      "previous": "Précédent",
+      "next": "Continuer",
+      "start": "Commencer"
+    },
+    "welcome": {
+      "title": "Bienvenue sur Varde",
+      "subtitle": "Mettons votre instance en route en quelques minutes.",
+      "intro": "Ce wizard va brancher votre bot Discord et démarrer le dashboard. Comptez environ 10 minutes — vous pouvez quitter et revenir, le wizard reprend à la dernière étape validée.",
+      "needsHeading": "Ce dont vous avez besoin",
+      "needsItem1": "Un compte Discord avec accès au portail Developer (https://discord.com/developers).",
+      "needsItem2": "Un serveur Discord pour tester le bot (un serveur dédié aux tests est recommandé).",
+      "localModeNote": "Varde fonctionne en local par défaut. Pour permettre à d'autres administrateurs de se connecter au dashboard, vous pourrez configurer une URL d'accès partagée plus tard."
+    }
   }
 }

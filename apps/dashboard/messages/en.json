@@ -20,5 +20,25 @@
     "title": "Page not found",
     "description": "The requested page does not exist, or you do not have access to it.",
     "backHome": "Back to my servers"
+  },
+  "setup": {
+    "shell": {
+      "stepIndicator": "Step {current} of {total}",
+      "progressLabel": "Setup progress"
+    },
+    "actions": {
+      "previous": "Back",
+      "next": "Continue",
+      "start": "Get started"
+    },
+    "welcome": {
+      "title": "Welcome to Varde",
+      "subtitle": "Let's get your instance up and running in a few minutes.",
+      "intro": "This wizard will hook up your Discord bot and bring the dashboard online. Plan for about 10 minutes — you can leave and come back, the wizard resumes at the last validated step.",
+      "needsHeading": "What you'll need",
+      "needsItem1": "A Discord account with access to the Developer portal (https://discord.com/developers).",
+      "needsItem2": "A Discord server to test the bot (a dedicated test server is recommended).",
+      "localModeNote": "Varde runs locally by default. To let other administrators reach the dashboard, you'll be able to configure a shared access URL later."
+    }
   }
 }
