@@ -1,0 +1,89 @@
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Principe de moindre privilège : aucun écrit sur le repo, lecture
+# uniquement pour le checkout. L'upload des traces Playwright en cas
+# d'échec passe par actions/upload-artifact qui ne demande pas de
+# permission supplémentaire (les artifacts sont scoped au workflow).
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright (smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: varde
+          POSTGRES_PASSWORD: varde
+          POSTGRES_DB: varde_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U varde -d varde_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      VARDE_DATABASE_URL: postgres://varde:varde@localhost:5432/varde_test
+      DATABASE_URL_TEST: postgres://varde:varde@localhost:5432/varde_test
+      VARDE_AUTH_SECRET: e2e-secret-not-for-prod
+      # Master key keystore : 32 octets aléatoires en base64. Valeur
+      # de test, jamais utilisée en prod. Régénérée à chaque run via
+      # `openssl rand -base64 32` serait plus propre, mais une valeur
+      # fixe simplifie le debug d'un échec.
+      VARDE_KEYSTORE_MASTER_KEY: dGVzdC1tYXN0ZXIta2V5LWZvci1lMmUtb25seS0zMmJ5dGVzIQ==
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @varde/dashboard exec playwright install --with-deps chromium
+
+      - name: Build dashboard
+        run: pnpm --filter @varde/dashboard... build
+
+      # Le webServer de playwright.config.ts lance Next en dev sur 3001 ;
+      # on n'a donc pas à démarrer un serveur ici, Playwright s'en charge.
+      - name: Run Playwright tests
+        run: pnpm --filter @varde/dashboard test:e2e
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/dashboard/test-results/
+          retention-days: 7

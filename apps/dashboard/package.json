@@ -40,6 +40,8 @@
     "@types/react-dom": "19.2.3",
     "@varde/config": "workspace:*",
     "happy-dom": "20.9.0",
+    "msw": "2.13.6",
+    "postgres": "3.4.9",
     "tailwindcss": "4.2.2",
     "typescript": "6.0.3",
     "vitest": "4.1.4"
