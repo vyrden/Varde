@@ -244,6 +244,52 @@ Points saillants :
 - API publique modifiée = doc mise à jour.
 - Changement comportemental = `CHANGELOG.md` mis à jour.
 
+### Internationalisation
+
+Tous les textes affichés à l'utilisateur dans le dashboard passent
+par les fichiers de messages `next-intl` situés sous
+[`apps/dashboard/messages/`](./apps/dashboard/messages/). **Aucune
+nouvelle chaîne hardcodée** ne doit être introduite.
+
+Pour ajouter une chaîne :
+
+1. Ajouter la clé dans `messages/fr.json` ET dans `messages/en.json`
+   (jamais l'un sans l'autre, sinon l'utilisateur EN voit la clé
+   brute).
+2. Convention de nommage : `{section}.{component}.{key}`, par
+   exemple `dashboard.guildList.empty.title`.
+3. Consommer la clé via `getTranslations()` côté Server Components
+   ou `useTranslations()` côté Client Components.
+
+Pour ajouter une nouvelle langue, suivre le guide dans
+[`apps/dashboard/i18n/README.md`](./apps/dashboard/i18n/README.md).
+
+### Tests E2E
+
+Les tests Playwright vivent dans
+[`apps/dashboard/tests/e2e/`](./apps/dashboard/tests/e2e/). Le
+[README dédié](./apps/dashboard/tests/e2e/README.md) explique le
+fonctionnement des fixtures (mocks Discord HTTP via MSW, auth
+forgée, reset DB) avec des exemples d'usage.
+
+Pour ajouter un test E2E :
+
+1. Vérifier que le scénario relève bien d'un E2E (parcours
+   utilisateur de bout en bout, pas de la logique métier — celle-ci
+   passe par des tests unitaires).
+2. Créer un fichier `*.spec.ts` sous `tests/e2e/`.
+3. Réutiliser les fixtures existantes (`loginAs`,
+   `mockDiscordUser`, `resetDatabase`). Étendre `discord-mocks.ts`
+   si un nouveau endpoint Discord est consommé.
+4. Préférer les sélecteurs accessibles (`getByRole`, `getByLabel`)
+   aux sélecteurs CSS — résiste aux refactors de Tailwind.
+
+Avant la première exécution sur un poste neuf :
+
+```sh
+pnpm exec playwright install --with-deps chromium
+```
+
 ## Process de revue
 
 - Délai indicatif de première réponse : sous 7 jours.

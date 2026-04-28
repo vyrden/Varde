@@ -211,14 +211,44 @@ Limité aux parcours critiques du dashboard :
 Pas de E2E exhaustifs : chaque module officiel a deux ou trois parcours
 E2E clés, pas une couverture par champ.
 
+### Infrastructure
+
+L'infra E2E est posée dans
+[`apps/dashboard/tests/e2e/`](../apps/dashboard/tests/e2e/) avec
+trois familles de fixtures (voir
+[`tests/e2e/README.md`](../apps/dashboard/tests/e2e/README.md)
+pour les exemples d'usage) :
+
+- **Mocks Discord HTTP** (`fixtures/discord-mocks.ts`) — MSW en
+  mode Node intercepte les appels sortants depuis les Server
+  Components et server actions. Helpers `mockDiscordUser`,
+  `mockDiscordGuilds`, `mockDiscordApplication`,
+  `mockDiscordTokenExchange`. Étendre quand un nouveau endpoint
+  Discord est consommé par le code.
+- **Auth forgée** (`fixtures/auth.ts`) — `loginAs(context, { userId,
+  username })` signe un JWT HS256 avec le même secret que le
+  webServer Next et le pose comme cookie `varde.session`. Permet
+  de tester un parcours authentifié sans jouer le flow OAuth réel.
+- **Reset DB** (`fixtures/db.ts`) — `resetDatabase()` truncate les
+  tables mutables, à appeler dans `beforeEach` pour les tests qui
+  modifient l'état. Lit `DATABASE_URL_TEST`.
+
+Le job CI `e2e.yml` provisionne Postgres via les services GitHub
+Actions, applique les migrations, télécharge Chromium, lance
+`pnpm test:e2e` et upload les traces en artifact en cas d'échec.
+
 ### Règles
 
-- Tests stables : sélecteurs par rôle ARIA ou `data-testid`, pas par classe
-  CSS ou position.
+- Tests stables : sélecteurs par rôle ARIA (`getByRole`,
+  `getByLabel`) ou `data-testid`, pas par classe CSS ou position.
 - Pages d'erreur et 404 testées.
-- Timeouts explicites sur les attentes asynchrones.
+- Timeouts explicites sur les attentes asynchrones — pas de
+  `page.waitForTimeout(500)` arbitraire.
 - Trace Playwright activée en cas d'échec pour le debug.
-- Exécution en CI avec un bot "test-guild" dédié, isolé du serveur de dev.
+- Exécution en CI avec une DB Postgres dédiée et des mocks Discord
+  (jamais d'appel à la vraie API Discord depuis la CI).
+- Les tests d'auth démarrent par `loginAs` ou documentent
+  explicitement qu'ils testent l'état non authentifié.
 
 ## Accessibilité
 

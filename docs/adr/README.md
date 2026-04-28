@@ -78,3 +78,5 @@ Liens, issues, PR, discussions liées.
 - [0008 - Symétrie des permissions officiels/tiers et seeding par onboarding](./0008-permissions-modules-officiels.md) — accepted
 - [0009 - Diff before/after sur `guild.channelUpdate` et `guild.roleUpdate`](./0009-diff-before-after-channel-role-update.md) — accepted
 - [0010 - `onboarding-presets` est API-driven, pas un module bot](./0010-onboarding-presets-api-driven.md) — accepted
+- [0011 - Internationalisation du dashboard avec `next-intl`, dispatch par cookie](./0011-i18n-next-intl-cookie.md) — accepted
+- [0012 - Tokens design CSS-first dans `@varde/ui` consommés via Tailwind 4](./0012-design-tokens-css-first.md) — accepted
