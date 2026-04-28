@@ -1,0 +1,99 @@
+# syntax=docker/dockerfile:1.7
+
+# Image dashboard : Next.js 16 en mode `output: 'standalone'`.
+# Standalone rassemble dans `.next/standalone/` un sous-arbre
+# autonome (server.js + node_modules trace-réduit) qu'on copie tel
+# quel dans le runtime. Pas de pnpm en image finale.
+#
+# Build : depuis la racine du repo,
+#   docker build -f docker/Dockerfile.dashboard -t varde/dashboard:dev .
+
+# ---------------------------------------------------------------------
+# Stage 1 — base : Node 24 LTS + corepack pour pnpm.
+# ---------------------------------------------------------------------
+FROM node:24-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    NODE_ENV=production
+RUN corepack enable
+
+# ---------------------------------------------------------------------
+# Stage 2 — builder : install dev, `next build`.
+# Identique en stratégie au Dockerfile.bot (cache lockfile-first).
+# ---------------------------------------------------------------------
+FROM base AS builder
+WORKDIR /repo
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/bot/package.json ./apps/bot/
+COPY apps/dashboard/package.json ./apps/dashboard/
+COPY apps/server/package.json ./apps/server/
+COPY packages/ai/package.json ./packages/ai/
+COPY packages/config/package.json ./packages/config/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/core/package.json ./packages/core/
+COPY packages/db/package.json ./packages/db/
+COPY packages/presets/package.json ./packages/presets/
+COPY packages/testing/package.json ./packages/testing/
+COPY packages/ui/package.json ./packages/ui/
+COPY modules/hello-world/package.json ./modules/hello-world/
+COPY modules/logs/package.json ./modules/logs/
+COPY modules/moderation/package.json ./modules/moderation/
+COPY modules/onboarding-test/package.json ./modules/onboarding-test/
+COPY modules/reaction-roles/package.json ./modules/reaction-roles/
+COPY modules/welcome/package.json ./modules/welcome/
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod=false
+
+COPY apps ./apps
+COPY packages ./packages
+COPY modules ./modules
+
+# Next.js cherche `.env.local` au build. Vide en image (les vraies
+# valeurs viennent du compose au runtime), mais le fichier doit
+# exister pour ne pas faire planter `next build`.
+RUN touch apps/dashboard/.env.local
+
+# Build du dashboard avec ses dépendances workspace transitives.
+RUN pnpm --filter @varde/dashboard... build
+
+# ---------------------------------------------------------------------
+# Stage 3 — runtime : node:slim, copy uniquement le standalone output
+# + les assets statiques que Next ne place pas dans standalone par
+# défaut (`.next/static/` et `public/`).
+# ---------------------------------------------------------------------
+FROM node:24-bookworm-slim AS runtime
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--enable-source-maps" \
+    HOSTNAME=0.0.0.0 \
+    PORT=3000
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 10001 varde \
+    && useradd --system --uid 10001 --gid varde --create-home --home-dir /home/varde varde
+
+WORKDIR /app
+
+# Standalone output. `outputFileTracingRoot` = racine du monorepo, donc
+# le standalone est généré sous `.next/standalone/apps/dashboard/`.
+COPY --from=builder --chown=varde:varde /repo/apps/dashboard/.next/standalone ./
+# Static à copier séparément (Next l'exclut du standalone). Pas de
+# `public/` dans ce projet — toutes les ressources statiques vivent
+# dans `@varde/ui` et sont bundle-traced par Next.
+COPY --from=builder --chown=varde:varde /repo/apps/dashboard/.next/static ./apps/dashboard/.next/static
+
+USER varde
+EXPOSE 3000
+
+# Healthcheck : `/` répond 200 (page d'accueil ou redirect login).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS -o /dev/null http://127.0.0.1:3000/ || exit 1
+
+# Le standalone produit `apps/dashboard/server.js` quand le tracing
+# root est le monorepo. C'est le launcher Next maison.
+CMD ["node", "apps/dashboard/server.js"]

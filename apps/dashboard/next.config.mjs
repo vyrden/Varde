@@ -1,3 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 
 /**
@@ -70,6 +75,15 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  // Output autonome pour les images Docker : Next isole le runtime
+  // dans `.next/standalone/` (server.js + node_modules réduit aux
+  // dépendances réellement utilisées). Voir docker/Dockerfile.dashboard.
+  output: 'standalone',
+  // Racine de tracing pour le monorepo pnpm. Sans ça, Next prendrait
+  // par défaut `apps/dashboard/` et ne traceait pas les paquets
+  // workspace (`@varde/ui`, `@varde/contracts`, etc.) — le bundle
+  // standalone serait cassé en runtime.
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   images: {
     // Domaines autorisés pour `next/image`. La CDN Discord sert :
     // - `/icons/**` : icônes de guilds (rail)

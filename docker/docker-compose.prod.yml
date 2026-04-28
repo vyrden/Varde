@@ -1,0 +1,145 @@
+# Compose de production pour Varde.
+#
+# Pré-requis :
+# - Un fichier `.env` dans le même dossier que ce compose, copié
+#   depuis `.env.example` à la racine du repo et rempli avec vos
+#   valeurs de prod. Voir docs/DEPLOYMENT.md pour les détails.
+# - Le repo cloné sur la machine cible (les Dockerfiles sont
+#   dans ce dossier `docker/`, le contexte de build est la racine).
+#
+# Démarrer :
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env up -d
+# Arrêter :
+#   docker compose -f docker/docker-compose.prod.yml down
+# Migration DB (à exécuter une fois après le premier `up`) :
+#   docker compose -f docker/docker-compose.prod.yml run --rm migrate
+#
+# Reverse-proxy : ce compose n'expose que `dashboard:3000` sur le host.
+# Bot et API ne sont accessibles qu'en interne du réseau Docker.
+# En prod, placer Caddy / Traefik / Nginx devant pour TLS.
+
+name: varde-prod
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: varde-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${VARDE_POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${VARDE_POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${VARDE_POSTGRES_DB:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${VARDE_POSTGRES_USER} -d ${VARDE_POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - varde
+    # Pas de `ports:` — la base ne sort pas de Docker en prod.
+
+  redis:
+    image: redis:7-alpine
+    container_name: varde-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - varde
+
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bot
+    image: varde/bot:latest
+    container_name: varde-bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      VARDE_LOG_LEVEL: ${VARDE_LOG_LEVEL:-info}
+      VARDE_DISCORD_TOKEN: ${VARDE_DISCORD_TOKEN:?required}
+      VARDE_DISCORD_CLIENT_ID: ${VARDE_DISCORD_CLIENT_ID:?required}
+      VARDE_DISCORD_CLIENT_SECRET: ${VARDE_DISCORD_CLIENT_SECRET:?required}
+      VARDE_DASHBOARD_URL: ${VARDE_DASHBOARD_URL:?required}
+      VARDE_API_HOST: 0.0.0.0
+      VARDE_API_PORT: "4000"
+      VARDE_AUTH_SECRET: ${VARDE_AUTH_SECRET:?required}
+      VARDE_KEYSTORE_MASTER_KEY: ${VARDE_KEYSTORE_MASTER_KEY:?required}
+      VARDE_KEYSTORE_PREVIOUS_MASTER_KEY: ${VARDE_KEYSTORE_PREVIOUS_MASTER_KEY:-}
+      VARDE_DATABASE_URL: postgres://${VARDE_POSTGRES_USER}:${VARDE_POSTGRES_PASSWORD}@postgres:5432/${VARDE_POSTGRES_DB}
+      VARDE_SEED_GUILD_IDS: ${VARDE_SEED_GUILD_IDS:-}
+    volumes:
+      - bot_uploads:/var/lib/varde/uploads
+    networks:
+      - varde
+    # Pas de `ports:` exposés sur le host — l'API n'est consommée
+    # que par le dashboard via le réseau interne.
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    image: varde/dashboard:latest
+    container_name: varde-dashboard
+    restart: unless-stopped
+    depends_on:
+      bot:
+        condition: service_healthy
+    environment:
+      VARDE_DISCORD_CLIENT_ID: ${VARDE_DISCORD_CLIENT_ID}
+      VARDE_DISCORD_CLIENT_SECRET: ${VARDE_DISCORD_CLIENT_SECRET}
+      VARDE_AUTH_SECRET: ${VARDE_AUTH_SECRET}
+      VARDE_DASHBOARD_URL: ${VARDE_DASHBOARD_URL}
+      VARDE_API_URL: http://bot:4000
+      AUTH_TRUST_HOST: "true"
+    ports:
+      - "${VARDE_DASHBOARD_PORT:-3000}:3000"
+    networks:
+      - varde
+
+  # Service utilitaire pour appliquer les migrations DB. À lancer une
+  # seule fois après le premier `up`, ou avant chaque mise à jour qui
+  # apporte de nouvelles migrations.
+  #
+  # Usage : docker compose -f docker/docker-compose.prod.yml run --rm migrate
+  migrate:
+    image: varde/bot:latest
+    container_name: varde-migrate
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VARDE_DATABASE_URL: postgres://${VARDE_POSTGRES_USER}:${VARDE_POSTGRES_PASSWORD}@postgres:5432/${VARDE_POSTGRES_DB}
+    command:
+      ["node", "node_modules/@varde/db/dist/migrate-pg.js"]
+    networks:
+      - varde
+
+volumes:
+  postgres_data:
+    name: varde_prod_postgres_data
+  redis_data:
+    name: varde_prod_redis_data
+  bot_uploads:
+    name: varde_prod_bot_uploads
+
+networks:
+  varde:
+    driver: bridge
