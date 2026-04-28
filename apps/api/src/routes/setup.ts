@@ -1,4 +1,9 @@
-import { encryptString, type InstanceConfigService, tryDecryptString } from '@varde/core';
+import {
+  encryptString,
+  type InstanceConfig,
+  type InstanceConfigService,
+  tryDecryptString,
+} from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -48,8 +53,15 @@ import type { FetchLike } from '../discord-client.js';
  * - `POST /setup/identity`      — PATCH `/applications/@me` (partial),
  *                                 persiste name/description et
  *                                 l'URL CDN de l'avatar
+ * - `POST /setup/complete`      — vérifie que les credentials sont
+ *                                 posés, pose `setup_completed_at`
+ *                                 et fire les handlers `onReady`
+ *                                 (login Discord en prod), avec
+ *                                 timeout 30 s
  *
- * Routes restant à ajouter : `complete`.
+ * Toutes les routes du wizard sont en place — la PR 7.1 boucle ici
+ * côté API. Reste l'UI (sub-livrables 4–5 du plan PR1-wizard.md) et
+ * les tests E2E (sub-livrable 6).
  */
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -88,6 +100,12 @@ export interface RegisterSetupRoutesOptions {
   readonly fetchImpl?: FetchLike;
   /** Base URL Discord. Défaut : `https://discord.com/api/v10`. */
   readonly discordBaseUrl?: string;
+  /**
+   * Timeout du `POST /setup/complete` : durée maximale d'attente
+   * pour que les handlers `onReady` (et donc, en prod, la connexion
+   * gateway Discord) résolvent. Défaut 30_000 ms (30 s).
+   */
+  readonly completeTimeoutMs?: number;
 }
 
 /**
@@ -312,6 +330,19 @@ const applicationPatchSchema = z.object({
   avatar: z.string().nullable().optional(),
 });
 
+/** Réponse de `POST /setup/complete`. */
+export type CompleteResponse =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: 'timeout' };
+
+/** Liste des champs requis pour pouvoir clore la setup. */
+const REQUIRED_FIELDS = [
+  'discordAppId',
+  'discordPublicKey',
+  'discordBotToken',
+  'discordClientSecret',
+] as const satisfies readonly (keyof InstanceConfig)[];
+
 /**
  * Erreur HTTP typée pour les routes du wizard. Fastify détecte
  * `statusCode` et l'utilise comme code de réponse.
@@ -343,6 +374,7 @@ export function registerSetupRoutes(
   const { instanceConfig, baseUrl, client, masterKey } = options;
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
   const discordBaseUrl = options.discordBaseUrl ?? 'https://discord.com/api/v10';
+  const completeTimeoutMs = options.completeTimeoutMs ?? 30_000;
 
   // Plafond serré : ces routes sont publiques pendant le wizard, on
   // les protège contre l'abus avec 10 req/min/IP. Le rate-limiter
@@ -795,6 +827,58 @@ export function registerSetupRoutes(
         description: after.botDescription,
         avatarUrl: after.botAvatarUrl,
       };
+    },
+  );
+
+  // public-route: wizard de setup initial — voir justification au-dessus de /setup/system-check
+  app.post(
+    '/setup/complete',
+    {
+      config: { rateLimit: setupRateLimit },
+      preHandler: requireUnconfigured,
+    },
+    async (): Promise<CompleteResponse> => {
+      // Vérifie que les 4 credentials sont posés. Pas un schéma Zod
+      // ici car on ne valide pas un body — on inspecte l'état
+      // accumulé en DB par les étapes précédentes du wizard.
+      const config = await instanceConfig.getConfig();
+      const missing: string[] = [];
+      for (const field of REQUIRED_FIELDS) {
+        if (config[field] === null) {
+          missing.push(field);
+        }
+      }
+      if (missing.length > 0) {
+        throw httpError(
+          400,
+          'missing_required_fields',
+          'Setup incomplète : un ou plusieurs credentials sont manquants.',
+          { missing },
+        );
+      }
+
+      // Race entre `complete()` (qui pose `setup_completed_at` en DB
+      // puis fire & await les handlers `onReady` — la connexion
+      // gateway en prod) et un timeout. Si le timeout fire d'abord,
+      // l'instance EST néanmoins finalisée en DB ; seule la
+      // connexion gateway n'a pas terminé dans la fenêtre. Le
+      // dashboard peut surfacer le warning et l'admin peut
+      // rafraîchir le statut bot via les logs.
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const completion = instanceConfig.complete().then((): CompleteResponse => {
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        return { ok: true };
+      });
+      const timeout = new Promise<CompleteResponse>((resolve) => {
+        timer = setTimeout(() => {
+          timer = null;
+          resolve({ ok: false, error: 'timeout' });
+        }, completeTimeoutMs);
+      });
+      return Promise.race([completion, timeout]);
     },
   );
 }

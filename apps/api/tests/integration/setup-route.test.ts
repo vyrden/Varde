@@ -30,6 +30,7 @@ interface BuildOptions {
   readonly baseUrl?: string;
   readonly fetchImpl?: FetchLike;
   readonly masterKey?: Buffer;
+  readonly completeTimeoutMs?: number;
 }
 
 const build = async (
@@ -57,6 +58,9 @@ const build = async (
     client,
     masterKey,
     ...(buildOptions.fetchImpl ? { fetchImpl: buildOptions.fetchImpl } : {}),
+    ...(buildOptions.completeTimeoutMs !== undefined
+      ? { completeTimeoutMs: buildOptions.completeTimeoutMs }
+      : {}),
   });
   return { app, instanceConfig };
 };
@@ -1139,6 +1143,140 @@ describe('POST /setup/identity', () => {
         payload: { name: 'X' },
       });
       expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('POST /setup/complete', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = await setupClient();
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  // Helper : seed les 4 champs obligatoires (appId + publicKey + bot
+  // token + client secret) — sinon /setup/complete refuse de finir.
+  const seedAllRequired = async (
+    instanceConfig: ReturnType<typeof createInstanceConfigService>,
+  ): Promise<void> => {
+    await instanceConfig.setStep(3, {
+      discordAppId: '987654321098765432',
+      discordPublicKey: '0'.repeat(64),
+    });
+    await instanceConfig.setStep(4, {
+      discordBotToken: 'NjAwAAAAAAAAAA.OOOOOO.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    });
+    await instanceConfig.setStep(5, {
+      discordClientSecret: 'aZbYcXdW1234567890_-secret_value',
+    });
+  };
+
+  it('200 ok=true sur happy path : setup_completed_at posé, onReady déclenché', async () => {
+    const { app, instanceConfig } = await build(client);
+    try {
+      await seedAllRequired(instanceConfig);
+      const onReady = vi.fn();
+      instanceConfig.onReady(onReady);
+
+      const res = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+      expect(onReady).toHaveBeenCalledTimes(1);
+
+      // Statut DB désormais configured=true.
+      const config = await instanceConfig.getConfig();
+      expect(config.setupCompletedAt).toBeInstanceOf(Date);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 missing_required_fields si appId absent', async () => {
+    const { app, instanceConfig } = await build(client);
+    try {
+      // Tout sauf appId.
+      await instanceConfig.setStep(4, {
+        discordBotToken: 'tok-long-enough-for-zod',
+      });
+      await instanceConfig.setStep(5, {
+        discordClientSecret: 'secret_long_enough',
+      });
+
+      const res = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(res.statusCode).toBe(400);
+      const body = res.json() as { error: string; details?: { missing?: string[] } };
+      expect(body.error).toBe('missing_required_fields');
+      expect(body.details?.missing).toContain('discordAppId');
+
+      // Setup PAS finalisée — l'écriture est protégée par le check.
+      const config = await instanceConfig.getConfig();
+      expect(config.setupCompletedAt).toBeNull();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('400 missing_required_fields liste tous les champs absents', async () => {
+    const { app } = await build(client);
+    try {
+      // DB vierge : tous les champs obligatoires manquent.
+      const res = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(res.statusCode).toBe(400);
+      const body = res.json() as { details?: { missing?: string[] } };
+      expect(body.details?.missing).toEqual(
+        expect.arrayContaining([
+          'discordAppId',
+          'discordPublicKey',
+          'discordBotToken',
+          'discordClientSecret',
+        ]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('200 ok=false sur timeout : un onReady handler bloque, le route répond avant', async () => {
+    const { app, instanceConfig } = await build(client, {
+      // Timeout très court côté test pour ne pas attendre 30 s.
+      // Le handler est branché plus bas et hang volontairement.
+      completeTimeoutMs: 50,
+    });
+    try {
+      await seedAllRequired(instanceConfig);
+      // Handler qui ne résout jamais — simule un login Discord qui
+      // n'aboutit pas dans la fenêtre de timeout.
+      instanceConfig.onReady(() => new Promise<void>(() => undefined));
+
+      const res = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: false, error: 'timeout' });
+
+      // setup_completed_at est néanmoins posé en DB — le timeout
+      // concerne uniquement la connexion gateway, pas la persistance.
+      const config = await instanceConfig.getConfig();
+      expect(config.setupCompletedAt).toBeInstanceOf(Date);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('403 sur appel répété (preHandler : setup déjà terminée)', async () => {
+    const { app, instanceConfig } = await build(client);
+    try {
+      await seedAllRequired(instanceConfig);
+      const first = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({ method: 'POST', url: '/setup/complete' });
+      expect(second.statusCode).toBe(403);
+      expect(second.json()).toMatchObject({ error: 'setup_completed' });
     } finally {
       await app.close();
     }

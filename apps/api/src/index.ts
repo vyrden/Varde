@@ -81,6 +81,13 @@ export {
   registerReactionRolesRoutes,
 } from './routes/reaction-roles.js';
 export {
+  type BotTokenResponse,
+  type BotUserDto,
+  type CompleteResponse,
+  type DiscordAppResponse,
+  type IdentityResponse,
+  type OAuthResponse,
+  type PrivilegedIntentName,
   type RegisterSetupRoutesOptions,
   registerSetupRoutes,
   type SystemCheckResponse,
