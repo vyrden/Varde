@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import type { ReactElement } from 'react';
 
 import { auth } from '../auth';
@@ -44,6 +45,7 @@ export default async function Page(): Promise<ReactElement> {
     redirect(`/guilds/${guilds[0]?.id}`);
   }
 
+  const t = await getTranslations('home.empty');
   return (
     <div className="flex min-h-screen items-center justify-center bg-rail p-6">
       <div className="max-w-md rounded-lg bg-sidebar p-8 text-center shadow-xl">
@@ -53,15 +55,9 @@ export default async function Page(): Promise<ReactElement> {
         >
           🤖
         </div>
-        <h1 className="text-xl font-bold text-foreground">Aucun serveur</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Le bot Varde n'est présent sur aucun de tes serveurs administrables — ou les permissions
-          Discord n'ont pas encore été synchronisées.
-        </p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Invite le bot sur ton serveur via le portail développeur Discord, puis recharge cette
-          page.
-        </p>
+        <h1 className="text-xl font-bold text-foreground">{t('title')}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">{t('descriptionLine1')}</p>
+        <p className="mt-3 text-xs text-muted-foreground">{t('descriptionLine2')}</p>
       </div>
     </div>
   );

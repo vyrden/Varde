@@ -1,4 +1,5 @@
 import { Button, Header } from '@varde/ui';
+import { getTranslations } from 'next-intl/server';
 import type { ReactElement } from 'react';
 
 import { signOut } from '../auth';
@@ -14,7 +15,8 @@ export interface DashboardHeaderProps {
  * automatiquement, contrairement au POST direct sur
  * `/api/auth/signout` qui échoue silencieusement sans token.
  */
-export function DashboardHeader({ userName }: DashboardHeaderProps): ReactElement {
+export async function DashboardHeader({ userName }: DashboardHeaderProps): Promise<ReactElement> {
+  const t = await getTranslations('header');
   return (
     <Header
       brand={<span>Varde</span>}
@@ -30,7 +32,7 @@ export function DashboardHeader({ userName }: DashboardHeaderProps): ReactElemen
             }}
           >
             <Button type="submit" variant="ghost" size="sm">
-              Se déconnecter
+              {t('signOut')}
             </Button>
           </form>
         </>

@@ -5,5 +5,20 @@
       "description": "Sign in with Discord to manage the servers on which you have administrator rights.",
       "button": "Sign in with Discord"
     }
+  },
+  "header": {
+    "signOut": "Sign out"
+  },
+  "home": {
+    "empty": {
+      "title": "No server",
+      "descriptionLine1": "The Varde bot is not present on any of your manageable servers — or Discord permissions have not synced yet.",
+      "descriptionLine2": "Invite the bot to your server via the Discord Developer Portal, then reload this page."
+    }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The requested page does not exist, or you do not have access to it.",
+    "backHome": "Back to my servers"
   }
 }

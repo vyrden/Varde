@@ -5,5 +5,20 @@
       "description": "Connectez-vous avec Discord pour accéder à la configuration des serveurs sur lesquels vous avez les droits d'administration.",
       "button": "Se connecter avec Discord"
     }
+  },
+  "header": {
+    "signOut": "Se déconnecter"
+  },
+  "home": {
+    "empty": {
+      "title": "Aucun serveur",
+      "descriptionLine1": "Le bot Varde n'est présent sur aucun de tes serveurs administrables — ou les permissions Discord n'ont pas encore été synchronisées.",
+      "descriptionLine2": "Invite le bot sur ton serveur via le portail développeur Discord, puis recharge cette page."
+    }
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "description": "La page demandée n'existe pas ou vous n'y avez pas accès.",
+    "backHome": "Retour à mes serveurs"
   }
 }
