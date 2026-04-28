@@ -39,6 +39,20 @@
       "needsItem1": "Un compte Discord avec accès au portail Developer (https://discord.com/developers).",
       "needsItem2": "Un serveur Discord pour tester le bot (un serveur dédié aux tests est recommandé).",
       "localModeNote": "Varde fonctionne en local par défaut. Pour permettre à d'autres administrateurs de se connecter au dashboard, vous pourrez configurer une URL d'accès partagée plus tard."
+    },
+    "systemCheck": {
+      "title": "Vérification système",
+      "subtitle": "On vérifie que votre instance peut bien parler à sa base de données, chiffrer ses secrets, et joindre Discord.",
+      "checks": {
+        "database": "Connexion à la base de données",
+        "masterKey": "Clé de chiffrement (master key)",
+        "discordConnectivity": "Connectivité sortante vers Discord"
+      },
+      "apiUnreachable": "L'API du wizard est injoignable. Vérifiez que le service serveur tourne (apps/server) et rechargez la page.",
+      "baseUrl": {
+        "label": "URL d'accès au dashboard",
+        "hint": "C'est l'adresse que vos administrateurs taperont dans leur navigateur. Modifiable plus tard depuis l'administration de l'instance."
+      }
     }
   }
 }

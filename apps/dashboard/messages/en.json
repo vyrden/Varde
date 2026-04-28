@@ -39,6 +39,20 @@
       "needsItem1": "A Discord account with access to the Developer portal (https://discord.com/developers).",
       "needsItem2": "A Discord server to test the bot (a dedicated test server is recommended).",
       "localModeNote": "Varde runs locally by default. To let other administrators reach the dashboard, you'll be able to configure a shared access URL later."
+    },
+    "systemCheck": {
+      "title": "System check",
+      "subtitle": "We verify that your instance can reach its database, encrypt secrets, and talk to Discord.",
+      "checks": {
+        "database": "Database connection",
+        "masterKey": "Encryption master key",
+        "discordConnectivity": "Outbound connectivity to Discord"
+      },
+      "apiUnreachable": "The wizard API is unreachable. Make sure the server process is running (apps/server) and reload the page.",
+      "baseUrl": {
+        "label": "Dashboard access URL",
+        "hint": "This is the address your administrators will type in their browser. You'll be able to change it later from the instance administration page."
+      }
     }
   }
 }
