@@ -15,6 +15,11 @@ export {
 export { requireGuildAdmin } from './middleware/require-guild-admin.js';
 export { reconcileOnboardingSessions } from './onboarding-reconcile.js';
 export {
+  type ClaimFirstOwnershipResponse,
+  type RegisterAdminOwnershipRoutesOptions,
+  registerAdminOwnershipRoutes,
+} from './routes/admin-ownership.js';
+export {
   type AiProviderId,
   type AiSettingsDto,
   type AiTestResultDto,

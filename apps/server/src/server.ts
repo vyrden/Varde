@@ -11,6 +11,7 @@ import {
   type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
+  registerAdminOwnershipRoutes,
   registerAiSettingsRoutes,
   registerAuditRoutes,
   registerBotSettingsRoutes,
@@ -58,6 +59,7 @@ import {
   createLogger,
   createOnboardingExecutor,
   createOnboardingHostService,
+  createOwnershipService,
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
@@ -65,6 +67,7 @@ import {
   type InstanceConfigService,
   type OnboardingExecutor,
   type OnboardingHostService,
+  type OwnershipService,
   type PluginLoader,
 } from '@varde/core';
 import {
@@ -278,6 +281,8 @@ export interface ServerHandle<D extends DbDriver> {
   readonly ctxBundle: CtxBundle;
   /** Service de configuration globale de l'instance (jalon 7 PR 7.1). */
   readonly instanceConfig: InstanceConfigService;
+  /** Service de gestion des owners de l'instance (jalon 7 PR 7.2). */
+  readonly ownership: OwnershipService;
   readonly start: () => Promise<{ readonly address: string }>;
   readonly stop: () => Promise<void>;
 }
@@ -363,6 +368,11 @@ export async function createServer<D extends DbDriver>(
     masterKey,
     logger,
   });
+
+  // Service de gestion des owners de l'instance (jalon 7 PR 7.2).
+  // Consommé par le hook Auth.js (claim-first), le middleware
+  // `requireOwner` côté API, et les routes admin de gestion.
+  const ownership = createOwnershipService({ client });
 
   const aiServiceCache = new Map<GuildId, ReturnType<typeof createGuildAiService>>();
   const aiFactory = (guildId: GuildId) => {
@@ -684,6 +694,7 @@ export async function createServer<D extends DbDriver>(
     client,
     masterKey,
   });
+  registerAdminOwnershipRoutes(api, { ownership, logger });
 
   await reconcileOnboardingSessions({
     client,
@@ -722,6 +733,7 @@ export async function createServer<D extends DbDriver>(
     client,
     ctxBundle,
     instanceConfig,
+    ownership,
     start,
     stop,
   };

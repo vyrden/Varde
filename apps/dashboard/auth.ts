@@ -30,7 +30,40 @@ const secret = process.env['VARDE_AUTH_SECRET'] ?? 'dev-only-insecure-change-in-
 const key = new TextEncoder().encode(secret);
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7; // 7 jours
 
+const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
+
 type JsonObject = Record<string, unknown>;
+
+/**
+ * Hook ownership : à chaque login Discord réussi, on appelle
+ * `POST /admin/ownership/claim-first` côté API. L'endpoint est
+ * idempotent côté serveur (no-op si la table contient déjà au
+ * moins un owner), donc on peut le déclencher sans condition.
+ *
+ * Échec silencieux : un problème réseau ne doit pas bloquer le
+ * login. La réussite ou l'échec est logué côté API ; côté
+ * dashboard on reste muet pour ne pas spammer la console
+ * utilisateur sur des chemins legacy.
+ */
+async function tryClaimFirstOwnership(
+  discordUserId: string,
+  username: string | undefined,
+): Promise<void> {
+  try {
+    await fetch(`${API_URL}/admin/ownership/claim-first`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        discordUserId,
+        ...(username !== undefined ? { username } : {}),
+      }),
+      cache: 'no-store',
+    });
+  } catch {
+    // L'API peut être hors-ligne (dev sans `apps/server`). Le
+    // claim sera retenté au prochain login.
+  }
+}
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -75,6 +108,23 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     },
   },
   callbacks: {
+    async signIn({ profile }) {
+      // Tenter le claim-first à chaque login. Idempotent côté API
+      // — pas de coût après le premier owner acquis. Cette logique
+      // vit ici (côté dashboard) plutôt que côté API parce que
+      // c'est Auth.js qui détient l'ID Discord vérifié juste après
+      // l'échange OAuth.
+      if (profile && typeof profile === 'object') {
+        const discordProfile = profile as { id?: unknown; username?: unknown };
+        if (typeof discordProfile.id === 'string' && discordProfile.id.length > 0) {
+          await tryClaimFirstOwnership(
+            discordProfile.id,
+            typeof discordProfile.username === 'string' ? discordProfile.username : undefined,
+          );
+        }
+      }
+      return true;
+    },
     async jwt({ token, account, profile }) {
       if (account?.access_token) {
         token['accessToken'] = account.access_token;
