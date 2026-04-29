@@ -1,5 +1,10 @@
-import type { Logger } from '@varde/contracts';
-import type { InstanceConfigService, OwnershipService } from '@varde/core';
+import type { Logger, UserId } from '@varde/contracts';
+import {
+  INSTANCE_AUDIT_ACTIONS,
+  type InstanceAuditService,
+  type InstanceConfigService,
+  type OwnershipService,
+} from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -66,6 +71,8 @@ export interface RegisterAdminIdentityRoutesOptions {
   readonly logger: Logger;
   readonly fetchImpl?: FetchLike;
   readonly discordBaseUrl?: string;
+  /** Service d'audit instance-scoped. Optionnel — tests sans audit. */
+  readonly instanceAudit?: InstanceAuditService;
 }
 
 const httpError = (
@@ -97,7 +104,7 @@ export function registerAdminIdentityRoutes(
   app: FastifyInstance,
   options: RegisterAdminIdentityRoutesOptions,
 ): void {
-  const { ownership, instanceConfig, logger } = options;
+  const { ownership, instanceConfig, logger, instanceAudit } = options;
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
   const discordBaseUrl = options.discordBaseUrl ?? 'https://discord.com/api/v10';
   const log = logger.child({ component: 'admin-identity' });
@@ -227,6 +234,12 @@ export function registerAdminIdentityRoutes(
     log.info('Admin identity updated', {
       ownerId: session.userId,
       fields: Object.keys(patch),
+    });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.IDENTITY_UPDATED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'info',
+      metadata: { fields: Object.keys(patch) },
     });
 
     const after = await instanceConfig.getConfig();

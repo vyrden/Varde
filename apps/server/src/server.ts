@@ -60,6 +60,7 @@ import {
   createConfigService,
   createCtxFactory,
   createEventBus,
+  createInstanceAuditService,
   createInstanceConfigService,
   createKeystoreService,
   createLogger,
@@ -391,6 +392,12 @@ export async function createServer<D extends DbDriver>(
     masterKey,
     logger,
   });
+
+  // Journal d'audit des événements scope-instance (rotation token,
+  // ajout/retrait owner, changement URL, etc.). Service séparé du
+  // `auditService` guild-scoped pour préserver la FK `audit_log →
+  // guilds`. Cf. ADR / `instance_audit_log` schema.
+  const instanceAudit = createInstanceAuditService({ client });
 
   // Service de gestion des owners de l'instance (jalon 7 PR 7.2).
   // Consommé par le hook Auth.js (claim-first), le middleware
@@ -728,12 +735,13 @@ export async function createServer<D extends DbDriver>(
     client,
     masterKey,
   });
-  registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
-  registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger });
+  registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger, instanceAudit });
+  registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger, instanceAudit });
   registerAdminDiscordRoutes(api, {
     ownership,
     instanceConfig,
     logger,
+    instanceAudit,
     ...(options.discordReconnect ? { reconnect: options.discordReconnect } : {}),
   });
   registerAdminUrlsRoutes(api, {
@@ -741,6 +749,7 @@ export async function createServer<D extends DbDriver>(
     instanceConfig,
     logger,
     envBaseUrl: options.baseUrl ?? 'http://localhost:3000',
+    instanceAudit,
   });
   registerAllowedHostsRoutes(api, {
     instanceConfig,

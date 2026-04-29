@@ -375,6 +375,31 @@ export const instanceOwners = sqliteTable('instance_owners', {
   grantedByDiscordUserId: text('granted_by_discord_user_id'),
 });
 
+/**
+ * Miroir SQLite de `instance_audit_log` PG. Voir doc dans `./pg.ts`.
+ */
+export const instanceAuditLog = sqliteTable(
+  'instance_audit_log',
+  {
+    id: text('id').primaryKey(),
+    actorType: text('actor_type').$type<ActorType>().notNull(),
+    actorId: text('actor_id'),
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    severity: text('severity').$type<Severity>().notNull(),
+    metadata: text('metadata', { mode: 'json' })
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'{}'`),
+    createdAt: text('created_at').notNull().default(nowIso),
+  },
+  (t) => [
+    index('idx_instance_audit_action_created').on(t.action, t.createdAt),
+    index('idx_instance_audit_actor').on(t.actorId),
+  ],
+);
+
 export const sqliteSchema = {
   guilds,
   guildConfig,
@@ -390,6 +415,7 @@ export const sqliteSchema = {
   keystore,
   instanceConfig,
   instanceOwners,
+  instanceAuditLog,
 } as const;
 
 export type SqliteSchema = typeof sqliteSchema;

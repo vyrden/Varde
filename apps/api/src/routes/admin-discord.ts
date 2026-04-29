@@ -1,5 +1,11 @@
-import type { Logger } from '@varde/contracts';
-import type { DiscordReconnectService, InstanceConfigService, OwnershipService } from '@varde/core';
+import type { Logger, UserId } from '@varde/contracts';
+import {
+  type DiscordReconnectService,
+  INSTANCE_AUDIT_ACTIONS,
+  type InstanceAuditService,
+  type InstanceConfigService,
+  type OwnershipService,
+} from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -142,6 +148,8 @@ export interface RegisterAdminDiscordRoutesOptions {
    * le client Discord initialisé.
    */
   readonly reconnect?: DiscordReconnectService;
+  /** Service d'audit instance-scoped. Optionnel. */
+  readonly instanceAudit?: InstanceAuditService;
 }
 
 const httpError = (
@@ -173,7 +181,7 @@ export function registerAdminDiscordRoutes(
   app: FastifyInstance,
   options: RegisterAdminDiscordRoutesOptions,
 ): void {
-  const { ownership, instanceConfig, logger, reconnect } = options;
+  const { ownership, instanceConfig, logger, reconnect, instanceAudit } = options;
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
   const discordBaseUrl = options.discordBaseUrl ?? 'https://discord.com/api/v10';
   const log = logger.child({ component: 'admin-discord' });
@@ -241,6 +249,11 @@ export function registerAdminDiscordRoutes(
       throw httpError(400, 'missing_bot_token', 'Token bot absent.');
     }
     log.warn('Admin revealed bot token', { ownerId: session.userId });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.TOKEN_REVEALED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'warn',
+    });
     return { token: config.discordBotToken };
   });
 
@@ -296,6 +309,12 @@ export function registerAdminDiscordRoutes(
       discordPublicKey: publicKey,
     });
     log.warn('Admin updated Discord app credentials', { ownerId: session.userId, appId });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.APP_UPDATED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'warn',
+      target: { type: 'discord_app', id: appId },
+    });
 
     const after = await instanceConfig.getConfig();
     const tokenLastFour =
@@ -431,6 +450,14 @@ export function registerAdminDiscordRoutes(
       appChanged,
       ...(appChanged ? { previousAppId: config.discordAppId, newAppId } : {}),
     });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.TOKEN_ROTATED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'warn',
+      metadata: appChanged
+        ? { previousAppId: config.discordAppId, newAppId }
+        : { appChanged: false },
+    });
 
     const after = await instanceConfig.getConfig();
     const tokenLastFour =
@@ -497,6 +524,11 @@ export function registerAdminDiscordRoutes(
 
     await instanceConfig.setStep(config.setupStep, { discordClientSecret: clientSecret });
     log.warn('Admin rotated OAuth client secret', { ownerId: session.userId });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.OAUTH_ROTATED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'warn',
+    });
 
     const after = await instanceConfig.getConfig();
     const tokenLastFour =

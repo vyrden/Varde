@@ -1,6 +1,11 @@
-import type { Logger } from '@varde/contracts';
+import type { Logger, UserId } from '@varde/contracts';
 import { ConflictError } from '@varde/contracts';
-import type { InstanceConfigService, OwnershipService } from '@varde/core';
+import {
+  INSTANCE_AUDIT_ACTIONS,
+  type InstanceAuditService,
+  type InstanceConfigService,
+  type OwnershipService,
+} from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -89,6 +94,8 @@ export interface RegisterAdminOwnershipRoutesOptions {
   readonly fetchImpl?: FetchLike;
   /** Base URL Discord. Défaut `https://discord.com/api/v10`. */
   readonly discordBaseUrl?: string;
+  /** Service d'audit instance-scoped. Optionnel. */
+  readonly instanceAudit?: InstanceAuditService;
 }
 
 const httpError = (
@@ -120,7 +127,7 @@ export function registerAdminOwnershipRoutes(
   app: FastifyInstance,
   options: RegisterAdminOwnershipRoutesOptions,
 ): void {
-  const { ownership, instanceConfig, logger } = options;
+  const { ownership, instanceConfig, logger, instanceAudit } = options;
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
   const discordBaseUrl = options.discordBaseUrl ?? DISCORD_API_BASE;
   const log = logger.child({ component: 'admin-ownership' });
@@ -146,6 +153,13 @@ export function registerAdminOwnershipRoutes(
         log.warn('Ownership claimed', {
           discordUserId,
           ...(username !== undefined ? { username } : {}),
+        });
+        await instanceAudit?.log({
+          action: INSTANCE_AUDIT_ACTIONS.OWNER_CLAIMED,
+          actor: { type: 'system' },
+          severity: 'warn',
+          target: { type: 'discord_user', id: discordUserId },
+          ...(username !== undefined ? { metadata: { username } } : {}),
         });
       }
       return { claimed: result.claimed };
@@ -238,6 +252,13 @@ export function registerAdminOwnershipRoutes(
       grantedBy: session.userId,
       username: userParsed.data.username,
     });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.OWNER_ADDED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'info',
+      target: { type: 'discord_user', id: discordUserId },
+      metadata: { username: userParsed.data.username },
+    });
     return { added: true };
   });
 
@@ -263,6 +284,12 @@ export function registerAdminOwnershipRoutes(
         throw err;
       }
       log.info('Owner removed', { discordUserId, removedBy: session.userId });
+      await instanceAudit?.log({
+        action: INSTANCE_AUDIT_ACTIONS.OWNER_REMOVED,
+        actor: { type: 'user', id: session.userId as UserId },
+        severity: 'info',
+        target: { type: 'discord_user', id: discordUserId },
+      });
       return { removed: true };
     },
   );

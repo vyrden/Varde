@@ -438,6 +438,34 @@ export const instanceOwners = pgTable('instance_owners', {
   grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 20 }),
 });
 
+/**
+ * Journal append-only des événements d'instance (rotation token,
+ * ajout/retrait d'owner, changement d'URL…). Mirroir de `audit_log`
+ * mais sans `guild_id` puisque ces événements sont scope-instance,
+ * pas scope-guild.
+ *
+ * ID applicatif en ULID — aligné avec `audit_log` pour préserver
+ * l'invariant pagination par cursor monotonic.
+ */
+export const instanceAuditLog = pgTable(
+  'instance_audit_log',
+  {
+    id: varchar('id', { length: 26 }).primaryKey(),
+    actorType: text('actor_type').$type<ActorType>().notNull(),
+    actorId: varchar('actor_id', { length: 20 }),
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    severity: text('severity').$type<Severity>().notNull(),
+    metadata: jsonb('metadata').$type<Readonly<Record<string, unknown>>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_instance_audit_action_created').on(t.action, t.createdAt),
+    index('idx_instance_audit_actor').on(t.actorId),
+  ],
+);
+
 /** Table union utile pour l'introspection. */
 export const pgSchema = {
   guilds,
@@ -454,6 +482,7 @@ export const pgSchema = {
   keystore,
   instanceConfig,
   instanceOwners,
+  instanceAuditLog,
 } as const;
 
 export type PgSchema = typeof pgSchema;

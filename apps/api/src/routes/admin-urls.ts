@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Logger } from '@varde/contracts';
-import type { AdditionalUrl, InstanceConfigService, OwnershipService } from '@varde/core';
+import type { Logger, UserId } from '@varde/contracts';
+import {
+  type AdditionalUrl,
+  INSTANCE_AUDIT_ACTIONS,
+  type InstanceAuditService,
+  type InstanceConfigService,
+  type OwnershipService,
+} from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -106,6 +112,8 @@ export interface RegisterAdminUrlsRoutesOptions {
    * pour le principal sans dépendre d'une mutation admin préalable.
    */
   readonly envBaseUrl: string;
+  /** Service d'audit instance-scoped. Optionnel. */
+  readonly instanceAudit?: InstanceAuditService;
 }
 
 const httpError = (
@@ -132,7 +140,7 @@ export function registerAdminUrlsRoutes(
   app: FastifyInstance,
   options: RegisterAdminUrlsRoutesOptions,
 ): void {
-  const { ownership, instanceConfig, logger, envBaseUrl } = options;
+  const { ownership, instanceConfig, logger, envBaseUrl, instanceAudit } = options;
   const log = logger.child({ component: 'admin-urls' });
 
   app.get('/admin/urls', async (request): Promise<AdminUrlsResponse> => {
@@ -174,6 +182,12 @@ export function registerAdminUrlsRoutes(
     const config = await instanceConfig.getConfig();
     await instanceConfig.setStep(config.setupStep, { baseUrl });
     log.warn('Admin updated base URL', { ownerId: session.userId, baseUrl });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.BASE_URL_UPDATED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'warn',
+      metadata: { baseUrl },
+    });
 
     const after = await instanceConfig.getConfig();
     return { baseUrl: after.baseUrl, additionalUrls: after.additionalUrls };
@@ -203,6 +217,13 @@ export function registerAdminUrlsRoutes(
       id: entry.id,
       url: entry.url,
     });
+    await instanceAudit?.log({
+      action: INSTANCE_AUDIT_ACTIONS.URL_ADDED,
+      actor: { type: 'user', id: session.userId as UserId },
+      severity: 'info',
+      target: { type: 'url', id: entry.id },
+      metadata: { url: entry.url, ...(entry.label !== undefined ? { label: entry.label } : {}) },
+    });
 
     const after = await instanceConfig.getConfig();
     return { baseUrl: after.baseUrl, additionalUrls: after.additionalUrls };
@@ -220,6 +241,12 @@ export function registerAdminUrlsRoutes(
       }
       await instanceConfig.setStep(config.setupStep, { additionalUrls: next });
       log.warn('Admin removed access URL', { ownerId: session.userId, id });
+      await instanceAudit?.log({
+        action: INSTANCE_AUDIT_ACTIONS.URL_REMOVED,
+        actor: { type: 'user', id: session.userId as UserId },
+        severity: 'info',
+        target: { type: 'url', id },
+      });
       const after = await instanceConfig.getConfig();
       return { baseUrl: after.baseUrl, additionalUrls: after.additionalUrls };
     },
