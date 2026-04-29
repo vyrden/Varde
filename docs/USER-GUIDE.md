@@ -18,7 +18,8 @@ ouvrir un terminal.
 5. [Le journal d'audit](#le-journal-daudit)
 6. [Permissions : qui peut faire quoi](#permissions--qui-peut-faire-quoi)
 7. [Brancher une IA (facultatif)](#brancher-une-ia-facultatif)
-8. [Pièges fréquents et comment s'en sortir](#pièges-fréquents-et-comment-sen-sortir)
+8. [Administration de l'instance](#administration-de-linstance)
+9. [Pièges fréquents et comment s'en sortir](#pièges-fréquents-et-comment-sen-sortir)
 
 ---
 
@@ -293,6 +294,119 @@ Sur la page **Paramètres → IA**, deux options :
 > 🧠 **L'IA propose, vous disposez.** Aucune décision de
 > modération ou d'application n'est jamais prise sans validation
 > humaine explicite. Toute invocation IA est tracée dans l'audit.
+
+---
+
+## Administration de l'instance
+
+Une fois le wizard de setup terminé, **la première personne qui se
+connecte au dashboard hérite des leviers globaux de l'instance**.
+On parle ici de configuration qui dépasse une guild — token bot
+Discord, URLs d'accès au dashboard, liste des autres
+administrateurs… Cette personne s'appelle un **owner**, et elle a
+accès à une zone dédiée : `/admin`.
+
+> ⚠️ **Le premier login compte.** Si vous avez installé Varde pour
+> quelqu'un d'autre, faites-le se connecter le premier. Sinon,
+> vous deviendrez automatiquement owner et il faudra ensuite vous
+> retirer manuellement.
+
+### Accéder à `/admin`
+
+L'URL est `/admin` sur votre dashboard. Trois cas :
+
+- **Vous êtes owner** → vous voyez la zone admin (bandeau jaune
+  permanent en haut, sidebar gauche avec 5 sections).
+- **Vous n'êtes pas owner** → 404, comme si la page n'existait
+  pas. C'est volontaire : on ne révèle pas l'existence du segment
+  admin à un user lambda.
+- **Vous n'êtes pas connecté** → 404 aussi (idem).
+
+### Les 5 sections
+
+#### Vue d'ensemble (`/admin`)
+
+Cartes de statut : bot connecté ou non, latence Discord, version
+installée, nombre de serveurs et de modules actifs, taille de la
+base de données. C'est le tableau de bord de santé de
+l'instance — purement de la lecture, aucune mutation.
+
+#### Identité du bot (`/admin/identity`)
+
+Nom, avatar et description affichés par le bot dans Discord.
+Le formulaire à gauche, l'aperçu temps-réel à droite (rendu
+comme un message Discord). Le bouton « Enregistrer » envoie un
+`PATCH /applications/@me` côté Discord et persiste localement.
+
+> 💡 Discord limite les modifications de cet endpoint à environ
+> 2 requêtes par minute. Si vous touchez ce formulaire plusieurs
+> fois d'affilée, l'UI affiche un cooldown — attendez la fin
+> avant de retenter.
+
+#### Configuration Discord (`/admin/discord`)
+
+Trois sous-blocs :
+
+1. **Application Discord** : Application ID + Public Key. À
+   modifier si vous changez d'application Discord (rare).
+2. **Token bot** : champ masqué affichant les 4 derniers
+   caractères. Bouton « Afficher » pour révéler le token complet
+   (loggué côté serveur), bouton « Régénérer » pour rentrer un
+   nouveau token. Si le nouveau token appartient à une autre
+   Application Discord, l'UI demande une confirmation explicite
+   — c'est important parce que les serveurs où le bot était
+   présent sous l'ancienne app ne reconnaîtront plus le bot.
+3. **OAuth Client Secret** : champ masqué + bouton « Modifier ».
+   ⚠️ Une rotation invalide les sessions Auth.js actives — vous
+   et les autres owners devrez vous reconnecter.
+
+#### URLs d'accès (`/admin/urls`)
+
+Trois sous-blocs :
+
+1. **URL principale** : adresse par défaut du dashboard. Par
+   défaut elle reste vide — l'instance utilise alors la valeur
+   d'environnement (`BASE_URL` ou `http://localhost:3000`).
+   Modifiable depuis l'UI si vous publiez Varde sur un domaine.
+2. **URLs additionnelles** : adresses supplémentaires (LAN,
+   second domaine, tunnel ngrok…). Chaque URL ajoutée est
+   automatiquement autorisée à servir le login Discord
+   (callback OAuth2).
+3. **Redirect URIs Discord** : liste à coller dans le portail
+   Discord OAuth2 → onglet « OAuth2 → Redirects ». Bouton
+   « Copier toutes » pour la coller en une fois.
+
+> 💡 Quand vous ajoutez une URL d'accès, **ajoutez aussi sa
+> redirect URI dans le portail Discord** — sinon le login
+> échouera côté Discord.
+
+#### Ownership (`/admin/ownership`)
+
+Liste des comptes Discord autorisés à accéder à `/admin/*`.
+Chaque entrée affiche l'ID Discord, la date d'attribution, et
+qui l'a ajouté (sauf le tout premier owner, ajouté
+automatiquement).
+
+- **Ajouter un owner** : collez son Discord User ID. Le bot
+  Discord vérifie côté serveur que cet ID existe avant
+  d'enregistrer (vous ne pouvez pas ajouter un ID inventé).
+- **Retirer un owner** : bouton « Retirer ». Demande
+  confirmation. Le dernier owner ne peut **pas** être retiré
+  (on ne peut pas se retrouver sans owner) — le bouton est
+  masqué dans ce cas.
+
+> 💡 **Pas de fonction « transfert » dédiée.** Pour transférer
+> l'ownership : ajoutez le nouveau, demandez-lui de se
+> connecter pour vérifier que ça marche, puis retirez-vous.
+
+### Et si je perds tous mes owners ?
+
+Si la table `instance_owners` est vide pour quelque raison que
+ce soit (dump DB importé, intervention manuelle), **le premier
+prochain login** redeviendra owner automatiquement (claim au
+premier login). C'est volontaire — c'est votre filet de sécurité
+en cas de perte d'accès, à condition d'avoir accès à
+l'instance pour relancer un login.
 
 ---
 
