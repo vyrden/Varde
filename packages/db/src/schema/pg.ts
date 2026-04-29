@@ -398,6 +398,11 @@ export const instanceConfig = pgTable(
     botName: text('bot_name'),
     botAvatarUrl: text('bot_avatar_url'),
     botDescription: text('bot_description'),
+    baseUrl: text('base_url'),
+    additionalUrls: jsonb('additional_urls')
+      .$type<readonly { readonly id: string; readonly url: string; readonly label?: string }[]>()
+      .notNull()
+      .default([]),
     setupStep: integer('setup_step').notNull().default(1),
     setupCompletedAt: timestamp('setup_completed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

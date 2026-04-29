@@ -23,6 +23,7 @@ export {
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
+  type AdditionalUrl,
   type CreateInstanceConfigServiceOptions,
   createInstanceConfigService,
   type InstanceConfig,

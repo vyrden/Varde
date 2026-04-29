@@ -353,6 +353,11 @@ export const instanceConfig = sqliteTable(
     botName: text('bot_name'),
     botAvatarUrl: text('bot_avatar_url'),
     botDescription: text('bot_description'),
+    baseUrl: text('base_url'),
+    additionalUrls: text('additional_urls', { mode: 'json' })
+      .$type<readonly { readonly id: string; readonly url: string; readonly label?: string }[]>()
+      .notNull()
+      .default([]),
     setupStep: integer('setup_step').notNull().default(1),
     setupCompletedAt: text('setup_completed_at'),
     createdAt: text('created_at').notNull().default(nowIso),

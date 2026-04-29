@@ -16,6 +16,7 @@ import {
   registerAdminIdentityRoutes,
   registerAdminOverviewRoutes,
   registerAdminOwnershipRoutes,
+  registerAdminUrlsRoutes,
   registerAiSettingsRoutes,
   registerAuditRoutes,
   registerBotSettingsRoutes,
@@ -720,6 +721,12 @@ export async function createServer<D extends DbDriver>(
   registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
   registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger });
   registerAdminDiscordRoutes(api, { ownership, instanceConfig, logger });
+  registerAdminUrlsRoutes(api, {
+    ownership,
+    instanceConfig,
+    logger,
+    envBaseUrl: options.baseUrl ?? 'http://localhost:3000',
+  });
   registerAdminOverviewRoutes(api, {
     ownership,
     client,

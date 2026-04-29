@@ -47,6 +47,13 @@ export interface InstanceConfigStatus {
   readonly currentStep: number;
 }
 
+/** Une URL additionnelle d'accès au dashboard. */
+export interface AdditionalUrl {
+  readonly id: string;
+  readonly url: string;
+  readonly label?: string;
+}
+
 /**
  * Snapshot complet déchiffré de la configuration de l'instance. Réservé
  * à l'admin et au runtime (login bot, callback OAuth) — ne JAMAIS le
@@ -60,6 +67,10 @@ export interface InstanceConfig {
   readonly botName: string | null;
   readonly botAvatarUrl: string | null;
   readonly botDescription: string | null;
+  /** URL principale persistée. `null` si l'instance retombe sur l'env. */
+  readonly baseUrl: string | null;
+  /** URLs additionnelles d'accès au dashboard (LAN, second domaine…). */
+  readonly additionalUrls: readonly AdditionalUrl[];
   readonly setupStep: number;
   readonly setupCompletedAt: Date | null;
 }
@@ -76,6 +87,10 @@ export interface InstanceConfigPatch {
   readonly botName?: string;
   readonly botAvatarUrl?: string;
   readonly botDescription?: string;
+  /** Override de l'URL principale. `null` rebascule sur l'environnement. */
+  readonly baseUrl?: string | null;
+  /** Remplace l'intégralité du tableau d'URLs additionnelles. */
+  readonly additionalUrls?: readonly AdditionalUrl[];
 }
 
 /** Handler invoqué au passage en `configured = true`. */
@@ -105,6 +120,8 @@ const DEFAULT_CONFIG: InstanceConfig = {
   botName: null,
   botAvatarUrl: null,
   botDescription: null,
+  baseUrl: null,
+  additionalUrls: [],
   setupStep: 1,
   setupCompletedAt: null,
 };
@@ -154,6 +171,8 @@ interface RawRow {
   readonly botName: string | null;
   readonly botAvatarUrl: string | null;
   readonly botDescription: string | null;
+  readonly baseUrl: string | null;
+  readonly additionalUrls: readonly AdditionalUrl[];
   readonly setupStep: number;
   readonly setupCompletedAt: Date | string | null;
 }
@@ -228,6 +247,8 @@ const rowToConfig = (row: RawRow, masterKey: Buffer): InstanceConfig => {
     botName: row.botName,
     botAvatarUrl: row.botAvatarUrl,
     botDescription: row.botDescription,
+    baseUrl: row.baseUrl,
+    additionalUrls: row.additionalUrls,
     setupStep: row.setupStep,
     setupCompletedAt: decodeTimestamp(row.setupCompletedAt),
   };
@@ -247,6 +268,8 @@ interface WriteValues {
   botName?: string;
   botAvatarUrl?: string;
   botDescription?: string;
+  baseUrl?: string | null;
+  additionalUrls?: readonly AdditionalUrl[];
 }
 
 const buildPatchValues = (
@@ -281,6 +304,12 @@ const buildPatchValues = (
   }
   if (patch.botDescription !== undefined) {
     values.botDescription = patch.botDescription;
+  }
+  if (patch.baseUrl !== undefined) {
+    values.baseUrl = patch.baseUrl;
+  }
+  if (patch.additionalUrls !== undefined) {
+    values.additionalUrls = patch.additionalUrls;
   }
   return values;
 };

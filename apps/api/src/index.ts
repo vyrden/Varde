@@ -43,6 +43,12 @@ export {
   registerAdminOwnershipRoutes,
 } from './routes/admin-ownership.js';
 export {
+  type AdminRedirectUrisResponse,
+  type AdminUrlsResponse,
+  type RegisterAdminUrlsRoutesOptions,
+  registerAdminUrlsRoutes,
+} from './routes/admin-urls.js';
+export {
   type AiProviderId,
   type AiSettingsDto,
   type AiTestResultDto,
