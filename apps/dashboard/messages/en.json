@@ -366,6 +366,39 @@
         "unknown": "An unexpected error occurred on the API side."
       }
     },
+    "ownership": {
+      "title": "Ownership",
+      "subtitle": "List of Discord accounts allowed to reach `/admin/*`. The first user to sign in after setup becomes an owner automatically; further owners must be added explicitly.",
+      "list": {
+        "heading": "Instance owners",
+        "description": "Each owner can change the instance configuration and add or remove other owners.",
+        "empty": "No owners recorded yet.",
+        "grantedAt": "Added on",
+        "grantedBy": "By",
+        "grantedByAuto": "(auto claim)",
+        "remove": "Remove",
+        "removeConfirm": "Remove this owner?",
+        "removeSuccess": "Owner removed."
+      },
+      "add": {
+        "heading": "Add an owner",
+        "description": "The Discord account must have signed in at least once (or its ID must be reachable by the bot via the Discord API).",
+        "userIdLabel": "Discord user ID",
+        "userIdPlaceholder": "e.g. 1212345678901234567",
+        "submit": "Add",
+        "success": "Owner added."
+      },
+      "errors": {
+        "invalidForm": "Missing fields.",
+        "invalidBody": "Invalid Discord ID. Must be a 17-20 digit snowflake.",
+        "userNotFound": "No Discord user found for this ID.",
+        "lastOwner": "Cannot remove the last owner. Add another owner first.",
+        "notFound": "Page not found.",
+        "discordUnreachable": "Discord is unreachable. Try again in a moment.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
     "overview": {
       "title": "Overview",
       "subtitle": "Global state of this Varde instance — bot, servers, modules, database.",

@@ -113,3 +113,16 @@ export const fetchAdminUrls = (): Promise<AdminUrlsDto> => apiGet<AdminUrlsDto>(
 
 export const fetchAdminRedirectUris = (): Promise<AdminRedirectUrisDto> =>
   apiGet<AdminRedirectUrisDto>('/admin/urls/redirect-uris');
+
+export interface AdminOwnerDto {
+  readonly discordUserId: string;
+  readonly grantedAt: string;
+  readonly grantedByDiscordUserId: string | null;
+}
+
+export interface AdminOwnersListDto {
+  readonly owners: readonly AdminOwnerDto[];
+}
+
+export const fetchAdminOwners = (): Promise<AdminOwnersListDto> =>
+  apiGet<AdminOwnersListDto>('/admin/ownership');

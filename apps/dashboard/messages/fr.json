@@ -366,6 +366,39 @@
         "unknown": "Une erreur inattendue s'est produite côté API."
       }
     },
+    "ownership": {
+      "title": "Ownership",
+      "subtitle": "Liste des comptes Discord autorisés à accéder à `/admin/*`. Le premier user qui se connecte après la setup devient automatiquement owner ; les suivants doivent être ajoutés explicitement.",
+      "list": {
+        "heading": "Owners de cette instance",
+        "description": "Chaque owner peut modifier la configuration de l'instance et ajouter/retirer d'autres owners.",
+        "empty": "Aucun owner enregistré.",
+        "grantedAt": "Ajouté le",
+        "grantedBy": "Par",
+        "grantedByAuto": "(claim automatique)",
+        "remove": "Retirer",
+        "removeConfirm": "Retirer cet owner ?",
+        "removeSuccess": "Owner retiré."
+      },
+      "add": {
+        "heading": "Ajouter un owner",
+        "description": "Le compte Discord doit déjà s'être connecté au moins une fois (ou son ID doit être validable côté Discord par le bot).",
+        "userIdLabel": "Discord User ID",
+        "userIdPlaceholder": "ex. 1212345678901234567",
+        "submit": "Ajouter",
+        "success": "Owner ajouté."
+      },
+      "errors": {
+        "invalidForm": "Champs manquants.",
+        "invalidBody": "ID Discord invalide. Doit être un snowflake (17-20 chiffres).",
+        "userNotFound": "Aucun utilisateur Discord trouvé pour cet ID.",
+        "lastOwner": "Impossible de retirer le dernier owner. Ajoutez d'abord un autre owner.",
+        "notFound": "Page introuvable.",
+        "discordUnreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
     "overview": {
       "title": "Vue d'ensemble",
       "subtitle": "État global de cette instance Varde — bot, serveurs, modules, base de données.",
