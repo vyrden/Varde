@@ -251,6 +251,24 @@ export const configUiSchema = z.object({
   fields: z.array(configFieldSpecSchema),
 });
 
+/**
+ * Niveau de permission requis pour qu'un user accède à un module
+ * via le dashboard d'un serveur (jalon 7 PR 7.3).
+ *
+ * - `'admin'` (défaut) : accès complet ; correspond aux rôles
+ *   Discord configurés en `adminRoleIds` côté `guild_permissions`,
+ *   au propriétaire du serveur, et fallback rôles avec perm Discord
+ *   `Administrator`.
+ * - `'moderator'` : accès limité aux modules tagués comme tels.
+ *   Couvre les use cases mod/anti-spam où on veut un accès dashboard
+ *   sans donner les leviers complets de l'instance.
+ *
+ * Les modules tiers peuvent déclarer leur niveau requis via
+ * `defineModule({ requiredPermission: 'moderator' })`. Ne pas
+ * spécifier équivaut à `'admin'` — le défaut est restrictif.
+ */
+export type PermissionLevel = 'admin' | 'moderator';
+
 /** Définition complète d'un module, retournée par `defineModule()`. */
 export interface ModuleDefinition {
   readonly manifest: ManifestStatic;
@@ -263,6 +281,11 @@ export interface ModuleDefinition {
   readonly configSchema?: ZodType<unknown>;
   readonly configDefaults?: Readonly<Record<string, unknown>>;
   readonly configUi?: ConfigUi;
+  /**
+   * Niveau de permission requis pour accéder au module via le
+   * dashboard. Défaut : `'admin'`. Cf. `PermissionLevel`.
+   */
+  readonly requiredPermission?: PermissionLevel;
 }
 
 /**

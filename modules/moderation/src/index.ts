@@ -27,6 +27,12 @@ export const moderation = defineModule({
   configSchema,
   configUi,
   commands,
+  // Module tagué `moderator` (jalon 7 PR 7.3) : accessible aux
+  // users qui ont au moins un rôle dans `moderatorRoleIds` côté
+  // `guild_permissions`, ou ce qu'on appelle un user `admin`.
+  // Sans cette annotation, le module retombe sur `'admin'`
+  // (défaut restrictif) et seul un admin du serveur le voit.
+  requiredPermission: 'moderator',
 
   onLoad: (ctx) => {
     ctx.logger.info('moderation : onLoad', {
