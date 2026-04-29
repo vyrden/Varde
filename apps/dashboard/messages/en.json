@@ -215,6 +215,43 @@
         "ownership": "Ownership"
       }
     },
+    "identity": {
+      "title": "Bot identity",
+      "subtitle": "Name, avatar and description displayed by the bot in Discord. Changes apply immediately via PATCH /applications/@me.",
+      "form": {
+        "name": {
+          "label": "Name",
+          "placeholder": "e.g. Varde"
+        },
+        "avatar": {
+          "label": "Avatar",
+          "hint": "PNG, JPEG or GIF. The file is sent to Discord, then the preview switches to the official CDN URL.",
+          "remove": "Cancel selection"
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Short tagline shown on the bot's Discord profile."
+        },
+        "submit": "Save",
+        "reset": "Cancel"
+      },
+      "preview": {
+        "heading": "Preview",
+        "emptyName": "(no name set)",
+        "emptyDescription": "(no description)"
+      },
+      "success": "Identity updated on Discord.",
+      "errors": {
+        "invalidBody": "Invalid fields. Check name length (max 32) and description length (max 400).",
+        "missingBotToken": "Bot token missing — this instance has no Discord credentials registered yet.",
+        "missingAppId": "Application ID missing — this instance has no Discord credentials registered yet.",
+        "discordUnreachable": "Discord is unreachable. Try again in a moment.",
+        "rateLimited": "Discord is rate-limiting this endpoint. Retry in {seconds}s.",
+        "notFound": "Page not found.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
     "overview": {
       "title": "Overview",
       "subtitle": "Global state of this Varde instance — bot, servers, modules, database.",

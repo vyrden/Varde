@@ -215,6 +215,43 @@
         "ownership": "Ownership"
       }
     },
+    "identity": {
+      "title": "Identité du bot",
+      "subtitle": "Nom, avatar et description affichés par le bot dans Discord. Modifications appliquées immédiatement via PATCH /applications/@me.",
+      "form": {
+        "name": {
+          "label": "Nom",
+          "placeholder": "ex. Varde"
+        },
+        "avatar": {
+          "label": "Avatar",
+          "hint": "PNG, JPEG ou GIF. Le fichier est envoyé à Discord puis remplacé par l'URL CDN officielle dans l'aperçu.",
+          "remove": "Annuler la sélection"
+        },
+        "description": {
+          "label": "Description",
+          "placeholder": "Présentation courte affichée sur le profil Discord du bot."
+        },
+        "submit": "Enregistrer",
+        "reset": "Annuler"
+      },
+      "preview": {
+        "heading": "Aperçu",
+        "emptyName": "(nom non défini)",
+        "emptyDescription": "(pas de description)"
+      },
+      "success": "Identité mise à jour côté Discord.",
+      "errors": {
+        "invalidBody": "Champs invalides. Vérifiez la longueur du nom (max 32) et de la description (max 400).",
+        "missingBotToken": "Token bot absent — l'instance n'a pas encore enregistré de credentials Discord.",
+        "missingAppId": "Application ID absent — l'instance n'a pas encore enregistré de credentials Discord.",
+        "discordUnreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "rateLimited": "Discord limite cet endpoint. Réessayez dans {seconds} s.",
+        "notFound": "Page introuvable.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
     "overview": {
       "title": "Vue d'ensemble",
       "subtitle": "État global de cette instance Varde — bot, serveurs, modules, base de données.",

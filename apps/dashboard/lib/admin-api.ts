@@ -67,3 +67,12 @@ export interface AdminOverviewDto {
 
 export const fetchAdminOverview = (): Promise<AdminOverviewDto> =>
   apiGet<AdminOverviewDto>('/admin/overview');
+
+export interface AdminIdentityDto {
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly avatarUrl: string | null;
+}
+
+export const fetchAdminIdentity = (): Promise<AdminIdentityDto> =>
+  apiGet<AdminIdentityDto>('/admin/identity');
