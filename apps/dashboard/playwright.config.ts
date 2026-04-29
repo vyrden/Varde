@@ -33,6 +33,14 @@ export default defineConfig({
     /* Trace + screenshot uniquement à l'échec, pour ne pas saturer le disque. */
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    /*
+     * Locale FR par défaut pour aligner les tests sur les chaînes
+     * `messages/fr.json` (locale par défaut du dashboard cf.
+     * `i18n/config.ts`). Sans ça, Chromium envoie `Accept-Language:
+     * en-US,...` et next-intl résout en EN, faisant échouer les
+     * regex FR.
+     */
+    locale: 'fr-FR',
   },
 
   projects: [

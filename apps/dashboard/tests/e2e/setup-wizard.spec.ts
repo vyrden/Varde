@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { setMockConfigured } from './fixtures/mock-state';
+
 /**
  * E2E du wizard de setup (jalon 7 PR 7.1, sous-livrable 6).
  *
@@ -10,10 +12,17 @@ import { expect, test } from '@playwright/test';
  * validation Discord) est testé séparément par les 54 tests
  * d'intégration de `apps/api/tests/integration/setup-route.test.ts`.
  *
- * Le mock HTTP (`tests/e2e/fixtures/setup-api-mock.ts`) est lancé
+ * Le mock HTTP (`tests/e2e/fixtures/setup-api-mock.mjs`) est lancé
  * en parallèle du dashboard par `playwright.config.ts` et répond
- * « non configurée + tout vert » par défaut.
+ * « non configurée + tout vert » par défaut. On force explicitement
+ * cet état au `beforeAll` pour ne pas dépendre de l'ordre
+ * d'exécution avec d'autres specs (landing.spec.ts bascule le
+ * mock en `configured: true`).
  */
+
+test.beforeAll(async () => {
+  await setMockConfigured(false);
+});
 
 test.describe('wizard de setup — middleware et navigation', () => {
   test('redirige `/` vers `/setup/welcome` quand l instance n est pas configurée', async ({

@@ -1,15 +1,26 @@
 import { expect, test } from '@playwright/test';
 
+import { setMockConfigured } from './fixtures/mock-state';
+
 /**
  * Smoke E2E — vérifie que le squelette du dashboard se sert et que
  * les redirects d'auth élémentaires fonctionnent. Pas de login Discord
  * réel : ces specs ne couvrent que les chemins publics et le retour
  * silencieux vers `/` quand on tape une URL admin sans session.
  *
+ * **Contexte mock** : ces specs supposent une instance déjà configurée
+ * (`setup_completed_at` posé). Sans ça, le middleware du wizard
+ * redirige `/` vers `/setup/welcome` et la landing card ne s'affiche
+ * jamais. On bascule le mock dans `configured: true` au beforeAll.
+ *
  * Pré-requis : exécuter `pnpm exec playwright install chromium` une
  * fois par poste pour télécharger le binaire navigateur (non livré
  * dans le `pnpm install` standard pour ne pas alourdir le repo).
  */
+
+test.beforeAll(async () => {
+  await setMockConfigured(true);
+});
 
 test.describe('landing publique', () => {
   test('rend la card de connexion Discord pour un visiteur sans session', async ({ page }) => {

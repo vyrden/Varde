@@ -38,6 +38,18 @@ const readBody = async (req) => {
 };
 
 const handlers = {
+  // Endpoint de contrôle pour les tests E2E : permet à un spec de
+  // basculer le mock entre `configured: false` (mode wizard) et
+  // `configured: true` (mode dashboard configuré). Sans ça, deux
+  // suites de tests qui veulent des états différents se marchent
+  // dessus au sein du même run Playwright.
+  'POST /__test/configure': async (req, res) => {
+    const body = await readBody(req);
+    if (typeof body.configured === 'boolean') {
+      state.configured = body.configured;
+    }
+    json(res, 200, { configured: state.configured });
+  },
   'GET /setup/status': async (_req, res) => {
     if (state.configured) {
       json(res, 403, { error: 'setup_completed', message: 'setup déjà terminée' });

@@ -40,15 +40,21 @@ import { decideRedirect, fetchSetupConfigured, type SetupFetch } from './lib/set
 
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 
+// `NODE_ENV === 'test'` désactive le cache positif. Sans ça, les
+// E2E qui basculent l'état du mock entre `configured: true` et
+// `configured: false` ne verraient jamais l'évolution (le worker
+// retiendrait pour toujours le premier `true` observé).
+const CACHE_ENABLED = process.env['NODE_ENV'] !== 'test';
+
 let configuredCache: boolean | null = null;
 const fetchImpl: SetupFetch = (input, init) => fetch(input, init);
 
 const isConfigured = async (): Promise<boolean> => {
-  if (configuredCache === true) {
+  if (CACHE_ENABLED && configuredCache === true) {
     return true;
   }
   const result = await fetchSetupConfigured(API_URL, fetchImpl);
-  if (result) {
+  if (CACHE_ENABLED && result) {
     configuredCache = true;
   }
   return result;
