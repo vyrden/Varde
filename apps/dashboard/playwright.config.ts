@@ -64,11 +64,16 @@ export default defineConfig({
       env: { PORT: '4002' },
     },
     {
-      command: 'pnpm dev -- --port 3001',
+      // Next.js honore `PORT` natif — on évite le `pnpm dev -- --port`
+      // qui ne plumbe pas le flag à travers les versions récentes de
+      // pnpm (qui interprètent le second `--` comme un argument
+      // positional « directory » côté Next).
+      command: 'pnpm dev',
       port: 3001,
       reuseExistingServer: !process.env['CI'],
       timeout: 60 * 1000,
       env: {
+        PORT: '3001',
         // Auth.js refuse de se charger sans secret ; on injecte une valeur
         // de test si elle n'est pas déjà fournie. Pour les specs qui
         // signent une session JWT, le test devra utiliser le même secret.
