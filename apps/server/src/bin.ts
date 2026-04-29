@@ -46,11 +46,12 @@ import {
   createDiscordJsChannelSender,
   createDiscordService,
   createOnboardingDiscordBridge,
+  type DiscordClientHolder,
   type OnboardingDiscordBridge,
   registerSlashCommandsForGuild,
 } from '@varde/bot';
 import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
-import { createLogger } from '@varde/core';
+import { createDiscordReconnectService, createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
 import { logs, locales as logsLocales } from '@varde/module-logs';
@@ -297,7 +298,13 @@ function subscribeAutoOnboard(
 }
 
 interface DiscordAttachment {
-  readonly client: Client;
+  /**
+   * Holder mutable du Client courant — muté par le reconnect handler
+   * (jalon 7 PR 7.2 sub-livrable 5). Tous les services (bridge,
+   * sender, discordService, listers) lisent `holder.current` au
+   * call-time, ils suivent donc le swap sans reconstruction.
+   */
+  readonly holder: DiscordClientHolder;
   readonly bridge: OnboardingDiscordBridge;
   /** Service Discord concret à passer à `createServer` via `discordService`. */
   readonly discordService: DiscordService;
@@ -341,8 +348,14 @@ interface DiscordBinding {
  * il est wrappé dans un `DiscordService` (rate limiter + traçabilité)
  * et passé à `createServer` pour alimenter `ctx.discord` des modules.
  */
-function createDiscordAttachment(logger: Logger): DiscordAttachment {
-  const client = new Client({
+/**
+ * Construit un `Client` discord.js avec les intents/partials de
+ * production. Factorise les paramètres pour que `createDiscordAttachment`
+ * (boot) et le `discordReconnectService` (rotation à chaud) construisent
+ * exactement le même client.
+ */
+function buildDiscordClient(): Client {
+  return new Client({
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
@@ -362,14 +375,18 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
     // redémarrage du bot, utilisateur jamais vu récemment).
     partials: [Partials.Message, Partials.Reaction, Partials.User, Partials.GuildMember],
   });
-  const bridge = createOnboardingDiscordBridge(client);
-  const sender = createDiscordJsChannelSender(client);
-  const discordService = createDiscordService({ sender, logger, client });
+}
+
+function createDiscordAttachment(logger: Logger): DiscordAttachment {
+  const holder: DiscordClientHolder = { current: buildDiscordClient() };
+  const bridge = createOnboardingDiscordBridge(holder);
+  const sender = createDiscordJsChannelSender(holder);
+  const discordService = createDiscordService({ sender, logger, client: holder });
 
   const listGuildTextChannels = async (
     guildId: string,
   ): Promise<readonly GuildTextChannelDto[]> => {
-    const guild = client.guilds.cache.get(guildId);
+    const guild = holder.current.guilds.cache.get(guildId);
     if (!guild) return [];
     // On préfère `guild.channels.fetch()` pour couvrir les cas où le cache
     // n'est pas encore peuplé (redémarrage rapide post-reconnexion).
@@ -383,7 +400,7 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   };
 
   const listGuildRoles = async (guildId: string): Promise<readonly GuildRoleDto[]> => {
-    const guild = client.guilds.cache.get(guildId);
+    const guild = holder.current.guilds.cache.get(guildId);
     if (!guild) return [];
     const roles = await guild.roles.fetch();
     return Array.from(roles.values())
@@ -395,7 +412,7 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   const listGuildEmojis: DiscordAttachment['listGuildEmojis'] = async (guildId) => {
     const current: { id: string; name: string; animated: boolean }[] = [];
     const external: { id: string; name: string; animated: boolean; guildName: string }[] = [];
-    for (const guild of client.guilds.cache.values()) {
+    for (const guild of holder.current.guilds.cache.values()) {
       for (const emoji of guild.emojis.cache.values()) {
         if (emoji.id === null || emoji.name === null) continue;
         if (guild.id === guildId) {
@@ -416,7 +433,7 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
   };
 
   return {
-    client,
+    holder,
     bridge,
     discordService,
     listGuildTextChannels,
@@ -441,7 +458,7 @@ function attachDiscordToHandle(
   handle: ServerHandle,
   logger: Logger,
 ): DiscordBinding {
-  attachment.client.once('ready', async (readyClient) => {
+  attachment.holder.current.once('ready', async (readyClient) => {
     const guilds = [...readyClient.guilds.cache.values()];
     logger.info('Client Discord ready', { tag: readyClient.user.tag, guilds: guilds.length });
     const commands = collectAllCommands(handle);
@@ -455,12 +472,15 @@ function attachDiscordToHandle(
       await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
-  const { detach } = attachDiscordClient(attachment.client, handle.dispatcher, logger, (input) =>
-    handle.ctxBundle.interactions.dispatchButton(input),
+  const { detach } = attachDiscordClient(
+    attachment.holder.current,
+    handle.dispatcher,
+    logger,
+    (input) => handle.ctxBundle.interactions.dispatchButton(input),
   );
   return {
     detach,
-    destroy: () => attachment.client.destroy(),
+    destroy: () => attachment.holder.current.destroy(),
   };
 }
 
@@ -494,6 +514,88 @@ async function main(): Promise<void> {
   // brancher la PR 7.1 « connexion différée jusqu'au wizard » sans
   // changer la composition de `createServer()`.
   const discordAttachment = createDiscordAttachment(logger);
+  // `discord` est mis à jour à chaque attach/swap. Déclaré ici parce
+  // que le handler `discordReconnect` (ci-dessous) doit le capturer
+  // par closure pour atteindre le binding en cours, lui-même utilisé
+  // par les routes admin via `createServer({ discordReconnect, ... })`.
+  let discord: DiscordBinding | null = null;
+
+  /**
+   * Procédure de rotation à chaud du token bot Discord (jalon 7 PR
+   * 7.2 sub-livrable 5).
+   *
+   * 1. Détache l'ancien dispatcher du Client en cours.
+   * 2. Construit un nouveau `Client` discord.js et le pose dans
+   *    `discordAttachment.holder.current` — bridge / sender /
+   *    discordService / listers continuent de fonctionner sur ce
+   *    nouveau client (ils résolvent depuis le holder à chaque appel).
+   * 3. `client.login(newToken)` puis attend `clientReady`.
+   * 4. Re-attache le dispatcher au nouveau client.
+   * 5. Détruit gracefulement l'ancien client.
+   *
+   * Échec en cours de swap : restore le holder sur l'ancien client,
+   * détruit le nouveau (qui a peut-être à moitié connecté), re-attache
+   * le dispatcher à l'ancien, et propage l'erreur. Le mutex FIFO du
+   * service empêche deux swaps concurrents.
+   */
+  const discordReconnect = createDiscordReconnectService({
+    handler: async (newToken: string): Promise<void> => {
+      const previousClient = discordAttachment.holder.current;
+      const previousBinding = discord;
+      if (previousBinding !== null) {
+        previousBinding.detach();
+        discord = null;
+      }
+      const newClient = buildDiscordClient();
+      discordAttachment.holder.current = newClient;
+      try {
+        // `clientReady` (discord.js v15+) remplace l'ancien `ready`.
+        // On configure les listeners avant `login()` pour ne pas
+        // rater l'événement si le login est très rapide en CI/dev.
+        const readyPromise = new Promise<void>((resolve, reject) => {
+          const onReady = (): void => {
+            newClient.off('error', onError);
+            resolve();
+          };
+          const onError = (err: Error): void => {
+            newClient.off('clientReady', onReady);
+            reject(err);
+          };
+          newClient.once('clientReady', onReady);
+          newClient.once('error', onError);
+        });
+        await newClient.login(newToken);
+        await readyPromise;
+      } catch (err) {
+        // Rollback : remet l'ancien client dans le holder, détruit
+        // le nouveau (peut être à moitié connecté), re-attache
+        // l'ancien dispatcher si on l'avait détaché.
+        discordAttachment.holder.current = previousClient;
+        try {
+          await newClient.destroy();
+        } catch (destroyErr) {
+          logger.warn('reconnect : destroy du nouveau client a échoué', {
+            error: destroyErr instanceof Error ? destroyErr.message : String(destroyErr),
+          });
+        }
+        if (previousBinding !== null) {
+          discord = attachDiscordToHandle(discordAttachment, handle, logger);
+        }
+        throw err;
+      }
+      // Succès : ré-attache dispatcher au nouveau client, détruit l'ancien.
+      discord = attachDiscordToHandle(discordAttachment, handle, logger);
+      try {
+        await previousClient.destroy();
+      } catch (err) {
+        logger.warn('reconnect : destroy de l ancien client a échoué', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    logger,
+    timeoutMs: 30_000,
+  });
 
   const driver = pickDriver(databaseUrl);
   const handle =
@@ -512,6 +614,7 @@ async function main(): Promise<void> {
           listGuildRoles: discordAttachment.listGuildRoles,
           listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
+          discordReconnect,
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -527,6 +630,7 @@ async function main(): Promise<void> {
           listGuildRoles: discordAttachment.listGuildRoles,
           listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
+          discordReconnect,
         });
 
   handle.loader.register(helloWorld);
@@ -551,9 +655,8 @@ async function main(): Promise<void> {
     }
   }
 
-  let discord: DiscordBinding | null = null;
   const unsubscribeAutoOnboard = subscribeAutoOnboard(handle, logger, () =>
-    discord !== null ? discordAttachment.client : null,
+    discord !== null ? discordAttachment.holder.current : null,
   );
 
   await seedFromEnv(handle, seedIds, logger);
@@ -573,7 +676,7 @@ async function main(): Promise<void> {
 
   const performLogin = async (token: string): Promise<void> => {
     discord = attachDiscordToHandle(discordAttachment, handle, logger);
-    await discordAttachment.client.login(token);
+    await discordAttachment.holder.current.login(token);
   };
 
   if (plan.kind === 'db') {

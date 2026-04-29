@@ -13,6 +13,8 @@ import {
   PermissionsBitField,
 } from 'discord.js';
 
+import { type DiscordClientHolder, resolveDiscordClient } from './client-holder.js';
+
 /**
  * Bridge discord.js → primitives onboarding (PR 3.12d). Matérialise
  * les méthodes `createRole` / `createCategory` / `createChannel` +
@@ -66,9 +68,11 @@ const toDiscordChannelType = (
   }
 };
 
-export function createOnboardingDiscordBridge(client: Client): OnboardingDiscordBridge {
+export function createOnboardingDiscordBridge(
+  clientOrHolder: Client | DiscordClientHolder,
+): OnboardingDiscordBridge {
   const requireGuild = (guildId: string): Guild => {
-    const guild = client.guilds.cache.get(guildId);
+    const guild = resolveDiscordClient(clientOrHolder).guilds.cache.get(guildId);
     if (!guild) {
       throw new Error(
         `Discord guild "${guildId}" introuvable dans le cache du bot : s'assurer que le bot est invité et connecté.`,

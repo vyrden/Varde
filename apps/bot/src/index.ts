@@ -5,6 +5,11 @@ export {
 } from './channel-sender-mapper.js';
 export { attachDiscordClient } from './client-adapter.js';
 export {
+  type DiscordClientHolder,
+  isDiscordClientHolder,
+  resolveDiscordClient,
+} from './client-holder.js';
+export {
   type CommandCtxFactory,
   type CommandPermissionsPort,
   type CommandRegistry,

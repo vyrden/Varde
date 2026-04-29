@@ -69,6 +69,7 @@ import {
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
+  type DiscordReconnectService,
   type I18nMessages,
   type InstanceConfigService,
   type OnboardingExecutor,
@@ -216,6 +217,14 @@ export interface CreateServerOptions<D extends DbDriver> {
    * sans `VARDE_DISCORD_TOKEN`.
    */
   readonly onboardingBridge?: OnboardingDiscordBridge;
+  /**
+   * Service de reconnexion gateway (jalon 7 PR 7.2 sub-livrable 5).
+   * Quand fourni, `PUT /admin/discord/token` l'utilise pour swap le
+   * token bot à chaud — un échec de reconnexion empêche la
+   * persistance du nouveau token (rollback automatique). Absent en
+   * test / CI.
+   */
+  readonly discordReconnect?: DiscordReconnectService;
   /**
    * Fonction listant les salons texte Discord d'une guild. Fournie par
    * `bin.ts` lorsque le bot est connecté. Absente → les routes GET
@@ -721,7 +730,12 @@ export async function createServer<D extends DbDriver>(
   });
   registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
   registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger });
-  registerAdminDiscordRoutes(api, { ownership, instanceConfig, logger });
+  registerAdminDiscordRoutes(api, {
+    ownership,
+    instanceConfig,
+    logger,
+    ...(options.discordReconnect ? { reconnect: options.discordReconnect } : {}),
+  });
   registerAdminUrlsRoutes(api, {
     ownership,
     instanceConfig,

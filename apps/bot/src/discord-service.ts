@@ -15,6 +15,8 @@ import {
 } from '@varde/contracts';
 import type { Client } from 'discord.js';
 
+import { type DiscordClientHolder, isDiscordClientHolder } from './client-holder.js';
+
 /**
  * Implémentation concrète du `DiscordService` : un wrapper minimal
  * autour d'un port `ChannelSender` qui abstrait discord.js. Le bot
@@ -53,8 +55,12 @@ export interface CreateDiscordServiceOptions {
    * directement aux messages/réactions (addReaction, removeUserReaction,
    * removeOwnReaction). Optionnel pour rester rétrocompatible avec les
    * tests qui ne couvrent que sendMessage/sendEmbed.
+   *
+   * Accepte aussi un `DiscordClientHolder` (jalon 7 PR 7.2) pour
+   * suivre le swap de token sans reconstruire le service — le
+   * client effectif est résolu à chaque appel.
    */
-  readonly client?: Client;
+  readonly client?: Client | DiscordClientHolder;
 }
 
 interface SlidingWindow {
@@ -238,13 +244,19 @@ interface UsersManagerLike {
  * demandée par le plan.
  */
 export function createDiscordService(options: CreateDiscordServiceOptions): DiscordService {
-  const { sender, moduleId, client } = options;
+  const { sender, moduleId } = options;
   const logger = options.logger.child({
     component: 'discord-service',
     ...(moduleId ? { moduleId } : {}),
   });
   const clock = options.now ?? (() => Date.now());
   const window = options.rateLimit ? createWindow(options.rateLimit) : null;
+  // `client` peut être un Client direct ou un holder mutable —
+  // on résout au call-time pour suivre une rotation de token.
+  const getClient = (): Client | undefined => {
+    if (options.client === undefined) return undefined;
+    return isDiscordClientHolder(options.client) ? options.client.current : options.client;
+  };
 
   return {
     async sendMessage(channelId, content) {
@@ -308,7 +320,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async addReaction(channelId: ChannelId, messageId: MessageId, emoji: Emoji): Promise<void> {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -343,7 +355,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       userId: UserId,
       emoji: Emoji,
     ): Promise<void> {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -381,7 +393,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       messageId: MessageId,
       emoji: Emoji,
     ): Promise<void> {
-      const botUserId = client?.user?.id;
+      const botUserId = getClient()?.user?.id;
       if (!botUserId) {
         throw new DiscordSendError(
           'unknown',
@@ -392,7 +404,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async addMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError('unknown', 'DiscordService.addMemberRole : guild introuvable');
       }
@@ -414,7 +426,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async removeMemberRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<void> {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError(
           'unknown',
@@ -442,7 +454,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async memberHasRole(guildId: GuildId, userId: UserId, roleId: RoleId): Promise<boolean> {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) return false;
       let member: GuildMemberLike;
       try {
@@ -462,7 +474,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         readonly components?: ReadonlyArray<unknown>;
       },
     ): Promise<{ readonly id: MessageId }> {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -515,7 +527,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         readonly color?: number;
       },
     ): Promise<{ readonly id: RoleId }> {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError('unknown', 'DiscordService.createRole : guild introuvable');
       }
@@ -544,7 +556,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
         readonly components?: ReadonlyArray<unknown>;
       },
     ): Promise<void> {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -567,7 +579,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async deleteMessage(channelId: ChannelId, messageId: MessageId): Promise<void> {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -590,7 +602,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async sendDirectMessage(userId, content, options) {
-      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      const users = (getClient() as unknown as { users?: UsersManagerLike } | undefined)?.users;
       if (!users) {
         throw new DiscordSendError('unknown', 'DiscordService.sendDirectMessage : client absent');
       }
@@ -628,17 +640,17 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     getGuildName(guildId) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       return guild?.name ?? null;
     },
 
     getRoleName(guildId, roleId) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       return guild?.roles.cache.get(roleId)?.name ?? null;
     },
 
     async kickMember(guildId, userId, reason) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError('unknown', 'DiscordService.kickMember : guild introuvable');
       }
@@ -670,7 +682,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async banMember(guildId, userId, reason, deleteMessageDays) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError('unknown', 'DiscordService.banMember : guild introuvable');
       }
@@ -691,7 +703,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async unbanMember(guildId, userId, reason) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) {
         throw new DiscordSendError('unknown', 'DiscordService.unbanMember : guild introuvable');
       }
@@ -707,7 +719,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async bulkDeleteMessages(channelId, count) {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -734,7 +746,7 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     async setChannelSlowmode(channelId, seconds) {
-      const channel = client?.channels.cache.get(channelId);
+      const channel = getClient()?.channels.cache.get(channelId);
       if (!channel || !('messages' in channel)) {
         throw new DiscordSendError(
           'channel-not-found',
@@ -763,11 +775,11 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
       // Auto-cible : refus immédiat sans toucher Discord.
       if (modUserId === targetUserId) return { ok: false, reason: 'self' };
 
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       if (!guild) return { ok: false, reason: 'unknown' };
 
       // Bot lui-même : on lit l'id depuis client.user.
-      const botUserId = client?.user?.id;
+      const botUserId = getClient()?.user?.id;
       if (botUserId !== undefined && targetUserId === botUserId) {
         return { ok: false, reason: 'bot' };
       }
@@ -810,12 +822,12 @@ export function createDiscordService(options: CreateDiscordServiceOptions): Disc
     },
 
     getMemberCount(guildId) {
-      const guild = client?.guilds.cache.get(guildId) as GuildLike | undefined;
+      const guild = getClient()?.guilds.cache.get(guildId) as GuildLike | undefined;
       return guild?.memberCount ?? null;
     },
 
     async getUserDisplayInfo(userId) {
-      const users = (client as unknown as { users?: UsersManagerLike } | undefined)?.users;
+      const users = (getClient() as unknown as { users?: UsersManagerLike } | undefined)?.users;
       if (!users) return null;
       let user: UserLike | undefined;
       try {

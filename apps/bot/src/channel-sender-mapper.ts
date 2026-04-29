@@ -1,6 +1,7 @@
 import type { ChannelId, UIEmbed, UIMessage } from '@varde/contracts';
 import { AttachmentBuilder, type Client, EmbedBuilder } from 'discord.js';
 
+import { type DiscordClientHolder, resolveDiscordClient } from './client-holder.js';
 import type { ChannelSender } from './discord-service.js';
 
 /**
@@ -50,11 +51,19 @@ const applyEmbed = (embed: EmbedBuilder, source: UIEmbed): EmbedBuilder => {
  * Construit un `ChannelSender` de production à partir d'un Client
  * discord.js. `sendMessage` envoie du texte brut ; `sendEmbed` passe
  * par `mapEmbedToDiscordJsPayload` pour produire le payload v14.
+ *
+ * Accepte soit un `Client` direct (tests, callers sans hot-swap),
+ * soit un `DiscordClientHolder` (jalon 7 PR 7.2) — dans ce dernier
+ * cas, le client effectif est résolu à chaque appel et suit les
+ * rotations de token sans reconstruction du sender.
  */
-export function createDiscordJsChannelSender(client: Client): ChannelSender {
+export function createDiscordJsChannelSender(
+  clientOrHolder: Client | DiscordClientHolder,
+): ChannelSender {
+  const getClient = (): Client => resolveDiscordClient(clientOrHolder);
   return {
     async sendMessage(channelId: ChannelId, content: string): Promise<void> {
-      const channel = await client.channels.fetch(channelId);
+      const channel = await getClient().channels.fetch(channelId);
       if (!channel?.isTextBased() || !('send' in channel)) {
         throw new Error('Unknown Channel');
       }
@@ -62,7 +71,7 @@ export function createDiscordJsChannelSender(client: Client): ChannelSender {
     },
 
     async sendEmbed(channelId: ChannelId, message: UIMessage): Promise<void> {
-      const channel = await client.channels.fetch(channelId);
+      const channel = await getClient().channels.fetch(channelId);
       if (!channel?.isTextBased() || !('send' in channel)) {
         throw new Error('Unknown Channel');
       }
