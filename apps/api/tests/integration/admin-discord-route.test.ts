@@ -1,6 +1,12 @@
 import { randomBytes } from 'node:crypto';
 
-import { createInstanceConfigService, createLogger, createOwnershipService } from '@varde/core';
+import {
+  createDiscordReconnectService,
+  createInstanceConfigService,
+  createLogger,
+  createOwnershipService,
+  type DiscordReconnectService,
+} from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient } from '@varde/db';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +51,7 @@ interface BuildOptions {
   readonly seedToken?: boolean;
   readonly seedSecret?: boolean;
   readonly seedAppId?: boolean;
+  readonly reconnect?: DiscordReconnectService;
 }
 
 const build = async (
@@ -85,6 +92,7 @@ const build = async (
     instanceConfig,
     logger: silentLogger(),
     ...(buildOptions.fetchImpl ? { fetchImpl: buildOptions.fetchImpl } : {}),
+    ...(buildOptions.reconnect ? { reconnect: buildOptions.reconnect } : {}),
   });
   return { app, ownership, instanceConfig };
 };
@@ -554,6 +562,65 @@ describe('PUT /admin/discord/token', () => {
         payload: { token: NEW_TOKEN },
       });
       expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('200 quand reconnect injecté résout — handler appelé avec le nouveau token', async () => {
+    const fetchImpl: FetchLike = vi.fn(async (url) => {
+      if (typeof url === 'string' && url.includes('/users/@me')) return usersMeOk();
+      return appMeOk();
+    });
+    const reconnectHandler = vi.fn(async () => Promise.resolve());
+    const reconnect = createDiscordReconnectService({
+      handler: reconnectHandler,
+      logger: silentLogger(),
+      timeoutMs: 100,
+    });
+    const { app, ownership, instanceConfig } = await build(client, { fetchImpl, reconnect });
+    try {
+      await ownership.claimFirstOwnership('111111111111111111');
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/admin/discord/token',
+        headers: ownerSession('111111111111111111'),
+        payload: { token: NEW_TOKEN },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(reconnectHandler).toHaveBeenCalledWith(NEW_TOKEN);
+      const config = await instanceConfig.getConfig();
+      expect(config.discordBotToken).toBe(NEW_TOKEN);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('503 reconnect_failed + rollback : token précédent conservé en DB', async () => {
+    const fetchImpl: FetchLike = vi.fn(async (url) => {
+      if (typeof url === 'string' && url.includes('/users/@me')) return usersMeOk();
+      return appMeOk();
+    });
+    const reconnect = createDiscordReconnectService({
+      handler: async () => {
+        throw new Error('gateway login refused');
+      },
+      logger: silentLogger(),
+      timeoutMs: 100,
+    });
+    const { app, ownership, instanceConfig } = await build(client, { fetchImpl, reconnect });
+    try {
+      await ownership.claimFirstOwnership('111111111111111111');
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/admin/discord/token',
+        headers: ownerSession('111111111111111111'),
+        payload: { token: NEW_TOKEN },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({ error: 'reconnect_failed' });
+      const config = await instanceConfig.getConfig();
+      expect(config.discordBotToken).toBe(BOT_TOKEN);
     } finally {
       await app.close();
     }

@@ -20,6 +20,13 @@ export {
   type CtxBundle,
   createCtxFactory,
 } from './ctx.js';
+export {
+  type CreateDiscordReconnectServiceOptions,
+  createDiscordReconnectService,
+  type DiscordReconnectHandler,
+  type DiscordReconnectResult,
+  type DiscordReconnectService,
+} from './discord-reconnect.js';
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {

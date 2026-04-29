@@ -1,5 +1,5 @@
 import type { Logger } from '@varde/contracts';
-import type { InstanceConfigService, OwnershipService } from '@varde/core';
+import type { DiscordReconnectService, InstanceConfigService, OwnershipService } from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -130,6 +130,18 @@ export interface RegisterAdminDiscordRoutesOptions {
   readonly logger: Logger;
   readonly fetchImpl?: FetchLike;
   readonly discordBaseUrl?: string;
+  /**
+   * Service de reconnexion gateway. Quand fourni, `PUT
+   * /admin/discord/token` l'appelle après validation Discord et
+   * **avant** persistance — c'est précisément cette discipline qui
+   * matérialise le rollback : un échec de reconnexion implique que
+   * le token n'est jamais persisté, l'instance reste sur l'ancien.
+   * Quand absent (tests, instance sans bot live), le route
+   * persiste directement après validation Discord (cas de la PR
+   * 7.1 et antérieur). Câblé par `apps/server/src/bin.ts` une fois
+   * le client Discord initialisé.
+   */
+  readonly reconnect?: DiscordReconnectService;
 }
 
 const httpError = (
@@ -161,7 +173,7 @@ export function registerAdminDiscordRoutes(
   app: FastifyInstance,
   options: RegisterAdminDiscordRoutesOptions,
 ): void {
-  const { ownership, instanceConfig, logger } = options;
+  const { ownership, instanceConfig, logger, reconnect } = options;
   const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
   const discordBaseUrl = options.discordBaseUrl ?? 'https://discord.com/api/v10';
   const log = logger.child({ component: 'admin-discord' });
@@ -393,6 +405,20 @@ export function registerAdminDiscordRoutes(
         'Ce token est associé à une autre Application Discord. Confirmez explicitement avec confirmAppChange:true.',
         { previousAppId: config.discordAppId, newAppId },
       );
+    }
+
+    // Reconnect gateway BEFORE persist — l'inversion de l'ordre
+    // matérialise le rollback. Si le swap gateway échoue, on ne
+    // touche pas à la DB et l'instance reste sur l'ancien token.
+    if (reconnect) {
+      const result = await reconnect.reconnect(token);
+      if (!result.ok) {
+        throw httpError(
+          503,
+          'reconnect_failed',
+          `Reconnexion gateway refusée : ${result.error ?? 'inconnu'}.`,
+        );
+      }
     }
 
     const patch: { discordBotToken: string; discordAppId?: string } = { discordBotToken: token };
