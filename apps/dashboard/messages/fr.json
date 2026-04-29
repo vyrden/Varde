@@ -215,6 +215,74 @@
         "ownership": "Ownership"
       }
     },
+    "discord": {
+      "title": "Configuration Discord",
+      "subtitle": "Credentials Discord de l'instance — Application ID + Public Key, Token bot, OAuth Client Secret. Toutes les modifications sont validées côté Discord avant persistance.",
+      "app": {
+        "heading": "Application Discord",
+        "description": "App ID et Public Key de votre application Discord. Modifiables depuis le portail Developer.",
+        "appIdLabel": "Application ID",
+        "appIdPlaceholder": "ex. 1212345678901234567",
+        "publicKeyLabel": "Public Key",
+        "publicKeyPlaceholder": "64 caractères hex (Ed25519)",
+        "submit": "Vérifier et enregistrer",
+        "success": "Application Discord enregistrée."
+      },
+      "token": {
+        "heading": "Token bot",
+        "description": "Token de connexion gateway. Champ masqué par défaut. Une rotation déclenche une reconnexion gateway sans redémarrage du process.",
+        "currentLabel": "Token actuel",
+        "tokenAbsent": "Aucun token enregistré.",
+        "revealButton": "Afficher",
+        "hideButton": "Masquer",
+        "rotateOpen": "Régénérer le token",
+        "rotateClose": "Annuler",
+        "tokenLabel": "Nouveau token",
+        "tokenPlaceholder": "Collez le nouveau token bot",
+        "submit": "Enregistrer le token",
+        "intents": {
+          "heading": "Intents privilégiés",
+          "presence": "PRESENCE",
+          "members": "GUILD_MEMBERS",
+          "messageContent": "MESSAGE_CONTENT",
+          "enabled": "activé",
+          "disabled": "désactivé",
+          "unknown": "Intents non vérifiables (token absent ou Discord injoignable)."
+        },
+        "appMismatchHeading": "App ID différent détecté",
+        "appMismatchBody": "Ce token est associé à une autre Application Discord. Confirmez la rotation pour persister la nouvelle identité — les serveurs où le bot était présent sous l'ancienne app ne reconnaîtront plus le bot.",
+        "confirmRotation": "Confirmer la rotation",
+        "success": "Token bot enregistré."
+      },
+      "oauth": {
+        "heading": "OAuth Client Secret",
+        "description": "Secret client utilisé par Auth.js pour le login dashboard. Une rotation invalide les sessions actives.",
+        "currentLabel": "Secret enregistré",
+        "secretAbsent": "Aucun client secret enregistré.",
+        "editButton": "Modifier",
+        "cancelButton": "Annuler",
+        "secretLabel": "Nouveau Client Secret",
+        "secretPlaceholder": "Collez le nouveau secret OAuth2",
+        "warning": "Attention : la modification invalide toutes les sessions Auth.js actives. Les owners devront se reconnecter.",
+        "submit": "Enregistrer le secret",
+        "success": "Client Secret enregistré."
+      },
+      "errors": {
+        "invalidBody": "Champs invalides. Vérifiez l'App ID (snowflake 17-20 chiffres) et la Public Key (64 caractères hex).",
+        "invalidForm": "Formulaire incomplet.",
+        "invalidToken": "Token bot rejeté par Discord. Vérifiez la valeur dans le portail Developer.",
+        "invalidSecret": "Client Secret rejeté par Discord. Vérifiez la valeur dans le portail Developer.",
+        "appNotFound": "Aucune application Discord trouvée pour cet App ID.",
+        "discordUnreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "missingAppId": "App ID absent. Renseignez d'abord l'application Discord.",
+        "missingBotToken": "Token bot absent.",
+        "appIdMismatch": "Ce token est associé à une autre Application Discord.",
+        "reconnectFailed": "Reconnexion gateway refusée. Le token n'a pas été persisté.",
+        "notFound": "Page introuvable.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
     "identity": {
       "title": "Identité du bot",
       "subtitle": "Nom, avatar et description affichés par le bot dans Discord. Modifications appliquées immédiatement via PATCH /applications/@me.",

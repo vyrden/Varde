@@ -215,6 +215,74 @@
         "ownership": "Ownership"
       }
     },
+    "discord": {
+      "title": "Discord configuration",
+      "subtitle": "Discord credentials for this instance — Application ID + Public Key, bot token, OAuth client secret. All changes are validated against Discord before persistence.",
+      "app": {
+        "heading": "Discord application",
+        "description": "App ID and Public Key for your Discord application. Editable from the Developer portal.",
+        "appIdLabel": "Application ID",
+        "appIdPlaceholder": "e.g. 1212345678901234567",
+        "publicKeyLabel": "Public Key",
+        "publicKeyPlaceholder": "64 hex characters (Ed25519)",
+        "submit": "Verify and save",
+        "success": "Discord application saved."
+      },
+      "token": {
+        "heading": "Bot token",
+        "description": "Gateway login token. Masked by default. A rotation triggers a gateway reconnect without restarting the process.",
+        "currentLabel": "Current token",
+        "tokenAbsent": "No token stored.",
+        "revealButton": "Show",
+        "hideButton": "Hide",
+        "rotateOpen": "Rotate token",
+        "rotateClose": "Cancel",
+        "tokenLabel": "New token",
+        "tokenPlaceholder": "Paste the new bot token",
+        "submit": "Save token",
+        "intents": {
+          "heading": "Privileged intents",
+          "presence": "PRESENCE",
+          "members": "GUILD_MEMBERS",
+          "messageContent": "MESSAGE_CONTENT",
+          "enabled": "enabled",
+          "disabled": "disabled",
+          "unknown": "Intents not checkable (no token, or Discord unreachable)."
+        },
+        "appMismatchHeading": "Different App ID detected",
+        "appMismatchBody": "This token belongs to a different Discord application. Confirm rotation to persist the new identity — the servers where the bot was present under the old app will no longer recognise the bot.",
+        "confirmRotation": "Confirm rotation",
+        "success": "Bot token saved."
+      },
+      "oauth": {
+        "heading": "OAuth client secret",
+        "description": "Client secret used by Auth.js for the dashboard login. Rotation invalidates active sessions.",
+        "currentLabel": "Stored secret",
+        "secretAbsent": "No client secret stored.",
+        "editButton": "Change",
+        "cancelButton": "Cancel",
+        "secretLabel": "New client secret",
+        "secretPlaceholder": "Paste the new OAuth2 secret",
+        "warning": "Warning: changing this invalidates every active Auth.js session. Owners will have to sign in again.",
+        "submit": "Save secret",
+        "success": "Client secret saved."
+      },
+      "errors": {
+        "invalidBody": "Invalid fields. Check the App ID (17-20 digit snowflake) and Public Key (64 hex chars).",
+        "invalidForm": "Incomplete form.",
+        "invalidToken": "Bot token rejected by Discord. Check the value in the Developer portal.",
+        "invalidSecret": "Client secret rejected by Discord. Check the value in the Developer portal.",
+        "appNotFound": "No Discord application found for this App ID.",
+        "discordUnreachable": "Discord is unreachable. Try again in a moment.",
+        "missingAppId": "App ID missing. Fill in the Discord application first.",
+        "missingBotToken": "Bot token missing.",
+        "appIdMismatch": "This token belongs to a different Discord application.",
+        "reconnectFailed": "Gateway reconnect refused. The token was not persisted.",
+        "notFound": "Page not found.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
     "identity": {
       "title": "Bot identity",
       "subtitle": "Name, avatar and description displayed by the bot in Discord. Changes apply immediately via PATCH /applications/@me.",

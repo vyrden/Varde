@@ -76,3 +76,20 @@ export interface AdminIdentityDto {
 
 export const fetchAdminIdentity = (): Promise<AdminIdentityDto> =>
   apiGet<AdminIdentityDto>('/admin/identity');
+
+export interface AdminDiscordIntentsDto {
+  readonly presence: boolean;
+  readonly members: boolean;
+  readonly messageContent: boolean;
+}
+
+export interface AdminDiscordDto {
+  readonly appId: string | null;
+  readonly publicKey: string | null;
+  readonly tokenLastFour: string | null;
+  readonly hasClientSecret: boolean;
+  readonly intents: AdminDiscordIntentsDto | null;
+}
+
+export const fetchAdminDiscord = (): Promise<AdminDiscordDto> =>
+  apiGet<AdminDiscordDto>('/admin/discord');
