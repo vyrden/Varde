@@ -7,10 +7,12 @@ import {
   createDiscordClient,
   createJwtAuthenticator,
   type DiscordClient,
+  type DiscordStatusSnapshot,
   type GuildRoleDto,
   type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
+  registerAdminOverviewRoutes,
   registerAdminOwnershipRoutes,
   registerAiSettingsRoutes,
   registerAuditRoutes,
@@ -283,6 +285,14 @@ export interface ServerHandle<D extends DbDriver> {
   readonly instanceConfig: InstanceConfigService;
   /** Service de gestion des owners de l'instance (jalon 7 PR 7.2). */
   readonly ownership: OwnershipService;
+  /**
+   * Pose le provider qui répond à `GET /admin/overview` pour les
+   * champs `bot.connected` / `bot.latencyMs`. `apps/server/src/bin.ts`
+   * l'appelle juste après `client.login()` avec une closure qui lit
+   * `client.isReady()` + `client.ws.ping`. Avant l'appel, l'API
+   * rapporte `connected: false`.
+   */
+  readonly setDiscordStatusProvider: (provider: () => DiscordStatusSnapshot) => void;
   readonly start: () => Promise<{ readonly address: string }>;
   readonly stop: () => Promise<void>;
 }
@@ -373,6 +383,17 @@ export async function createServer<D extends DbDriver>(
   // Consommé par le hook Auth.js (claim-first), le middleware
   // `requireOwner` côté API, et les routes admin de gestion.
   const ownership = createOwnershipService({ client });
+
+  // Provider de statut Discord pour `GET /admin/overview` — câblé
+  // par `apps/server/src/bin.ts` après `client.login()` via
+  // `handle.setDiscordStatusProvider(...)`. Tant que rien n'a été
+  // posé, le provider rapporte « disconnected, latency null » pour
+  // ne pas mentir avant que le bot ait vraiment ouvert sa
+  // connexion gateway.
+  let discordStatusProvider: () => DiscordStatusSnapshot = () => ({
+    connected: false,
+    latencyMs: null,
+  });
 
   const aiServiceCache = new Map<GuildId, ReturnType<typeof createGuildAiService>>();
   const aiFactory = (guildId: GuildId) => {
@@ -695,6 +716,18 @@ export async function createServer<D extends DbDriver>(
     masterKey,
   });
   registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
+  registerAdminOverviewRoutes(api, {
+    ownership,
+    client,
+    loader,
+    version: coreVersion,
+    // Le statut Discord live (connected + latency) est attaché par
+    // `apps/server/src/bin.ts` après `client.login()` via
+    // `setDiscordStatusProvider(...)` exposé sur le handle. Tant
+    // qu'il n'a pas été câblé (CI, dev sans token, boot avant
+    // login), on retombe sur le défaut « disconnected, latency null ».
+    getDiscordStatus: () => discordStatusProvider(),
+  });
 
   await reconcileOnboardingSessions({
     client,
@@ -734,6 +767,9 @@ export async function createServer<D extends DbDriver>(
     ctxBundle,
     instanceConfig,
     ownership,
+    setDiscordStatusProvider(provider) {
+      discordStatusProvider = provider;
+    },
     start,
     stop,
   };
