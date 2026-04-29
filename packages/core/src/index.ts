@@ -28,6 +28,14 @@ export {
   type DiscordReconnectService,
 } from './discord-reconnect.js';
 export { type CreateEventBusOptions, createEventBus, type EventHandler } from './events.js';
+export {
+  type CreateGuildPermissionsServiceOptions,
+  createGuildPermissionsService,
+  type GuildPermissionsConfig,
+  type GuildPermissionsContext,
+  type GuildPermissionsPatch,
+  type GuildPermissionsService,
+} from './guild-permissions.js';
 export { type CreateI18nOptions, createI18n, type I18nMessages } from './i18n.js';
 export {
   type CreateInstanceAuditServiceOptions,
