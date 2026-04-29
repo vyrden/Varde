@@ -43,20 +43,41 @@ export default defineConfig({
   ],
 
   /*
-   * Lance Next en dev sur 3001 (le 3000 est typiquement déjà pris par
-   * le shell développeur). Réutilise une instance déjà démarrée si
-   * `reuseExistingServer` est vrai en local — accélère les itérations.
+   * Deux serveurs en parallèle :
+   *
+   * 1. Mock HTTP de l'API du wizard (port 4002). Sert les routes
+   *    `/setup/*` avec des réponses pré-cuites (cas par défaut :
+   *    setup non configurée + tout vert) — voir
+   *    `tests/e2e/fixtures/setup-api-mock.ts`. Évite la dépendance
+   *    au vrai `apps/server` + Postgres pendant les E2E du wizard.
+   * 2. Next.js dev sur 3001 (le 3000 est typiquement déjà pris par
+   *    le shell développeur). `VARDE_API_URL` pointe vers le mock.
+   *
+   * `reuseExistingServer: !CI` accélère les itérations locales.
    */
-  webServer: {
-    command: 'pnpm dev -- --port 3001',
-    port: 3001,
-    reuseExistingServer: !process.env['CI'],
-    timeout: 60 * 1000,
-    env: {
-      // Auth.js refuse de se charger sans secret ; on injecte une valeur
-      // de test si elle n'est pas déjà fournie. Pour les specs qui
-      // signent une session JWT, le test devra utiliser le même secret.
-      VARDE_AUTH_SECRET: process.env['VARDE_AUTH_SECRET'] ?? 'e2e-secret-not-for-prod',
+  webServer: [
+    {
+      command: 'pnpm tsx tests/e2e/fixtures/setup-api-mock.ts',
+      port: 4002,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 30 * 1000,
+      env: { PORT: '4002' },
     },
-  },
+    {
+      command: 'pnpm dev -- --port 3001',
+      port: 3001,
+      reuseExistingServer: !process.env['CI'],
+      timeout: 60 * 1000,
+      env: {
+        // Auth.js refuse de se charger sans secret ; on injecte une valeur
+        // de test si elle n'est pas déjà fournie. Pour les specs qui
+        // signent une session JWT, le test devra utiliser le même secret.
+        VARDE_AUTH_SECRET: process.env['VARDE_AUTH_SECRET'] ?? 'e2e-secret-not-for-prod',
+        // Le middleware Next.js et les server actions du wizard tapent
+        // sur `VARDE_API_URL` — on les redirige vers le mock HTTP du
+        // sous-livrable 6.
+        VARDE_API_URL: 'http://127.0.0.1:4002',
+      },
+    },
+  ],
 });

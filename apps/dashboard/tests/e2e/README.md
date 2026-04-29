@@ -70,6 +70,25 @@ test('parcours admin', async ({ context, page }) => {
 Le secret côté test est `e2e-secret-not-for-prod` par défaut, posé
 dans `playwright.config.ts` au lancement du `webServer` Next.
 
+### `setup-api-mock.ts` — mock HTTP de l'API du wizard
+
+Le wizard de setup (jalon 7 PR 7.1) discute avec `apps/server` (API
+Fastify) via `VARDE_API_URL`. Pour les E2E on remplace ce serveur
+par un mock HTTP minimaliste qui répond aux 8 routes `/setup/*`
+avec des réponses pré-cuites (cas par défaut : setup non
+configurée + tout vert + persistance simulée).
+
+Le mock est lancé en parallèle de Next.js par `playwright.config.ts`
+(deuxième `webServer`) sur le port 4002. `VARDE_API_URL=
+http://127.0.0.1:4002` est injecté dans l'env de Next.js.
+
+Les specs n'ont rien à importer du mock — il suffit d'aller sur
+`/setup/welcome` (ou autre étape) et le dashboard discute déjà
+avec le mock. Le comportement métier de l'API (chiffrement,
+persistance, validation Discord) est testé séparément par les
+54 tests d'intégration de
+`apps/api/tests/integration/setup-route.test.ts`.
+
 ### `db.ts` — reset de la base entre tests
 
 Pour les tests qui mutent l'état (config modules, audit, onboarding),
