@@ -116,6 +116,69 @@
         "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
         "unknown": "Une erreur inattendue s'est produite côté API."
       }
+    },
+    "oauth": {
+      "title": "OAuth pour le dashboard",
+      "subtitle": "On configure la connexion Discord du dashboard pour vos administrateurs.",
+      "steps": {
+        "openOAuthTab": "Dans votre application Discord, ouvrez l'onglet « OAuth2 → General ».",
+        "pasteRedirect": "Sous « Redirects », ajoutez l'URL ci-dessous puis cliquez « Save Changes ».",
+        "copySecret": "Toujours dans « OAuth2 → General », cliquez « Reset Secret » et copiez la valeur (Discord ne la rejouera pas).",
+        "pasteSecret": "Collez le client secret ci-dessous."
+      },
+      "redirect": {
+        "label": "Redirect URI à coller dans Discord",
+        "copy": "Copier",
+        "copied": "Copié !",
+        "hint": "Vous pourrez ajouter d'autres URLs d'accès plus tard depuis l'administration de l'instance.",
+        "unreachable": "Impossible d'obtenir l'URI de redirection auprès de l'API."
+      },
+      "secret": {
+        "label": "Client Secret",
+        "placeholder": "sgvGLh...",
+        "hint": "Chiffré au repos avec votre master key. Jamais loggué, jamais affiché en clair.",
+        "show": "Afficher",
+        "hide": "Masquer"
+      },
+      "submit": "Valider",
+      "success": "Client secret accepté.",
+      "invalidSecret": "Client secret refusé par Discord. Re-générez-en un dans le portail (OAuth2 → Reset Secret) et réessayez.",
+      "errors": {
+        "invalidBody": "Client secret absent ou trop court.",
+        "missingAppId": "L'Application ID n'est pas encore enregistré. Reprenez l'étape « Discord App ».",
+        "unreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
+    "identity": {
+      "title": "Identité du bot",
+      "subtitle": "Personnalisez le nom, l'avatar et la description du bot. Cette étape est facultative.",
+      "editLater": "Modifiable plus tard dans Administration → Identité du bot.",
+      "name": {
+        "label": "Nom du bot",
+        "placeholder": "Varde Bot"
+      },
+      "avatar": {
+        "label": "Avatar (PNG, JPG ou GIF)",
+        "hint": "Laissez vide pour conserver l'avatar par défaut. Taille max 8 Mo.",
+        "remove": "Retirer"
+      },
+      "description": {
+        "label": "Description",
+        "placeholder": "Décrivez votre bot en quelques mots (400 caractères max)."
+      },
+      "skip": "Passer cette étape",
+      "submit": "Enregistrer",
+      "success": "Identité enregistrée auprès de Discord.",
+      "errors": {
+        "invalidBody": "L'un des champs ne respecte pas le format attendu (nom 1–32 chars, description 0–400 chars, avatar image valide).",
+        "missingBotToken": "Le token bot n'est pas encore enregistré. Reprenez l'étape « Token bot ».",
+        "missingAppId": "L'Application ID n'est pas encore enregistré. Reprenez l'étape « Discord App ».",
+        "unreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
     }
   }
 }

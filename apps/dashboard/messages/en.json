@@ -116,6 +116,69 @@
         "network": "Network issue. Check your connection and try again.",
         "unknown": "An unexpected error occurred on the API side."
       }
+    },
+    "oauth": {
+      "title": "OAuth for the dashboard",
+      "subtitle": "We configure Discord login for your dashboard administrators.",
+      "steps": {
+        "openOAuthTab": "In your Discord application, open the \"OAuth2 → General\" tab.",
+        "pasteRedirect": "Under \"Redirects\", add the URL below then click \"Save Changes\".",
+        "copySecret": "Still in \"OAuth2 → General\", click \"Reset Secret\" and copy the value (Discord will not show it again).",
+        "pasteSecret": "Paste the client secret below."
+      },
+      "redirect": {
+        "label": "Redirect URI to paste into Discord",
+        "copy": "Copy",
+        "copied": "Copied!",
+        "hint": "You'll be able to add additional access URLs later from the instance administration page.",
+        "unreachable": "Could not retrieve the redirect URI from the API."
+      },
+      "secret": {
+        "label": "Client Secret",
+        "placeholder": "sgvGLh...",
+        "hint": "Encrypted at rest with your master key. Never logged, never displayed in clear.",
+        "show": "Show",
+        "hide": "Hide"
+      },
+      "submit": "Validate",
+      "success": "Client secret accepted.",
+      "invalidSecret": "Client secret rejected by Discord. Generate a fresh one in the portal (OAuth2 → Reset Secret) and try again.",
+      "errors": {
+        "invalidBody": "Client secret missing or too short.",
+        "missingAppId": "Application ID is not yet stored. Go back to the \"Discord App\" step.",
+        "unreachable": "Discord is unreachable. Try again in a moment.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
+    "identity": {
+      "title": "Bot identity",
+      "subtitle": "Customize the bot's name, avatar and description. This step is optional.",
+      "editLater": "Editable later in Administration → Bot identity.",
+      "name": {
+        "label": "Bot name",
+        "placeholder": "Varde Bot"
+      },
+      "avatar": {
+        "label": "Avatar (PNG, JPG or GIF)",
+        "hint": "Leave empty to keep the default avatar. Max size 8 MB.",
+        "remove": "Remove"
+      },
+      "description": {
+        "label": "Description",
+        "placeholder": "Describe your bot in a few words (400 characters max)."
+      },
+      "skip": "Skip this step",
+      "submit": "Save",
+      "success": "Identity saved to Discord.",
+      "errors": {
+        "invalidBody": "One of the fields does not match the expected format (name 1–32 chars, description 0–400 chars, avatar valid image).",
+        "missingBotToken": "Bot token is not yet stored. Go back to the \"Bot token\" step.",
+        "missingAppId": "Application ID is not yet stored. Go back to the \"Discord App\" step.",
+        "unreachable": "Discord is unreachable. Try again in a moment.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
     }
   }
 }
