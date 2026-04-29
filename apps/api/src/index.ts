@@ -56,6 +56,11 @@ export {
   registerAiSettingsRoutes,
 } from './routes/ai-settings.js';
 export {
+  type AllowedHostsResponse,
+  type RegisterAllowedHostsRoutesOptions,
+  registerAllowedHostsRoutes,
+} from './routes/allowed-hosts.js';
+export {
   type AuditPageDto,
   type RegisterAuditRoutesOptions,
   registerAuditRoutes,

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { type AllowedHostsFetch, getAllowedHosts, isHostAllowed } from './lib/allowed-hosts';
 import { decideRedirect, fetchSetupConfigured, type SetupFetch } from './lib/setup-status';
 
 /**
@@ -51,6 +52,7 @@ const CACHE_ENABLED = process.env['VARDE_DISABLE_CONFIGURED_CACHE'] !== '1';
 
 let configuredCache: boolean | null = null;
 const fetchImpl: SetupFetch = (input, init) => fetch(input, init);
+const allowedHostsFetchImpl: AllowedHostsFetch = (input, init) => fetch(input, init);
 
 const isConfigured = async (): Promise<boolean> => {
   if (CACHE_ENABLED && configuredCache === true) {
@@ -63,7 +65,52 @@ const isConfigured = async (): Promise<boolean> => {
   return result;
 };
 
+/**
+ * Whitelist callback Auth.js : pour les routes `/api/auth/*`, on
+ * vérifie que le `Host:` de la requête est dans la liste persistée
+ * (`base_url` + `additional_urls` + env). Sinon 403 avec un
+ * message explicite — l'UI dashboard du même host indiquera à
+ * l'admin d'ajouter cette URL via la section « URLs d'accès ».
+ *
+ * Fail open : si l'API n'a jamais répondu (boot, instance
+ * unreachable), on laisse passer — la défense en profondeur
+ * Discord OAuth2 attrape de toute façon les redirect_uri non
+ * autorisés. La whitelist est un confort UX, pas une frontière
+ * de sécurité absolue.
+ */
+const isAuthPath = (pathname: string): boolean =>
+  pathname === '/api/auth' || pathname.startsWith('/api/auth/');
+
+const enforceHostWhitelist = async (request: NextRequest): Promise<NextResponse | null> => {
+  if (!isAuthPath(request.nextUrl.pathname)) {
+    return null;
+  }
+  const host = request.headers.get('host');
+  if (host === null) {
+    return null;
+  }
+  const allowed = await getAllowedHosts(API_URL, allowedHostsFetchImpl);
+  if (allowed === null) {
+    // Fail open : pas de liste exploitable → pas d'enforcement.
+    return null;
+  }
+  if (isHostAllowed(host, allowed)) {
+    return null;
+  }
+  return new NextResponse(
+    JSON.stringify({
+      error: 'host_not_allowed',
+      message: `Le host '${host}' n'est pas dans la liste des URLs autorisées de cette instance. Ajoutez-le via la page admin « URLs d'accès » avant de retenter le login.`,
+    }),
+    { status: 403, headers: { 'content-type': 'application/json' } },
+  );
+};
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const denied = await enforceHostWhitelist(request);
+  if (denied !== null) {
+    return denied;
+  }
   const configured = await isConfigured();
   const action = decideRedirect({ configured, pathname: request.nextUrl.pathname });
   switch (action.kind) {
