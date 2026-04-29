@@ -179,6 +179,27 @@
         "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
         "unknown": "Une erreur inattendue s'est produite côté API."
       }
+    },
+    "summary": {
+      "title": "Récapitulatif et démarrage",
+      "subtitle": "Tout est en place. On peut connecter le bot à Discord et ouvrir le dashboard.",
+      "checklist": {
+        "discordApp": "Application Discord enregistrée",
+        "botToken": "Token bot validé et chiffré au repos",
+        "oauth": "OAuth dashboard configuré",
+        "identity": "Étape identité franchie"
+      },
+      "startNote": "Cliquer sur « Démarrer Varde » pose la marque de setup terminée et déclenche la connexion gateway Discord. Vous serez redirigé vers le dashboard une fois le bot en ligne (timeout 30 s).",
+      "start": "Démarrer Varde",
+      "successMessage": "Varde est prêt. Redirection en cours…",
+      "successContinue": "Aller au dashboard",
+      "timeoutMessage": "La setup est enregistrée mais la connexion gateway Discord n'a pas terminé dans la fenêtre de 30 s. Vérifiez les logs côté serveur — le bot reprendra la connexion à votre prochain rafraîchissement.",
+      "timeoutContinue": "Aller au dashboard quand même",
+      "errors": {
+        "missingFields": "Il manque des credentials. Reprenez les étapes précédentes du wizard.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
     }
   }
 }

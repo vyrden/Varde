@@ -179,6 +179,27 @@
         "network": "Network issue. Check your connection and try again.",
         "unknown": "An unexpected error occurred on the API side."
       }
+    },
+    "summary": {
+      "title": "Summary and launch",
+      "subtitle": "Everything is in place. We can connect the bot to Discord and open the dashboard.",
+      "checklist": {
+        "discordApp": "Discord application registered",
+        "botToken": "Bot token validated and encrypted at rest",
+        "oauth": "Dashboard OAuth configured",
+        "identity": "Identity step completed"
+      },
+      "startNote": "Clicking \"Start Varde\" marks the setup as done and triggers the Discord gateway connection. You'll be redirected to the dashboard once the bot is online (30 s timeout).",
+      "start": "Start Varde",
+      "successMessage": "Varde is ready. Redirecting…",
+      "successContinue": "Go to the dashboard",
+      "timeoutMessage": "The setup is saved but the Discord gateway connection didn't finish within the 30 s window. Check the server logs — the bot will reconnect on your next refresh.",
+      "timeoutContinue": "Go to the dashboard anyway",
+      "errors": {
+        "missingFields": "Some credentials are missing. Go back through the wizard.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
     }
   }
 }
