@@ -13,6 +13,7 @@ export {
   createJwtAuthenticator,
 } from './jwt-authenticator.js';
 export { requireGuildAdmin } from './middleware/require-guild-admin.js';
+export { requireOwner } from './middleware/require-owner.js';
 export { reconcileOnboardingSessions } from './onboarding-reconcile.js';
 export {
   type ClaimFirstOwnershipResponse,
