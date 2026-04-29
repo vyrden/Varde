@@ -79,8 +79,10 @@ avec des réponses pré-cuites (cas par défaut : setup non
 configurée + tout vert + persistance simulée).
 
 Le mock est lancé en parallèle de Next.js par `playwright.config.ts`
-(deuxième `webServer`) sur le port 4002. `VARDE_API_URL=
-http://127.0.0.1:4002` est injecté dans l'env de Next.js.
+(deuxième `webServer`) sur le port 4002, via `node` directement
+(le fichier est écrit en `.mjs` pour éviter la dépendance à `tsx`).
+`VARDE_API_URL=http://127.0.0.1:4002` est injecté dans l'env de
+Next.js.
 
 Les specs n'ont rien à importer du mock — il suffit d'aller sur
 `/setup/welcome` (ou autre étape) et le dashboard discute déjà

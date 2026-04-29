@@ -57,7 +57,9 @@ export default defineConfig({
    */
   webServer: [
     {
-      command: 'pnpm tsx tests/e2e/fixtures/setup-api-mock.ts',
+      // Mock écrit en `.mjs` plutôt qu'en `.ts` : pas de
+      // dépendance `tsx`, démarrage déterministe en CI.
+      command: 'node tests/e2e/fixtures/setup-api-mock.mjs',
       port: 4002,
       reuseExistingServer: !process.env['CI'],
       timeout: 30 * 1000,
@@ -71,7 +73,10 @@ export default defineConfig({
       command: 'pnpm dev',
       port: 3001,
       reuseExistingServer: !process.env['CI'],
-      timeout: 60 * 1000,
+      // Next dev compile à la première requête — `120 s` couvre les
+      // runners CI lents sans rester bloqué indéfiniment si quelque
+      // chose dérape côté build.
+      timeout: 120 * 1000,
       env: {
         PORT: '3001',
         // Auth.js refuse de se charger sans secret ; on injecte une valeur

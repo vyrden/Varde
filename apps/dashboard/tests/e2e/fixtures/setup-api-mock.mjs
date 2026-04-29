@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
 
 /**
  * Mock HTTP minimaliste de l'API du wizard (jalon 7 PR 7.1) pour les
@@ -12,28 +12,22 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
  * est testé séparément par les 54 tests d'intégration de
  * `apps/api/tests/integration/setup-route.test.ts`.
  *
- * Le mock est lancé en parallèle du `webServer` Next.js par
- * `playwright.config.ts`. Les tests configurent les réponses
- * attendues via la variable d'env `MOCK_API_SCRIPT` (cas par
- * défaut : tout vert, setup non-configurée).
+ * Volontairement écrit en `.mjs` plutôt qu'en TS — on évite la
+ * dépendance à `tsx` côté CI, ce qui rend la startup déterministe
+ * (pas de transpile au démarrage).
  */
 
-interface MockState {
-  /** Si `true`, le preHandler `requireUnconfigured` retourne 403. */
-  configured: boolean;
-}
+const state = { configured: false };
 
-const state: MockState = { configured: false };
-
-const json = (res: ServerResponse, status: number, body: unknown): void => {
+const json = (res, status, body) => {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
 };
 
-const readBody = async (req: IncomingMessage): Promise<unknown> => {
-  const chunks: Buffer[] = [];
+const readBody = async (req) => {
+  const chunks = [];
   for await (const chunk of req) {
-    chunks.push(chunk as Buffer);
+    chunks.push(chunk);
   }
   if (chunks.length === 0) return {};
   try {
@@ -43,7 +37,7 @@ const readBody = async (req: IncomingMessage): Promise<unknown> => {
   }
 };
 
-const handlers: Record<string, (req: IncomingMessage, res: ServerResponse) => Promise<void>> = {
+const handlers = {
   'GET /setup/status': async (_req, res) => {
     if (state.configured) {
       json(res, 403, { error: 'setup_completed', message: 'setup déjà terminée' });
@@ -69,7 +63,7 @@ const handlers: Record<string, (req: IncomingMessage, res: ServerResponse) => Pr
     });
   },
   'POST /setup/discord-app': async (req, res) => {
-    const body = (await readBody(req)) as { appId?: string; publicKey?: string };
+    const body = await readBody(req);
     if (!body.appId || !body.publicKey) {
       json(res, 400, { error: 'invalid_body', message: 'champs manquants' });
       return;
@@ -77,7 +71,7 @@ const handlers: Record<string, (req: IncomingMessage, res: ServerResponse) => Pr
     json(res, 200, { appName: 'Mock Bot' });
   },
   'POST /setup/bot-token': async (req, res) => {
-    const body = (await readBody(req)) as { token?: string };
+    const body = await readBody(req);
     if (!body.token) {
       json(res, 400, { error: 'invalid_body', message: 'token manquant' });
       return;
@@ -89,7 +83,7 @@ const handlers: Record<string, (req: IncomingMessage, res: ServerResponse) => Pr
     });
   },
   'POST /setup/oauth': async (req, res) => {
-    const body = (await readBody(req)) as { clientSecret?: string };
+    const body = await readBody(req);
     if (!body.clientSecret) {
       json(res, 400, { error: 'invalid_body' });
       return;
@@ -105,41 +99,28 @@ const handlers: Record<string, (req: IncomingMessage, res: ServerResponse) => Pr
   },
 };
 
-const route = (method: string | undefined, url: string | undefined): string => {
+const route = (method, url) => {
   const path = (url ?? '').split('?')[0] ?? '';
   return `${method ?? 'GET'} ${path}`;
 };
 
-export function createSetupApiMockServer(): Server {
-  return createServer(async (req, res) => {
-    const handler = handlers[route(req.method, req.url)];
-    if (!handler) {
-      json(res, 404, { error: 'route_not_mocked', message: route(req.method, req.url) });
-      return;
-    }
-    try {
-      await handler(req, res);
-    } catch (err) {
-      json(res, 500, {
-        error: 'mock_error',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-}
+const server = createServer(async (req, res) => {
+  const handler = handlers[route(req.method, req.url)];
+  if (!handler) {
+    json(res, 404, { error: 'route_not_mocked', message: route(req.method, req.url) });
+    return;
+  }
+  try {
+    await handler(req, res);
+  } catch (err) {
+    json(res, 500, {
+      error: 'mock_error',
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
 
-/**
- * Point d'entrée CLI quand le fichier est exécuté directement par
- * Playwright via la config `webServer`. Lit `PORT` depuis l'env
- * (défaut 4002).
- */
-const isMain =
-  process.argv[1]?.endsWith('setup-api-mock.ts') === true ||
-  process.argv[1]?.endsWith('setup-api-mock.js') === true;
-if (isMain) {
-  const port = Number(process.env['PORT'] ?? 4002);
-  const server = createSetupApiMockServer();
-  server.listen(port, '127.0.0.1', () => {
-    process.stdout.write(`[setup-api-mock] listening on http://127.0.0.1:${port}\n`);
-  });
-}
+const port = Number(process.env['PORT'] ?? 4002);
+server.listen(port, '127.0.0.1', () => {
+  process.stdout.write(`[setup-api-mock] listening on http://127.0.0.1:${port}\n`);
+});
