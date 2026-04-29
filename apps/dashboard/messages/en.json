@@ -201,5 +201,55 @@
         "unknown": "An unexpected error occurred on the API side."
       }
     }
+  },
+  "admin": {
+    "shell": {
+      "banner": "Instance administration — host-only area. Changes apply immediately.",
+      "sidebarHeading": "Administration",
+      "backToApp": "Back to app",
+      "sections": {
+        "overview": "Overview",
+        "identity": "Bot identity",
+        "discord": "Discord configuration",
+        "urls": "Access URLs",
+        "ownership": "Ownership"
+      }
+    },
+    "overview": {
+      "title": "Overview",
+      "subtitle": "Global state of this Varde instance — bot, servers, modules, database.",
+      "unknown": "unknown",
+      "uptime": {
+        "seconds": "{value} s",
+        "minutes": "{value} min",
+        "hours": "{value} h",
+        "days": "{value} d"
+      },
+      "cards": {
+        "bot": {
+          "title": "Bot status",
+          "connected": "Connected",
+          "disconnected": "Disconnected",
+          "latency": "{value} ms",
+          "uptime": "Uptime"
+        },
+        "version": {
+          "title": "Version"
+        },
+        "guilds": {
+          "title": "Servers",
+          "members": "{value} total members"
+        },
+        "modules": {
+          "title": "Active modules",
+          "activeOverInstalled": "active / installed"
+        },
+        "db": {
+          "title": "Database",
+          "size": "Size",
+          "lastMigration": "Last migration"
+        }
+      }
+    }
   }
 }

@@ -201,5 +201,55 @@
         "unknown": "Une erreur inattendue s'est produite côté API."
       }
     }
+  },
+  "admin": {
+    "shell": {
+      "banner": "Administration de l'instance — zone réservée à l'hébergeur. Modifications appliquées immédiatement.",
+      "sidebarHeading": "Administration",
+      "backToApp": "Retour à l'app",
+      "sections": {
+        "overview": "Vue d'ensemble",
+        "identity": "Identité du bot",
+        "discord": "Configuration Discord",
+        "urls": "URLs d'accès",
+        "ownership": "Ownership"
+      }
+    },
+    "overview": {
+      "title": "Vue d'ensemble",
+      "subtitle": "État global de cette instance Varde — bot, serveurs, modules, base de données.",
+      "unknown": "inconnu",
+      "uptime": {
+        "seconds": "{value} s",
+        "minutes": "{value} min",
+        "hours": "{value} h",
+        "days": "{value} j"
+      },
+      "cards": {
+        "bot": {
+          "title": "Statut du bot",
+          "connected": "Connecté",
+          "disconnected": "Déconnecté",
+          "latency": "{value} ms",
+          "uptime": "Uptime"
+        },
+        "version": {
+          "title": "Version"
+        },
+        "guilds": {
+          "title": "Serveurs",
+          "members": "{value} membres au total"
+        },
+        "modules": {
+          "title": "Modules actifs",
+          "activeOverInstalled": "actifs / installés"
+        },
+        "db": {
+          "title": "Base de données",
+          "size": "Taille",
+          "lastMigration": "Dernière migration"
+        }
+      }
+    }
   }
 }
