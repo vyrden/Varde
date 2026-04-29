@@ -98,12 +98,92 @@ export interface GuildPermissionsService {
    * (rôles `Administrator`) et logue un event d'audit.
    */
   readonly cleanupDeletedRole: (guildId: GuildId, roleId: string) => Promise<void>;
+  /**
+   * Invalide toutes les entrées de cache d'une guild. Appelé après
+   * `updateConfig`, `GUILD_ROLE_DELETE`, `GUILD_ROLE_UPDATE`. No-op
+   * quand le cache est désactivé.
+   */
+  readonly invalidateGuild: (guildId: GuildId) => void;
+  /**
+   * Invalide la clé cache d'un user précis. Appelé sur
+   * `GUILD_MEMBER_UPDATE` (le user a gagné/perdu un rôle).
+   */
+  readonly invalidateMember: (guildId: GuildId, userId: UserId) => void;
+}
+
+/**
+ * Configuration du cache LRU `getUserLevel` (jalon 7 PR 7.3
+ * sub-livrable 4). Désactivable pour les tests qui veulent vérifier
+ * la lecture pure DB. En prod : TTL court (60 s) pour limiter
+ * l'écart entre une mutation et son effet sur les routes.
+ */
+export interface GuildPermissionsCacheConfig {
+  /** Taille max du cache (en entrées). Au-delà : éviction LRU. */
+  readonly maxSize: number;
+  /** TTL d'une entrée en millisecondes. Défaut : 60_000. */
+  readonly ttlMs: number;
+  /** Horloge injectable. Défaut : `Date.now`. */
+  readonly now?: () => number;
 }
 
 export interface CreateGuildPermissionsServiceOptions<D extends DbDriver> {
   readonly client: DbClient<D>;
   readonly context: GuildPermissionsContext;
   readonly audit?: CoreAuditService;
+  /** Active le cache LRU. Omis → cache désactivé (tests). */
+  readonly cache?: GuildPermissionsCacheConfig;
+}
+
+/**
+ * Cache LRU minimal — Map insertion-ordered, éviction de la plus
+ * ancienne entrée quand on dépasse `maxSize`. TTL appliqué à la
+ * lecture (entrée expirée → miss). Pas de timer d'expiration en
+ * arrière-plan — la révocation est lazy.
+ */
+class LruWithTtl<V> {
+  private readonly maxSize: number;
+  private readonly ttlMs: number;
+  private readonly now: () => number;
+  private readonly entries = new Map<string, { value: V; expiresAt: number }>();
+
+  constructor(config: GuildPermissionsCacheConfig) {
+    this.maxSize = config.maxSize;
+    this.ttlMs = config.ttlMs;
+    this.now = config.now ?? (() => Date.now());
+  }
+
+  get(key: string): V | undefined {
+    const entry = this.entries.get(key);
+    if (entry === undefined) return undefined;
+    if (entry.expiresAt < this.now()) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    // Touch : on re-insert pour rafraîchir l'ordre LRU.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.value;
+  }
+
+  set(key: string, value: V): void {
+    if (this.entries.has(key)) {
+      this.entries.delete(key);
+    } else if (this.entries.size >= this.maxSize) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest !== undefined) this.entries.delete(oldest);
+    }
+    this.entries.set(key, { value, expiresAt: this.now() + this.ttlMs });
+  }
+
+  deleteByPrefix(prefix: string): void {
+    for (const key of this.entries.keys()) {
+      if (key.startsWith(prefix)) this.entries.delete(key);
+    }
+  }
+
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
 }
 
 const validatePatch = (patch: GuildPermissionsPatch): void => {
@@ -216,6 +296,9 @@ export function createGuildPermissionsService<D extends DbDriver>(
   options: CreateGuildPermissionsServiceOptions<D>,
 ): GuildPermissionsService {
   const { client, context, audit } = options;
+  const cache = options.cache ? new LruWithTtl<PermissionLevel | null>(options.cache) : null;
+  const cacheKey = (guildId: GuildId, userId: UserId): string => `${guildId}:${userId}`;
+  const guildPrefix = (guildId: GuildId): string => `${guildId}:`;
 
   /**
    * Si `getConfig` n'a pas trouvé de row, on génère et **persiste**
@@ -255,6 +338,9 @@ export function createGuildPermissionsService<D extends DbDriver>(
       validatePatch(patch);
       const before = await readConfig(guildId);
       await upsertRow(client, guildId, patch);
+      // Invalidation cache : la config a changé, toutes les clés
+      // `${guildId}:*` sont potentiellement obsolètes.
+      cache?.deleteByPrefix(guildPrefix(guildId));
       // Audit : diff before/after pour traçabilité ; cf. spec § 10.
       await audit?.log({
         guildId,
@@ -276,24 +362,34 @@ export function createGuildPermissionsService<D extends DbDriver>(
     },
 
     async getUserLevel(guildId, userId) {
+      const key = cacheKey(guildId, userId);
+      const cached = cache?.get(key);
+      if (cached !== undefined) {
+        return cached;
+      }
       // Owner Discord du serveur → toujours admin (filet de sécurité
       // contre lock-out, cf. spec § 7).
       const ownerId = await context.getOwnerId(guildId);
       if (ownerId === userId) {
+        cache?.set(key, 'admin');
         return 'admin';
       }
       const config = await readConfig(guildId);
       const userRoleIds = await context.getUserRoleIds(guildId, userId);
       if (userRoleIds.length === 0) {
+        cache?.set(key, null);
         return null;
       }
       const userRoleSet = new Set<string>(userRoleIds);
       if (config.adminRoleIds.some((rid) => userRoleSet.has(rid))) {
+        cache?.set(key, 'admin');
         return 'admin';
       }
       if (config.moderatorRoleIds.some((rid) => userRoleSet.has(rid))) {
+        cache?.set(key, 'moderator');
         return 'moderator';
       }
+      cache?.set(key, null);
       return null;
     },
 
@@ -331,6 +427,7 @@ export function createGuildPermissionsService<D extends DbDriver>(
         adminRoleIds: nextAdmin,
         moderatorRoleIds: moderatorWithoutRole,
       });
+      cache?.deleteByPrefix(guildPrefix(guildId));
       await audit?.log({
         guildId,
         action: 'permissions.role.auto_removed' as ActionId,
@@ -347,6 +444,14 @@ export function createGuildPermissionsService<D extends DbDriver>(
           metadata: { regeneratedAdminRoleIds: nextAdmin },
         });
       }
+    },
+
+    invalidateGuild(guildId) {
+      cache?.deleteByPrefix(guildPrefix(guildId));
+    },
+
+    invalidateMember(guildId, userId) {
+      cache?.delete(cacheKey(guildId, userId));
     },
   };
 }

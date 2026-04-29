@@ -30,6 +30,11 @@ export {
   createDispatcher,
 } from './dispatcher.js';
 export {
+  type AttachGuildPermissionsListenersOptions,
+  attachGuildPermissionsListeners,
+  type GuildPermissionsListenersBinding,
+} from './guild-permissions-listeners.js';
+export {
   type DiscordEventInput,
   type DiscordEventKind,
   mapDiscordEvent,

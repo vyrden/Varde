@@ -31,6 +31,7 @@ export { type CreateEventBusOptions, createEventBus, type EventHandler } from '.
 export {
   type CreateGuildPermissionsServiceOptions,
   createGuildPermissionsService,
+  type GuildPermissionsCacheConfig,
   type GuildPermissionsConfig,
   type GuildPermissionsContext,
   type GuildPermissionsPatch,

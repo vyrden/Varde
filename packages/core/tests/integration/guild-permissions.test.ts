@@ -249,6 +249,156 @@ describe('guildPermissionsService — canAccessModule', () => {
   });
 });
 
+describe('guildPermissionsService — cache', () => {
+  let client: DbClient<'sqlite'>;
+
+  beforeEach(async () => {
+    client = createDbClient({ driver: 'sqlite', url: ':memory:' });
+    await applyMigrations(client);
+    await seed(client);
+  });
+
+  afterEach(async () => {
+    await client.close();
+  });
+
+  it('cache hit : deuxième appel ne re-tire pas le contexte Discord', async () => {
+    const ctx = buildContext();
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 100, ttlMs: 60_000 },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    // Cache miss — appel Discord context.
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    // Cache hit — pas d'appel Discord supplémentaire.
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(1);
+    expect(ctx.getOwnerId).toHaveBeenCalledTimes(1);
+  });
+
+  it('updateConfig invalide tout le cache de la guild', async () => {
+    const ctx = buildContext();
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 100, ttlMs: 60_000 },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    await service.getUserLevel(GUILD, MOD_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(2);
+    // updateConfig → invalide les 2 entrées
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE, PARTNER_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    await service.getUserLevel(GUILD, MOD_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(4);
+  });
+
+  it('invalidateMember n invalide qu une clé', async () => {
+    const ctx = buildContext();
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 100, ttlMs: 60_000 },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    await service.getUserLevel(GUILD, MOD_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(2);
+    service.invalidateMember(GUILD, ADMIN_USER);
+    await service.getUserLevel(GUILD, ADMIN_USER); // miss → +1
+    await service.getUserLevel(GUILD, MOD_USER); // hit → 0
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(3);
+  });
+
+  it('invalidateGuild invalide toutes les clés de la guild', async () => {
+    const ctx = buildContext();
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 100, ttlMs: 60_000 },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    await service.getUserLevel(GUILD, MOD_USER);
+    service.invalidateGuild(GUILD);
+    await service.getUserLevel(GUILD, ADMIN_USER); // miss
+    await service.getUserLevel(GUILD, MOD_USER); // miss
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(4);
+  });
+
+  it('TTL expire l entrée et déclenche un re-fetch', async () => {
+    const ctx = buildContext();
+    let now = 1_000_000;
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 100, ttlMs: 60_000, now: () => now },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(1);
+    // Avance avant TTL : hit
+    now += 30_000;
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(1);
+    // Avance après TTL : miss
+    now += 31_000;
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(2);
+  });
+
+  it('LRU : éviction de la plus ancienne entrée au-delà de maxSize', async () => {
+    const ctx = buildContext();
+    const service = createGuildPermissionsService({
+      client,
+      context: ctx,
+      cache: { maxSize: 2, ttlMs: 60_000 },
+    });
+    await service.updateConfig(
+      GUILD,
+      { adminRoleIds: [ADMIN_ROLE], moderatorRoleIds: [MOD_ROLE] },
+      { type: 'user', id: OWNER },
+    );
+    await service.getUserLevel(GUILD, ADMIN_USER); // entrée A
+    await service.getUserLevel(GUILD, MOD_USER); // entrée B
+    await service.getUserLevel(GUILD, RANDOM_USER); // entrée C → évince A (LRU)
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(3);
+    // C est encore là → hit
+    await service.getUserLevel(GUILD, RANDOM_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(3);
+    // A a été évincée → re-fetch
+    await service.getUserLevel(GUILD, ADMIN_USER);
+    expect(ctx.getUserRoleIds).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('guildPermissionsService — cleanupDeletedRole', () => {
   let client: DbClient<'sqlite'>;
 
