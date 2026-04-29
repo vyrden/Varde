@@ -44,6 +44,7 @@ const tablesInResetOrder = [
   'guild_config',
   'guilds',
   'instance_config',
+  'instance_owners',
 ] as const;
 
 /**
@@ -82,7 +83,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     }
   });
 
-  it('crée les 13 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1)', async () => {
+  it('crée les 14 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1 + instance_owners jalon 7 PR 7.2)', async () => {
     const rows = await client.db.execute<{ table_name: string }>(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%' ORDER BY table_name`,
     );
@@ -93,6 +94,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'guild_modules',
       'guilds',
       'instance_config',
+      'instance_owners',
       'keystore',
       'modules_registry',
       'onboarding_actions_log',

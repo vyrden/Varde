@@ -361,6 +361,15 @@ export const instanceConfig = sqliteTable(
   (t) => [check('instance_config_singleton_check', sql`${t.id} = 'singleton'`)],
 );
 
+/**
+ * Miroir SQLite de `instance_owners` PG. Voir doc dans `./pg.ts`.
+ */
+export const instanceOwners = sqliteTable('instance_owners', {
+  discordUserId: text('discord_user_id').primaryKey(),
+  grantedAt: text('granted_at').notNull().default(nowIso),
+  grantedByDiscordUserId: text('granted_by_discord_user_id'),
+});
+
 export const sqliteSchema = {
   guilds,
   guildConfig,
@@ -375,6 +384,7 @@ export const sqliteSchema = {
   aiInvocations,
   keystore,
   instanceConfig,
+  instanceOwners,
 } as const;
 
 export type SqliteSchema = typeof sqliteSchema;

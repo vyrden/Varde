@@ -406,6 +406,33 @@ export const instanceConfig = pgTable(
   (t) => [check('instance_config_singleton_check', sql`${t.id} = 'singleton'`)],
 );
 
+/**
+ * Liste des owners de l'instance Varde — utilisateurs Discord
+ * autorisés à accéder à `/admin/*` côté dashboard et `/api/admin/*`
+ * côté API (jalon 7 PR 7.2).
+ *
+ * Le premier user qui se connecte après que `instance_config.
+ * setup_completed_at` est posé devient automatiquement owner via
+ * `claimFirstOwnership()` (le hook Auth.js fait l'appel). Les
+ * suivants doivent être ajoutés explicitement par un owner
+ * existant via `POST /api/admin/ownership`.
+ *
+ * Pas de FK vers une table `users` — l'instance n'enregistre pas
+ * les utilisateurs Discord en local (ADR 0006). Le `discord_user_id`
+ * est l'ID Discord brut (snowflake) tel que reçu via OAuth, et la
+ * vérification d'identité reste la responsabilité d'Auth.js.
+ */
+export const instanceOwners = pgTable('instance_owners', {
+  discordUserId: varchar('discord_user_id', { length: 20 }).primaryKey(),
+  grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * `null` pour le premier owner (auto-assigné via
+   * `claimFirstOwnership`). Sinon snowflake de l'owner qui a
+   * accordé l'accès — utile pour l'audit ulterieur sans cross-FK.
+   */
+  grantedByDiscordUserId: varchar('granted_by_discord_user_id', { length: 20 }),
+});
+
 /** Table union utile pour l'introspection. */
 export const pgSchema = {
   guilds,
@@ -421,6 +448,7 @@ export const pgSchema = {
   aiInvocations,
   keystore,
   instanceConfig,
+  instanceOwners,
 } as const;
 
 export type PgSchema = typeof pgSchema;

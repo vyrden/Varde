@@ -76,6 +76,13 @@ export {
   type UndoSessionResult,
 } from './onboarding/index.js';
 export {
+  type ClaimFirstOwnershipResult,
+  type CreateOwnershipServiceOptions,
+  createOwnershipService,
+  type InstanceOwner,
+  type OwnershipService,
+} from './ownership.js';
+export {
   type CorePermissionService,
   type CreatePermissionServiceOptions,
   createPermissionService,
