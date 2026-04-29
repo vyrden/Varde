@@ -87,19 +87,18 @@ test.describe('wizard de setup — étapes formulaire', () => {
     await expect(tokenField).toBeVisible();
     await expect(tokenField).toHaveAttribute('type', 'password');
 
-    // On attend explicitement que le bouton « Afficher » soit
-    // visible (proxy pour la fin de l'hydratation React) avant de
-    // cliquer — sinon Playwright peut taper avant que le handler
-    // `onClick` ne soit attaché côté client.
-    const toggle = page.getByRole('button', { name: /Afficher/i });
-    await expect(toggle).toBeVisible();
-    await toggle.click();
-
-    // Le label du bouton bascule à « Masquer » dès que React a
-    // re-render — on attend ce signal avant d'asserter sur le
-    // `type` de l'input pour ne pas dépendre du timing du
-    // batching React vs. Playwright.
-    await expect(page.getByRole('button', { name: /Masquer/i })).toBeVisible();
+    // Hydratation React vs. Playwright : avec `next dev` + Turbopack,
+    // le button SSR rend instantanément mais son handler `onClick`
+    // n'est attaché qu'après le download + parse du chunk client.
+    // Un click avant cet instant est un no-op silencieux. On retry
+    // donc le couple click + assertion via `expect.toPass` jusqu'à
+    // ce que React ait pris le relais.
+    await expect(async () => {
+      await page.getByRole('button', { name: /Afficher/i }).click({ timeout: 1000 });
+      await expect(page.getByRole('button', { name: /Masquer/i })).toBeVisible({
+        timeout: 1000,
+      });
+    }).toPass({ timeout: 15_000, intervals: [250, 500, 1000] });
     await expect(tokenField).toHaveAttribute('type', 'text');
   });
 
