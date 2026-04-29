@@ -176,13 +176,14 @@ export function AdminOwnershipSection({
               onChange={(e) => setDiscordUserId(e.target.value)}
               placeholder={copy.userIdPlaceholder}
               inputMode="numeric"
+              data-testid="admin-ownership-add-input"
               className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div className="flex items-center justify-end">
             <button
               type="submit"
-              disabled={addPending || discordUserId.length === 0}
+              disabled={addPending}
               className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="admin-ownership-add-submit"
             >

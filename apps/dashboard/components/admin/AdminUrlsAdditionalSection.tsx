@@ -129,6 +129,7 @@ export function AdminUrlsAdditionalSection({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder={copy.urlPlaceholder}
+              data-testid="admin-urls-add-url-input"
               className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
@@ -147,13 +148,14 @@ export function AdminUrlsAdditionalSection({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder={copy.labelPlaceholder}
+              data-testid="admin-urls-add-label-input"
               className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div className="flex items-center justify-end">
             <button
               type="submit"
-              disabled={addPending || url.length === 0}
+              disabled={addPending}
               className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="admin-urls-add-submit"
             >
