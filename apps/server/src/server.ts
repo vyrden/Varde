@@ -12,6 +12,7 @@ import {
   type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
+  registerAdminDiscordRoutes,
   registerAdminIdentityRoutes,
   registerAdminOverviewRoutes,
   registerAdminOwnershipRoutes,
@@ -718,6 +719,7 @@ export async function createServer<D extends DbDriver>(
   });
   registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
   registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger });
+  registerAdminDiscordRoutes(api, { ownership, instanceConfig, logger });
   registerAdminOverviewRoutes(api, {
     ownership,
     client,

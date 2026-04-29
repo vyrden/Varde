@@ -16,6 +16,13 @@ export { requireGuildAdmin } from './middleware/require-guild-admin.js';
 export { requireOwner } from './middleware/require-owner.js';
 export { reconcileOnboardingSessions } from './onboarding-reconcile.js';
 export {
+  type AdminDiscordIntents,
+  type AdminDiscordResponse,
+  type AdminRevealTokenResponse,
+  type RegisterAdminDiscordRoutesOptions,
+  registerAdminDiscordRoutes,
+} from './routes/admin-discord.js';
+export {
   type AdminIdentityResponse,
   type RegisterAdminIdentityRoutesOptions,
   registerAdminIdentityRoutes,
