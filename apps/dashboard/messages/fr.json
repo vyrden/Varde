@@ -53,6 +53,69 @@
         "label": "URL d'accès au dashboard",
         "hint": "C'est l'adresse que vos administrateurs taperont dans leur navigateur. Modifiable plus tard depuis l'administration de l'instance."
       }
+    },
+    "discordApp": {
+      "title": "Créer l'application Discord",
+      "subtitle": "Créez une application dans le portail Developer de Discord, puis collez son Application ID et sa Public Key.",
+      "openPortal": "Ouvrir le portail Discord Developer",
+      "steps": {
+        "openPortal": "Ouvrez https://discord.com/developers/applications dans un nouvel onglet.",
+        "createApp": "Cliquez sur « New Application » et donnez-lui un nom (modifiable plus tard).",
+        "copyAppId": "Onglet « General Information » → copiez l'Application ID.",
+        "copyPublicKey": "Toujours dans « General Information » → copiez la Public Key."
+      },
+      "appId": {
+        "label": "Application ID",
+        "placeholder": "ex. 1212345678901234567"
+      },
+      "publicKey": {
+        "label": "Public Key",
+        "placeholder": "64 caractères hex (Ed25519)"
+      },
+      "submit": "Valider",
+      "success": "Application Discord détectée :",
+      "errors": {
+        "invalidBody": "Application ID ou Public Key mal formé. Vérifiez qu'ils correspondent à ce que Discord affiche.",
+        "notFound": "Aucune application Discord trouvée pour cet Application ID. Vérifiez la valeur dans le portail Developer.",
+        "unreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
+    "botToken": {
+      "title": "Token bot et intents",
+      "subtitle": "Le bot a besoin d'un token et de trois intents privilégiés activés dans le portail Developer.",
+      "steps": {
+        "openBotTab": "Dans votre application, ouvrez l'onglet « Bot ».",
+        "resetToken": "Cliquez sur « Reset Token » et copiez la valeur immédiatement (Discord ne la rejouera pas).",
+        "enableIntents": "Activez les trois Privileged Gateway Intents (Presence, Server Members, Message Content).",
+        "pasteToken": "Collez le token ci-dessous."
+      },
+      "token": {
+        "label": "Token bot",
+        "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
+        "hint": "Ne partagez jamais ce token. Il est chiffré au repos avec votre master key.",
+        "show": "Afficher",
+        "hide": "Masquer"
+      },
+      "submit": "Valider",
+      "success": "Bot identifié :",
+      "invalidToken": "Token refusé par Discord. Re-générez-en un dans le portail Developer et réessayez.",
+      "intents": {
+        "heading": "Intents privilégiés",
+        "allOk": "Les trois intents sont activés.",
+        "missing": "Activez les intents manquants dans le portail Developer puis revalidez. Vous pouvez aussi continuer — certains modules tournent sans, mais les fonctionnalités liées seront désactivées.",
+        "presence": "Presence Intent",
+        "guildMembers": "Server Members Intent",
+        "messageContent": "Message Content Intent",
+        "enable": "Activer dans le portail"
+      },
+      "errors": {
+        "invalidBody": "Token absent ou trop court.",
+        "unreachable": "Discord est injoignable. Réessayez dans un instant.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
     }
   }
 }

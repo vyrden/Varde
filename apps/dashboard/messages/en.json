@@ -53,6 +53,69 @@
         "label": "Dashboard access URL",
         "hint": "This is the address your administrators will type in their browser. You'll be able to change it later from the instance administration page."
       }
+    },
+    "discordApp": {
+      "title": "Create the Discord application",
+      "subtitle": "Create an application in Discord's Developer portal, then paste its Application ID and Public Key.",
+      "openPortal": "Open the Discord Developer portal",
+      "steps": {
+        "openPortal": "Open https://discord.com/developers/applications in a new tab.",
+        "createApp": "Click \"New Application\" and give it a name (you can change it later).",
+        "copyAppId": "Under \"General Information\" → copy the Application ID.",
+        "copyPublicKey": "Still in \"General Information\" → copy the Public Key."
+      },
+      "appId": {
+        "label": "Application ID",
+        "placeholder": "e.g. 1212345678901234567"
+      },
+      "publicKey": {
+        "label": "Public Key",
+        "placeholder": "64 hex characters (Ed25519)"
+      },
+      "submit": "Validate",
+      "success": "Discord application detected:",
+      "errors": {
+        "invalidBody": "Application ID or Public Key is malformed. Verify the values shown by Discord.",
+        "notFound": "No Discord application found for this Application ID. Double-check the value in the Developer portal.",
+        "unreachable": "Discord is unreachable. Try again in a moment.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
+    "botToken": {
+      "title": "Bot token and intents",
+      "subtitle": "The bot needs a token and the three privileged intents enabled in the Developer portal.",
+      "steps": {
+        "openBotTab": "In your application, open the \"Bot\" tab.",
+        "resetToken": "Click \"Reset Token\" and copy the value immediately (Discord will not show it again).",
+        "enableIntents": "Enable the three Privileged Gateway Intents (Presence, Server Members, Message Content).",
+        "pasteToken": "Paste the token below."
+      },
+      "token": {
+        "label": "Bot token",
+        "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
+        "hint": "Never share this token. It is encrypted at rest with your master key.",
+        "show": "Show",
+        "hide": "Hide"
+      },
+      "submit": "Validate",
+      "success": "Bot identified:",
+      "invalidToken": "Token rejected by Discord. Generate a fresh one in the Developer portal and try again.",
+      "intents": {
+        "heading": "Privileged intents",
+        "allOk": "All three intents are enabled.",
+        "missing": "Enable the missing intents in the Developer portal then re-validate. You can also continue — some modules work without them, but the related features will be disabled.",
+        "presence": "Presence Intent",
+        "guildMembers": "Server Members Intent",
+        "messageContent": "Message Content Intent",
+        "enable": "Enable in portal"
+      },
+      "errors": {
+        "invalidBody": "Token missing or too short.",
+        "unreachable": "Discord is unreachable. Try again in a moment.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
     }
   }
 }

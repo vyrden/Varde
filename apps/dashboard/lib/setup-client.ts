@@ -23,6 +23,48 @@ export interface SystemCheckPayload {
   readonly detectedBaseUrl: string;
 }
 
+/** Réponse de `POST /setup/discord-app`. */
+export interface DiscordAppResponse {
+  readonly appName: string;
+}
+
+/** Nom canonique d'un intent privilégié Discord. */
+export type PrivilegedIntentName = 'PRESENCE' | 'GUILD_MEMBERS' | 'MESSAGE_CONTENT';
+
+/** DTO bot user retourné par `POST /setup/bot-token`. */
+export interface BotUserDto {
+  readonly id: string;
+  readonly username: string;
+  readonly discriminator?: string;
+  readonly avatar?: string | null;
+}
+
+/** Réponse de `POST /setup/bot-token` (union discriminée par `valid`). */
+export type BotTokenResponse =
+  | {
+      readonly valid: true;
+      readonly botUser: BotUserDto;
+      readonly missingIntents: readonly PrivilegedIntentName[];
+    }
+  | { readonly valid: false; readonly reason: 'invalid_token' };
+
+/** Réponse de `POST /setup/oauth`. */
+export type OAuthResponse =
+  | { readonly valid: true }
+  | { readonly valid: false; readonly reason: 'invalid_secret' };
+
+/** Réponse de `POST /setup/identity`. */
+export interface IdentityResponse {
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly avatarUrl: string | null;
+}
+
+/** Réponse de `POST /setup/complete`. */
+export type CompleteResponse =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: 'timeout' };
+
 /**
  * Résultat ergonomique côté UI — discrimine succès / échec d'appel
  * (un échec API n'est pas la même chose qu'un check qui rapporte
