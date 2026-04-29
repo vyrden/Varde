@@ -60,26 +60,46 @@ Pour développer et tester localement, il faut une application Discord
 dédiée, distincte de toute application utilisée en production ou sur un
 serveur réel.
 
-#### Créer l'application
+#### Configurer Discord — wizard ou env (legacy)
+
+Depuis le jalon 7 (cf. ADR 0013), les credentials Discord sont
+collectés par le wizard de setup à `${VARDE_BASE_URL}/setup` et
+persistés chiffrés en DB. Sur une instance fraîche :
+
+1. Ouvrir le dashboard, le middleware redirige automatiquement
+   vers `/setup/welcome`.
+2. Suivre les 7 étapes — le wizard ouvre lui-même les liens vers le
+   portail Developer et explique quoi copier/coller à chaque
+   étape.
+
+Le chemin **legacy** par variables d'environnement reste
+disponible pour les dev setups antérieurs au wizard :
+`VARDE_DISCORD_TOKEN`, `VARDE_DISCORD_CLIENT_ID`,
+`VARDE_DISCORD_CLIENT_SECRET`. Si elles sont renseignées dans
+`.env.local`, le bot se connecte directement sans passer par le
+wizard, et un warning est émis au boot pour signaler la migration
+à venir. Voir `.env.example` pour le détail.
+
+Pour les développeurs qui veulent comprendre ce qu'attend le
+wizard sans le dérouler à chaque fois, voici les valeurs et leur
+provenance dans le portail Discord :
 
 1. Ouvrir
    [discord.com/developers/applications](https://discord.com/developers/applications)
    et créer une nouvelle application.
-2. Dans **General Information**, noter l'`Application ID` à renseigner
-   dans `VARDE_DISCORD_CLIENT_ID`.
-3. Dans **OAuth2 → General**, copier le `Client Secret` à renseigner
-   dans `VARDE_DISCORD_CLIENT_SECRET`. Il ne s'affiche qu'une fois ;
-   le régénérer si perdu.
-
-#### Configurer le bot
-
-1. Dans l'onglet **Bot**, créer le bot s'il n'existe pas.
-2. Copier le token à renseigner dans `VARDE_DISCORD_TOKEN`. Même règle
-   d'affichage unique, et même possibilité de régénération.
-3. Activer les **Privileged Gateway Intents** suivants :
-   - `Server Members Intent` — requis pour la modération et l'accueil.
-   - `Message Content Intent` — requis pour l'automod et certaines
-     commandes.
+2. **General Information** → `Application ID` (saisi étape
+   « Discord App » du wizard, ou `VARDE_DISCORD_CLIENT_ID` en
+   legacy).
+3. **General Information** → `Public Key` (saisi étape « Discord
+   App »).
+4. **OAuth2 → General** → `Client Secret` (saisi étape « OAuth »,
+   ou `VARDE_DISCORD_CLIENT_SECRET` en legacy). Il ne s'affiche
+   qu'une fois ; régénérer si perdu.
+5. **Bot** → bouton « Reset Token », copier la valeur (saisie
+   étape « Token bot », ou `VARDE_DISCORD_TOKEN` en legacy).
+6. **Bot → Privileged Gateway Intents** : activer les trois —
+   `Presence`, `Server Members`, `Message Content`. Le wizard
+   liste explicitement ceux qui manquent à l'étape « Token bot ».
 
 #### Scopes OAuth2
 
@@ -115,8 +135,13 @@ l'automod s'y appliqueraient sans filtre.
 #### Rotation des secrets
 
 Le token et le client secret se régénèrent depuis le Discord Developer
-Portal. En cas de fuite suspectée, révoquer immédiatement côté Discord
-puis mettre à jour `.env.local`.
+Portal. En cas de fuite suspectée, révoquer immédiatement côté
+Discord puis :
+
+- soit rejouer le wizard depuis l'admin instance (chantier 2 du
+  jalon 7) si le wizard a déjà été terminé ;
+- soit mettre à jour `.env.local` puis redémarrer le service si
+  vous êtes encore sur le chemin legacy.
 
 ### Démarrage
 

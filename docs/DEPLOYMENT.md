@@ -51,31 +51,40 @@ est déjà installé. Pas besoin d'être développeur — il faut juste
 
 ## Créer l'application Discord
 
-Vous allez d'abord déclarer le bot sur le Developer Portal de
-Discord. Cette étape ne touche pas à votre serveur Varde.
+Depuis le jalon 7 (cf. [ADR 0013](./adr/0013-credentials-discord-en-db-chiffree.md)),
+le wizard de setup de Varde collecte les credentials Discord
+directement à l'ouverture du dashboard. **Vous n'avez pas besoin
+de copier le token ou les clés OAuth dans `.env` à l'avance.**
+
+Cette section décrit ce que vous aurez à fournir au wizard. Le bot
+n'est pas créé tant que cette étape n'est pas faite.
 
 1. **Aller sur** [discord.com/developers/applications](https://discord.com/developers/applications)
    et cliquer sur **« New Application »**.
 2. Choisir un nom (par ex. `Varde`), accepter les conditions, créer.
-3. **Onglet `OAuth2`** :
-   - Noter le **Client ID** et révéler le **Client Secret** :
-     ce seront `VARDE_DISCORD_CLIENT_ID` et
-     `VARDE_DISCORD_CLIENT_SECRET`.
-   - Section « Redirects », ajouter :
-     `https://votre-domaine.com/api/auth/callback/discord`
-     (ou, en dev local : `http://localhost:3000/api/auth/callback/discord`).
-4. **Onglet `Bot`** :
-   - Cliquer **« Reset Token »** et copier le token affiché —
-     c'est `VARDE_DISCORD_TOKEN`. Vous ne le reverrez plus, donc
-     mettez-le tout de suite en lieu sûr.
-   - Activer **« Server Members Intent »** et **« Message
-     Content Intent »** (Varde en a besoin pour les modules
-     `welcome` et `moderation`).
+3. **Onglet `General Information`** : noter le **Application ID**
+   et la **Public Key** (vous les collerez à l'étape « Discord App »
+   du wizard).
+4. **Onglet `OAuth2 → General`** :
+   - Cliquer **« Reset Secret »** et copier le **Client Secret**
+     (étape « OAuth » du wizard). Il ne s'affiche qu'une fois.
+   - Section « Redirects » : à laisser vide pour l'instant. Le
+     wizard vous donnera l'URL exacte à coller ici à l'étape
+     « OAuth ».
+5. **Onglet `Bot`** :
+   - Cliquer **« Reset Token »** et copier le token affiché
+     (étape « Token bot » du wizard). Vous ne le reverrez plus.
+   - Activer les **trois Privileged Gateway Intents** : `Presence`,
+     `Server Members`, `Message Content`. Le wizard liste
+     explicitement ceux qui manquent et propose un lien direct
+     vers le portail si besoin.
 
 > ⚠️ **Le token bot est un secret aussi sensible qu'un mot de passe
 > maître.** S'il fuit, n'importe qui peut prendre le contrôle de
-> votre bot. Voir [SECURITY.md](../SECURITY.md) pour la procédure de
-> révocation rapide.
+> votre bot. Une fois persisté par le wizard, il est chiffré au
+> repos en AES-256-GCM avec votre `VARDE_KEYSTORE_MASTER_KEY` —
+> voir [SECURITY.md](../SECURITY.md) pour la procédure de
+> révocation et la rotation de master key.
 
 ---
 
@@ -118,9 +127,6 @@ git checkout v0.5.0   # ou la version la plus récente publiée
 
    | Variable | Valeur attendue |
    | --- | --- |
-   | `VARDE_DISCORD_TOKEN` | Le token de l'étape précédente. |
-   | `VARDE_DISCORD_CLIENT_ID` | Client ID OAuth2. |
-   | `VARDE_DISCORD_CLIENT_SECRET` | Client Secret OAuth2. |
    | `VARDE_BASE_URL` | `https://votre-domaine.com` (ou `http://localhost:3000` en dev — optionnelle, défaut `http://localhost:3000`). |
    | `VARDE_POSTGRES_PASSWORD` | Un mot de passe long, généré aléatoirement. |
    | `VARDE_LOG_LEVEL` | `info` en prod, `debug` pour investiguer. |
@@ -155,8 +161,30 @@ Tout passe par Docker Compose à partir d'ici.
 
    Vous devriez voir `[db] migrations Postgres appliquées`.
 
-3. **Inviter le bot sur votre serveur Discord** : ouvrez l'URL
-   suivante dans un navigateur, en remplaçant `CLIENT_ID` :
+3. **Ouvrir le wizard de setup** : pointez votre navigateur sur
+   `http://localhost:3000` (ou votre domaine HTTPS si vous êtes
+   déjà derrière un reverse-proxy). Le middleware Next.js détecte
+   que `setup_completed_at` est null en DB et vous redirige vers
+   `/setup/welcome`.
+
+   Suivez les 7 étapes — le wizard explique quoi copier/coller à
+   chaque écran et valide les credentials contre Discord en temps
+   réel. À la fin, le bouton « Démarrer Varde » pose
+   `setup_completed_at` et déclenche la connexion gateway sans
+   redémarrage du process. Vous arrivez ensuite sur la page
+   d'accueil du dashboard.
+
+   > 🛠️ **Chemin legacy.** Si vous avez déjà renseigné
+   > `VARDE_DISCORD_TOKEN` + `VARDE_DISCORD_CLIENT_ID` +
+   > `VARDE_DISCORD_CLIENT_SECRET` dans `.env`, le bot se connecte
+   > directement avec ces valeurs et le wizard est court-circuité.
+   > Un warning explicite est posé dans les logs pour vous inviter
+   > à migrer vers la persistance DB chiffrée (cf. ADR 0013).
+
+4. **Inviter le bot sur votre serveur Discord** : ouvrez l'URL
+   suivante dans un navigateur, en remplaçant `CLIENT_ID` par
+   l'Application ID que vous avez collé à l'étape « Discord App »
+   du wizard :
 
    ```text
    https://discord.com/oauth2/authorize?client_id=CLIENT_ID&permissions=8&scope=bot+applications.commands

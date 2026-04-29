@@ -80,3 +80,4 @@ Liens, issues, PR, discussions liées.
 - [0010 - `onboarding-presets` est API-driven, pas un module bot](./0010-onboarding-presets-api-driven.md) — accepted
 - [0011 - Internationalisation du dashboard avec `next-intl`, dispatch par cookie](./0011-i18n-next-intl-cookie.md) — accepted
 - [0012 - Tokens design CSS-first dans `@varde/ui` consommés via Tailwind 4](./0012-design-tokens-css-first.md) — accepted
+- [0013 - Persistance des credentials Discord en DB chiffrée plutôt qu'en `.env`](./0013-credentials-discord-en-db-chiffree.md) — accepted
