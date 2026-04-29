@@ -40,11 +40,14 @@ import { decideRedirect, fetchSetupConfigured, type SetupFetch } from './lib/set
 
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 
-// `NODE_ENV === 'test'` désactive le cache positif. Sans ça, les
-// E2E qui basculent l'état du mock entre `configured: true` et
-// `configured: false` ne verraient jamais l'évolution (le worker
-// retiendrait pour toujours le premier `true` observé).
-const CACHE_ENABLED = process.env['NODE_ENV'] !== 'test';
+// `VARDE_DISABLE_CONFIGURED_CACHE=1` désactive le cache positif. On
+// ne peut pas se contenter de `NODE_ENV` parce que `next dev` le
+// force à `'development'` peu importe ce que l'env extérieur a posé.
+// Le flag dédié est posé par `playwright.config.ts` côté CI pour que
+// les E2E qui basculent l'état du mock entre `configured: true` et
+// `configured: false` voient l'évolution (sinon le worker retient
+// pour toujours le premier `true` observé).
+const CACHE_ENABLED = process.env['VARDE_DISABLE_CONFIGURED_CACHE'] !== '1';
 
 let configuredCache: boolean | null = null;
 const fetchImpl: SetupFetch = (input, init) => fetch(input, init);

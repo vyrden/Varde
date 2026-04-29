@@ -114,6 +114,12 @@ export default defineConfig({
         // sur `VARDE_API_URL` — on les redirige vers le mock HTTP du
         // sous-livrable 6.
         VARDE_API_URL: 'http://127.0.0.1:4002',
+        // Désactive le cache positif du middleware en E2E pour que les
+        // tests puissent basculer le mock entre `configured: true` et
+        // `configured: false` sans rester piégés sur la première
+        // observation. `NODE_ENV` ne marche pas — `next dev` le force
+        // à `'development'`.
+        VARDE_DISABLE_CONFIGURED_CACHE: '1',
       },
     },
   ],
