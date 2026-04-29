@@ -21,12 +21,31 @@ export default defineConfig({
   testDir: './tests/e2e',
   /* Pas de retry par défaut en local ; CI peut surcharger via env. */
   retries: process.env['CI'] ? 2 : 0,
-  /* Workers limités pour éviter de spawner 10× le serveur Next. */
-  workers: 2,
+  /*
+   * 1 worker pour sérialiser les specs : le mock API du wizard
+   * (`setup-api-mock.mjs`) porte un état partagé (`configured`)
+   * que landing.spec.ts et setup-wizard.spec.ts veulent
+   * différent. En parallèle, le `beforeAll` de l'un écrase celui
+   * de l'autre par ordre de scheduling et fait flapper les tests
+   * tardifs du wizard. La perf gagnée par `workers: 2` est
+   * négligeable sur 16 specs.
+   */
+  workers: 1,
   /* Reporters compacts en local, GitHub Actions sur CI. */
   reporter: process.env['CI'] ? 'github' : [['list']],
   /* Output dans un dossier dédié — gitignoré. */
   outputDir: './test-results',
+
+  /*
+   * `next dev` compile les routes à la demande — la 1ʳᵉ requête
+   * sur une page froide peut prendre plusieurs secondes en CI.
+   * 10 s de timeout par expect couvre ça sans masquer un vrai
+   * blocage (les vraies erreurs se manifestent plutôt en quelques
+   * centaines de ms).
+   */
+  expect: {
+    timeout: 10 * 1000,
+  },
 
   use: {
     baseURL: 'http://127.0.0.1:3001',
