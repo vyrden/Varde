@@ -1,56 +1,94 @@
 import type { Logger } from '@varde/contracts';
-import type { OwnershipService } from '@varde/core';
+import { ConflictError } from '@varde/contracts';
+import type { InstanceConfigService, OwnershipService } from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+
+import type { FetchLike } from '../discord-client.js';
+import { requireOwner } from '../middleware/require-owner.js';
 
 /**
  * Routes ownership de l'admin instance (jalon 7 PR 7.2).
  *
- * Ce module pose en l'état seulement le endpoint « claim-first »,
- * appelé par le hook Auth.js v5 du dashboard à chaque login Discord
- * pour absorber le cas démarrage frais où le premier user devient
- * owner. Les routes de gestion des owners (GET / POST / DELETE)
- * gardées par `requireOwner` arriveront aux sous-livrables 3-4 du
- * plan PR2-admin instance.md.
+ * Deux groupes de routes :
  *
- * **Sécurité du claim-first** : l'endpoint est public (pas de
- * cookie de session). C'est nécessaire — au moment du tout premier
- * login, aucun cookie n'est encore posé. Le risque de race entre
- * un attaquant et l'owner légitime existe mais reste théorique
- * dans le modèle déploiement « auto-hébergé, single instance,
- * single user au boot » de Varde. La méthode du service est
- * idempotente (pas d'effet après le premier claim) et l'API logge
- * en niveau `warn` chaque claim réussi pour traçabilité.
+ * 1. **`POST /admin/ownership/claim-first`** — public, idempotent.
+ *    Appelé par le hook Auth.js v5 du dashboard à chaque login
+ *    Discord pour absorber le cas démarrage frais où le premier
+ *    user devient owner. Sécurité : voir doc en bas du module.
+ *
+ * 2. **`GET / POST / DELETE /admin/ownership[/:id]`** — gardées
+ *    par `requireOwner`. Listent / ajoutent / retirent des owners.
+ *    L'ajout valide d'abord l'existence du `discordUserId` côté
+ *    Discord (`GET /users/{id}` avec le bot token déchiffré depuis
+ *    `instance_config`), pour qu'un admin ne puisse pas s'ajouter
+ *    un ID arbitraire qui n'existe pas.
+ *
+ * Toute opération réussie est loguée en niveau `info` (warn pour
+ * `claim-first`) avec l'identité de l'owner appelant et la cible
+ * — traçabilité d'ownership exigée par la doc PR 7.2.
  */
 
-/** Body wire de `POST /admin/ownership/claim-first`. */
+const DISCORD_API_BASE = 'https://discord.com/api/v10';
+
+const snowflakeSchema = z
+  .string()
+  .regex(/^\d{17,20}$/u, 'doit être un snowflake Discord (17-20 chiffres)');
+
 const claimFirstBodySchema = z.object({
-  /** Snowflake Discord du user qui vient de se loguer. */
-  discordUserId: z
-    .string()
-    .regex(/^\d{17,20}$/, 'discordUserId doit être un snowflake Discord (17-20 chiffres)'),
-  /**
-   * Username Discord, optionnel — sert uniquement au log de
-   * traçabilité côté serveur. L'API ne le persiste pas.
-   */
+  discordUserId: snowflakeSchema,
   username: z.string().min(1).max(100).optional(),
+});
+
+const addOwnerBodySchema = z.object({
+  discordUserId: snowflakeSchema,
+});
+
+const deleteOwnerParamsSchema = z.object({
+  discordUserId: snowflakeSchema,
+});
+
+const discordUserSchema = z.object({
+  id: z.string(),
+  username: z.string(),
 });
 
 /** Réponse de `POST /admin/ownership/claim-first`. */
 export interface ClaimFirstOwnershipResponse {
-  /**
-   * `true` si le user vient d'être ajouté comme owner. `false` si
-   * la table `instance_owners` contenait déjà au moins un owner —
-   * dans ce cas, le user n'est PAS ajouté (les owners suivants
-   * passent par les routes admin protégées).
-   */
   readonly claimed: boolean;
+}
+
+/** Forme publique d'un owner exposée par `GET /admin/ownership`. */
+export interface OwnerDto {
+  readonly discordUserId: string;
+  readonly grantedAt: string;
+  readonly grantedByDiscordUserId: string | null;
+}
+
+/** Réponse de `GET /admin/ownership`. */
+export interface OwnersListResponse {
+  readonly owners: readonly OwnerDto[];
+}
+
+/** Réponse de `POST /admin/ownership`. */
+export interface AddOwnerResponse {
+  readonly added: true;
+}
+
+/** Réponse de `DELETE /admin/ownership/:id`. */
+export interface RemoveOwnerResponse {
+  readonly removed: true;
 }
 
 /** Options de construction. */
 export interface RegisterAdminOwnershipRoutesOptions {
   readonly ownership: OwnershipService;
+  readonly instanceConfig: InstanceConfigService;
   readonly logger: Logger;
+  /** Fetch injectable pour les tests. Défaut `globalThis.fetch`. */
+  readonly fetchImpl?: FetchLike;
+  /** Base URL Discord. Défaut `https://discord.com/api/v10`. */
+  readonly discordBaseUrl?: string;
 }
 
 const httpError = (
@@ -70,34 +108,39 @@ const httpError = (
   return err;
 };
 
+const errorDetail = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 /**
- * Enregistre les routes `/admin/ownership/*` qui n'ont pas besoin
- * d'un owner (juste `claim-first` pour l'instant). Le reste des
- * routes admin (gardées par `requireOwner`) sera enregistré par
- * un module séparé aux sous-livrables ulterieurs.
+ * Enregistre les routes `/admin/ownership/*`. Mélange volontairement
+ * une route publique (`claim-first`) avec des routes gardées par
+ * `requireOwner` — c'est la même URL family, et factoriser dans le
+ * même module évite de dupliquer les schémas Zod / typages partagés.
  */
 export function registerAdminOwnershipRoutes(
   app: FastifyInstance,
   options: RegisterAdminOwnershipRoutesOptions,
 ): void {
-  const { ownership, logger } = options;
+  const { ownership, instanceConfig, logger } = options;
+  const fetchImpl = options.fetchImpl ?? (globalThis.fetch.bind(globalThis) as FetchLike);
+  const discordBaseUrl = options.discordBaseUrl ?? DISCORD_API_BASE;
   const log = logger.child({ component: 'admin-ownership' });
 
-  // Plafond serré, comme les routes setup : public + idempotent ne
-  // veut pas dire qu'on laisse marteler.
-  const rateLimit = { max: 10, timeWindow: '1 minute' } as const;
+  const claimFirstRateLimit = { max: 10, timeWindow: '1 minute' } as const;
+
+  // ------------------------------------------------------------------
+  // POST /admin/ownership/claim-first  — public, idempotent
+  // ------------------------------------------------------------------
 
   // public-route: claim-first du wizard Auth.js — par construction sans session, idempotent post-claim, rate-limit 10 req/min/IP. Voir bloc-doc en tête du module.
   app.post(
     '/admin/ownership/claim-first',
-    { config: { rateLimit } },
+    { config: { rateLimit: claimFirstRateLimit } },
     async (request): Promise<ClaimFirstOwnershipResponse> => {
       const parsed = claimFirstBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) {
         throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
       }
       const { discordUserId, username } = parsed.data;
-
       const result = await ownership.claimFirstOwnership(discordUserId);
       if (result.claimed) {
         log.warn('Ownership claimed', {
@@ -106,6 +149,121 @@ export function registerAdminOwnershipRoutes(
         });
       }
       return { claimed: result.claimed };
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // GET /admin/ownership  — gardée
+  // ------------------------------------------------------------------
+
+  app.get('/admin/ownership', async (request): Promise<OwnersListResponse> => {
+    await requireOwner(app, request, ownership);
+    const owners = await ownership.getOwners();
+    return {
+      owners: owners.map((o) => ({
+        discordUserId: o.discordUserId,
+        grantedAt: o.grantedAt.toISOString(),
+        grantedByDiscordUserId: o.grantedByDiscordUserId,
+      })),
+    };
+  });
+
+  // ------------------------------------------------------------------
+  // POST /admin/ownership  — gardée + valide via Discord
+  // ------------------------------------------------------------------
+
+  app.post('/admin/ownership', async (request): Promise<AddOwnerResponse> => {
+    const session = await requireOwner(app, request, ownership);
+    const parsed = addOwnerBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw httpError(400, 'invalid_body', 'Body invalide.', parsed.error.issues);
+    }
+    const { discordUserId } = parsed.data;
+
+    const config = await instanceConfig.getConfig();
+    if (config.discordBotToken === null) {
+      throw httpError(
+        400,
+        'missing_bot_token',
+        "Token bot absent — l'instance n'a pas de token pour valider l'existence du user Discord.",
+      );
+    }
+
+    let response: Response;
+    try {
+      response = await fetchImpl(`${discordBaseUrl}/users/${discordUserId}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bot ${config.discordBotToken}`,
+          accept: 'application/json',
+        },
+      });
+    } catch (err) {
+      throw httpError(
+        502,
+        'discord_unreachable',
+        `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+      );
+    }
+
+    if (response.status === 404) {
+      throw httpError(
+        400,
+        'invalid_user',
+        `Aucun utilisateur Discord trouvé pour l'ID ${discordUserId}.`,
+      );
+    }
+    if (!response.ok) {
+      throw httpError(
+        502,
+        'discord_unreachable',
+        `Discord a répondu ${response.status} sur /users/${discordUserId}.`,
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw httpError(502, 'discord_unreachable', 'Réponse Discord non parseable.');
+    }
+    const userParsed = discordUserSchema.safeParse(body);
+    if (!userParsed.success) {
+      throw httpError(502, 'discord_unreachable', 'Réponse Discord inattendue.');
+    }
+
+    await ownership.addOwner(discordUserId, session.userId);
+    log.info('Owner added', {
+      discordUserId,
+      grantedBy: session.userId,
+      username: userParsed.data.username,
+    });
+    return { added: true };
+  });
+
+  // ------------------------------------------------------------------
+  // DELETE /admin/ownership/:discordUserId  — gardée + interdit le dernier
+  // ------------------------------------------------------------------
+
+  app.delete<{ Params: { discordUserId: string } }>(
+    '/admin/ownership/:discordUserId',
+    async (request): Promise<RemoveOwnerResponse> => {
+      const session = await requireOwner(app, request, ownership);
+      const params = deleteOwnerParamsSchema.safeParse(request.params ?? {});
+      if (!params.success) {
+        throw httpError(400, 'invalid_params', 'Paramètre invalide.', params.error.issues);
+      }
+      const { discordUserId } = params.data;
+      try {
+        await ownership.removeOwner(discordUserId);
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          throw httpError(409, 'last_owner', err.message);
+        }
+        throw err;
+      }
+      log.info('Owner removed', { discordUserId, removedBy: session.userId });
+      return { removed: true };
     },
   );
 }

@@ -694,7 +694,7 @@ export async function createServer<D extends DbDriver>(
     client,
     masterKey,
   });
-  registerAdminOwnershipRoutes(api, { ownership, logger });
+  registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger });
 
   await reconcileOnboardingSessions({
     client,
