@@ -376,6 +376,25 @@ export const instanceOwners = sqliteTable('instance_owners', {
 });
 
 /**
+ * Miroir SQLite de `guild_permissions` PG. Voir doc dans `./pg.ts`.
+ */
+export const guildPermissions = sqliteTable('guild_permissions', {
+  guildId: text('guild_id')
+    .primaryKey()
+    .references(() => guilds.id, { onDelete: 'cascade' }),
+  adminRoleIds: text('admin_role_ids', { mode: 'json' })
+    .$type<readonly string[]>()
+    .notNull()
+    .default([]),
+  moderatorRoleIds: text('moderator_role_ids', { mode: 'json' })
+    .$type<readonly string[]>()
+    .notNull()
+    .default([]),
+  createdAt: text('created_at').notNull().default(nowIso),
+  updatedAt: text('updated_at').notNull().default(nowIso),
+});
+
+/**
  * Miroir SQLite de `instance_audit_log` PG. Voir doc dans `./pg.ts`.
  */
 export const instanceAuditLog = sqliteTable(
@@ -416,6 +435,7 @@ export const sqliteSchema = {
   instanceConfig,
   instanceOwners,
   instanceAuditLog,
+  guildPermissions,
 } as const;
 
 export type SqliteSchema = typeof sqliteSchema;

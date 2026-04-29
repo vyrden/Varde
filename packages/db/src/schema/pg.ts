@@ -439,6 +439,23 @@ export const instanceOwners = pgTable('instance_owners', {
 });
 
 /**
+ * Mappage rôle Discord → niveau de permission par guild (jalon 7
+ * PR 7.3). Une ligne par guild. `admin_role_ids` non-vide invariant
+ * (validé côté `guildPermissionsService`). `moderator_role_ids`
+ * peut être vide. Listes JSONB pour évoluer sans migration de
+ * schéma si on ajoute des niveaux additionnels.
+ */
+export const guildPermissions = pgTable('guild_permissions', {
+  guildId: varchar('guild_id', { length: 20 })
+    .primaryKey()
+    .references(() => guilds.id, { onDelete: 'cascade' }),
+  adminRoleIds: jsonb('admin_role_ids').$type<readonly string[]>().notNull().default([]),
+  moderatorRoleIds: jsonb('moderator_role_ids').$type<readonly string[]>().notNull().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Journal append-only des événements d'instance (rotation token,
  * ajout/retrait d'owner, changement d'URL…). Mirroir de `audit_log`
  * mais sans `guild_id` puisque ces événements sont scope-instance,
@@ -483,6 +500,7 @@ export const pgSchema = {
   instanceConfig,
   instanceOwners,
   instanceAuditLog,
+  guildPermissions,
 } as const;
 
 export type PgSchema = typeof pgSchema;

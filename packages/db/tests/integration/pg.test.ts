@@ -83,7 +83,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     }
   });
 
-  it('crée les 15 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1 + instance_owners + instance_audit_log jalon 7 PR 7.2)', async () => {
+  it('crée les 16 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1 + instance_owners + instance_audit_log jalon 7 PR 7.2 + guild_permissions jalon 7 PR 7.3)', async () => {
     const rows = await client.db.execute<{ table_name: string }>(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%' ORDER BY table_name`,
     );
@@ -92,6 +92,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'audit_log',
       'guild_config',
       'guild_modules',
+      'guild_permissions',
       'guilds',
       'instance_audit_log',
       'instance_config',
