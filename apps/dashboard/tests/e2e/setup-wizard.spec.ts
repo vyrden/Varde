@@ -86,7 +86,20 @@ test.describe('wizard de setup — étapes formulaire', () => {
     const tokenField = page.getByLabel(/Token bot/i);
     await expect(tokenField).toBeVisible();
     await expect(tokenField).toHaveAttribute('type', 'password');
-    await page.getByRole('button', { name: /Afficher/i }).click();
+
+    // On attend explicitement que le bouton « Afficher » soit
+    // visible (proxy pour la fin de l'hydratation React) avant de
+    // cliquer — sinon Playwright peut taper avant que le handler
+    // `onClick` ne soit attaché côté client.
+    const toggle = page.getByRole('button', { name: /Afficher/i });
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+
+    // Le label du bouton bascule à « Masquer » dès que React a
+    // re-render — on attend ce signal avant d'asserter sur le
+    // `type` de l'input pour ne pas dépendre du timing du
+    // batching React vs. Playwright.
+    await expect(page.getByRole('button', { name: /Masquer/i })).toBeVisible();
     await expect(tokenField).toHaveAttribute('type', 'text');
   });
 
