@@ -93,3 +93,23 @@ export interface AdminDiscordDto {
 
 export const fetchAdminDiscord = (): Promise<AdminDiscordDto> =>
   apiGet<AdminDiscordDto>('/admin/discord');
+
+export interface AdminAdditionalUrlDto {
+  readonly id: string;
+  readonly url: string;
+  readonly label?: string;
+}
+
+export interface AdminUrlsDto {
+  readonly baseUrl: string | null;
+  readonly additionalUrls: readonly AdminAdditionalUrlDto[];
+}
+
+export interface AdminRedirectUrisDto {
+  readonly redirectUris: readonly string[];
+}
+
+export const fetchAdminUrls = (): Promise<AdminUrlsDto> => apiGet<AdminUrlsDto>('/admin/urls');
+
+export const fetchAdminRedirectUris = (): Promise<AdminRedirectUrisDto> =>
+  apiGet<AdminRedirectUrisDto>('/admin/urls/redirect-uris');

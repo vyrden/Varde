@@ -320,6 +320,52 @@
         "unknown": "An unexpected error occurred on the API side."
       }
     },
+    "urls": {
+      "title": "Access URLs",
+      "subtitle": "Manage the main dashboard URL and the additional ones. Also generates the list of redirect URIs to paste into the Discord OAuth2 portal.",
+      "base": {
+        "heading": "Main URL",
+        "description": "Primary address used by your admins to reach the dashboard. When empty, the instance falls back to the environment value (BASE_URL).",
+        "currentLabel": "Current value",
+        "notSet": "(not set — the instance uses the environment value)",
+        "editButton": "Change",
+        "cancelButton": "Cancel",
+        "inputLabel": "New main URL",
+        "inputPlaceholder": "e.g. https://varde.example.com",
+        "warning": "Warning: changing this affects every bot-generated link and invalidates sessions hosted on other origins.",
+        "submit": "Save",
+        "success": "Main URL updated."
+      },
+      "additional": {
+        "heading": "Additional URLs",
+        "description": "Extra addresses (LAN, second domain, tunnel) allowed to serve the dashboard. Each entry shows up automatically in the redirect URI list.",
+        "empty": "No additional URLs.",
+        "remove": "Remove",
+        "addHeading": "Add a URL",
+        "urlLabel": "URL",
+        "urlPlaceholder": "e.g. http://192.168.1.10:3000",
+        "labelLabel": "Label (optional)",
+        "labelPlaceholder": "e.g. office LAN",
+        "submit": "Add"
+      },
+      "redirect": {
+        "heading": "Redirect URIs to configure in Discord",
+        "description": "List auto-generated from the main URL and additional URLs. Paste these into the Discord OAuth2 portal → \"OAuth2 → Redirects\" tab.",
+        "copyAll": "Copy all",
+        "copied": "Copied ✓",
+        "portalLabel": "Open Discord Developer portal",
+        "portalLink": "https://discord.com/developers/applications"
+      },
+      "errors": {
+        "invalidBody": "Invalid URL. Must be a full http(s) URL.",
+        "invalidForm": "Missing fields.",
+        "urlAlreadyExists": "This URL is already registered.",
+        "urlNotFound": "URL not found.",
+        "notFound": "Page not found.",
+        "network": "Network issue. Check your connection and try again.",
+        "unknown": "An unexpected error occurred on the API side."
+      }
+    },
     "overview": {
       "title": "Overview",
       "subtitle": "Global state of this Varde instance — bot, servers, modules, database.",

@@ -320,6 +320,52 @@
         "unknown": "Une erreur inattendue s'est produite côté API."
       }
     },
+    "urls": {
+      "title": "URLs d'accès",
+      "subtitle": "Gestion de l'URL principale du dashboard et des URLs additionnelles. Sert aussi à matérialiser la liste des redirect URIs à coller dans le portail Discord OAuth2.",
+      "base": {
+        "heading": "URL principale",
+        "description": "Adresse principale par laquelle vos administrateurs accèdent au dashboard. Quand vide, l'instance retombe sur la valeur d'environnement (BASE_URL).",
+        "currentLabel": "Valeur courante",
+        "notSet": "(non définie — l'instance utilise la valeur d'environnement)",
+        "editButton": "Modifier",
+        "cancelButton": "Annuler",
+        "inputLabel": "Nouvelle URL principale",
+        "inputPlaceholder": "ex. https://varde.example.com",
+        "warning": "Attention : la modification impacte tous les liens générés par le bot et invalide les sessions actives sur les autres origines.",
+        "submit": "Enregistrer",
+        "success": "URL principale mise à jour."
+      },
+      "additional": {
+        "heading": "URLs additionnelles",
+        "description": "Adresses supplémentaires (LAN, second domaine, tunnel) autorisées à servir le dashboard. Chaque URL apparaît automatiquement dans la liste des redirect URIs.",
+        "empty": "Aucune URL additionnelle.",
+        "remove": "Retirer",
+        "addHeading": "Ajouter une URL",
+        "urlLabel": "URL",
+        "urlPlaceholder": "ex. http://192.168.1.10:3000",
+        "labelLabel": "Étiquette (optionnelle)",
+        "labelPlaceholder": "ex. LAN bureau",
+        "submit": "Ajouter"
+      },
+      "redirect": {
+        "heading": "Redirect URIs à configurer dans Discord",
+        "description": "Liste générée automatiquement à partir de l'URL principale et des URLs additionnelles. Collez-les dans le portail Discord OAuth2 → onglet « OAuth2 → Redirects ».",
+        "copyAll": "Copier toutes",
+        "copied": "Copié ✓",
+        "portalLabel": "Ouvrir le portail Discord Developer",
+        "portalLink": "https://discord.com/developers/applications"
+      },
+      "errors": {
+        "invalidBody": "URL invalide. Doit être un http(s) complet.",
+        "invalidForm": "Champs manquants.",
+        "urlAlreadyExists": "Cette URL est déjà enregistrée.",
+        "urlNotFound": "URL introuvable.",
+        "notFound": "Page introuvable.",
+        "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+        "unknown": "Une erreur inattendue s'est produite côté API."
+      }
+    },
     "overview": {
       "title": "Vue d'ensemble",
       "subtitle": "État global de cette instance Varde — bot, serveurs, modules, base de données.",
