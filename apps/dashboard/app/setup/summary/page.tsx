@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
 import { SummaryComplete } from '../../../components/setup/SummaryComplete';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
 
 /**
@@ -24,6 +25,7 @@ export default async function SummaryPage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.summary');
+  const stepperCopy = await loadStepperCopy();
 
   const items = [
     t('checklist.discordApp'),
@@ -39,7 +41,7 @@ export default async function SummaryPage(): Promise<ReactElement> {
         current: setupStepIndex('summary'),
         total: SETUP_STEPS.length,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep title={t('title')} description={t('subtitle')}>
         <ul

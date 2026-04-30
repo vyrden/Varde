@@ -6,6 +6,7 @@ import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
 import { ValidationCheckList } from '../../../components/setup/ValidationCheckList';
 import { runSystemCheck, type SystemCheckResult } from '../../../lib/setup-client';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepHref, setupStepIndex } from '../../../lib/setup-steps';
 
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
@@ -25,6 +26,7 @@ export default async function SystemCheckPage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.systemCheck');
+  const stepperCopy = await loadStepperCopy();
 
   const totalSteps = SETUP_STEPS.length;
   const result = await runSystemCheck(API_URL, fetch);
@@ -46,7 +48,7 @@ export default async function SystemCheckPage(): Promise<ReactElement> {
         current: setupStepIndex('system-check'),
         total: totalSteps,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep
         title={t('title')}

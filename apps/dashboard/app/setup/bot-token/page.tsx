@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { BotTokenForm } from '../../../components/setup/BotTokenForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
 
 const PORTAL_URL = 'https://discord.com/developers/applications';
@@ -18,6 +19,7 @@ export default async function BotTokenPage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.botToken');
+  const stepperCopy = await loadStepperCopy();
 
   return (
     <SetupShell
@@ -26,7 +28,7 @@ export default async function BotTokenPage(): Promise<ReactElement> {
         current: setupStepIndex('bot-token'),
         total: SETUP_STEPS.length,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep title={t('title')} description={t('subtitle')}>
         <ol className="list-decimal space-y-2 rounded-md border border-border-muted bg-sidebar p-4 pl-9 text-sm text-muted-foreground">

@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { IdentityForm } from '../../../components/setup/IdentityForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
 
 /**
@@ -17,6 +18,7 @@ export default async function IdentityPage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.identity');
+  const stepperCopy = await loadStepperCopy();
 
   return (
     <SetupShell
@@ -25,7 +27,7 @@ export default async function IdentityPage(): Promise<ReactElement> {
         current: setupStepIndex('identity'),
         total: SETUP_STEPS.length,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep title={t('title')} description={t('subtitle')}>
         <p className="rounded-md border border-border-muted bg-sidebar p-4 text-sm text-muted-foreground">

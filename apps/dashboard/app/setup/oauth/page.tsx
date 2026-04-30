@@ -6,6 +6,7 @@ import { OAuthForm } from '../../../components/setup/OAuthForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
 import { fetchRedirectUri } from '../../../lib/setup-redirect-uri';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
 
 const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
@@ -25,6 +26,7 @@ export default async function OAuthPage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.oauth');
+  const stepperCopy = await loadStepperCopy();
 
   const redirectResult = await fetchRedirectUri(API_URL, fetch);
   const redirectUri = redirectResult.ok ? redirectResult.uri : '';
@@ -36,7 +38,7 @@ export default async function OAuthPage(): Promise<ReactElement> {
         current: setupStepIndex('oauth'),
         total: SETUP_STEPS.length,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep title={t('title')} description={t('subtitle')}>
         <ol className="list-decimal space-y-2 rounded-md border border-border-muted bg-sidebar p-4 pl-9 text-sm text-muted-foreground">

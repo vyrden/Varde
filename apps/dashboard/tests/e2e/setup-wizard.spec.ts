@@ -38,9 +38,15 @@ test.describe('wizard de setup — middleware et navigation', () => {
     await expect(page.getByTestId('setup-step-indicator')).toHaveText(/Étape 1 sur 7/u);
   });
 
-  test('progress bar a aria-valuenow=1 sur welcome', async ({ page }) => {
+  test('stepper marque welcome=current et les 6 autres=future', async ({ page }) => {
     await page.goto('/setup/welcome');
-    await expect(page.getByTestId('setup-progress')).toHaveAttribute('aria-valuenow', '1');
+    await expect(page.getByTestId('wizard-stepper')).toBeVisible();
+    await expect(page.getByTestId('wizard-step-welcome')).toHaveAttribute('data-status', 'current');
+    await expect(page.getByTestId('wizard-step-system-check')).toHaveAttribute(
+      'data-status',
+      'future',
+    );
+    await expect(page.getByTestId('wizard-step-summary')).toHaveAttribute('data-status', 'future');
   });
 
   test('le bouton « Commencer » route vers `/setup/system-check`', async ({ page }) => {
@@ -88,7 +94,7 @@ test.describe('wizard de setup — étapes formulaire', () => {
     // ce qui contourne la course Playwright vs. hydration React
     // qu'on observait sur Turbopack dev en CI froid.
     await page.goto('/setup/bot-token');
-    const tokenField = page.getByLabel(/Token bot/i);
+    const tokenField = page.locator('input[name="token"]');
     await expect(tokenField).toBeVisible();
     await expect(tokenField).toHaveAttribute('type', 'password');
     await expect(page.getByRole('button', { name: /Afficher/i })).toBeVisible();

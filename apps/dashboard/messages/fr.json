@@ -36,7 +36,20 @@
   "setup": {
     "shell": {
       "stepIndicator": "Étape {current} sur {total}",
-      "progressLabel": "Avancement de la configuration"
+      "progressLabel": "Avancement de la configuration",
+      "stepper": {
+        "stepAriaLabelTemplate": "Étape {current} sur {total} : {name}",
+        "completedPrefix": "Étape complétée :",
+        "names": {
+          "welcome": "Accueil",
+          "system-check": "Système",
+          "discord-app": "App Discord",
+          "bot-token": "Token bot",
+          "oauth": "OAuth",
+          "identity": "Identité",
+          "summary": "Récap"
+        }
+      }
     },
     "actions": {
       "previous": "Précédent",

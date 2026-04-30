@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepHref, setupStepIndex } from '../../../lib/setup-steps';
 
 /**
@@ -16,6 +17,7 @@ export default async function WelcomePage(): Promise<ReactElement> {
   const tShell = await getTranslations('setup.shell');
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.welcome');
+  const stepperCopy = await loadStepperCopy();
   const totalSteps = SETUP_STEPS.length;
   return (
     <SetupShell
@@ -24,7 +26,7 @@ export default async function WelcomePage(): Promise<ReactElement> {
         current: setupStepIndex('welcome'),
         total: totalSteps,
       })}
-      progressLabel={tShell('progressLabel')}
+      stepperCopy={stepperCopy}
     >
       <SetupStep
         title={t('title')}
