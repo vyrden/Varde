@@ -30,6 +30,8 @@ export default async function AdminIdentityPage(): Promise<ReactElement> {
     avatarLabel: t('form.avatar.label'),
     avatarHint: t('form.avatar.hint'),
     avatarRemove: t('form.avatar.remove'),
+    avatarDropPrompt: t('form.avatar.dropPrompt'),
+    avatarLoadedTemplate: t.raw('form.avatar.loadedTemplate') as string,
     descriptionLabel: t('form.description.label'),
     descriptionPlaceholder: t('form.description.placeholder'),
     submit: t('form.submit'),

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ChangeEvent, ReactElement } from 'react';
+import type { ChangeEvent, DragEvent, ReactElement } from 'react';
 import { useActionState, useRef, useState } from 'react';
 
 import type { AdminIdentityDto } from '../../lib/admin-api';
@@ -8,16 +8,18 @@ import { type AdminActionState, submitAdminIdentity } from '../../lib/admin-iden
 
 /**
  * Formulaire admin de modification de l'identité du bot (jalon 7
- * PR 7.2 sub-livrable 7b).
+ * PR 7.2 sub-livrable 7b, drop zone + feedback ajoutés en PR 7.7).
  *
  * Layout 2 colonnes : à gauche les champs `name`, `avatar`,
  * `description` ; à droite un aperçu temps-réel qui rejoue le
  * rendu d'un message Discord (avatar rond + name + description).
  *
- * Avatar : data URI lu côté navigateur. Persistance Discord
- * répond avec un hash CDN — on rebascule l'aperçu sur l'URL CDN
- * dès que l'API répond avec succès, pour ne pas faire mentir
- * l'aperçu après save.
+ * Avatar : drop zone qui accepte clic OU glisser-déposer. Une fois
+ * un fichier choisi, on affiche son nom + sa taille pour confirmer
+ * visuellement le chargement (sans ça, l'admin ne sait pas s'il a
+ * effectivement uploadé). Persistance Discord répond avec un hash
+ * CDN — on rebascule l'aperçu sur l'URL CDN dès que l'API répond
+ * avec succès.
  *
  * Rate limit Discord (PATCH /applications/@me ~ 2 req/min) : on
  * affiche `retryAfterMs` quand l'API renvoie `429 rate_limited`,
@@ -30,6 +32,8 @@ export interface AdminIdentityFormCopy {
   readonly avatarLabel: string;
   readonly avatarHint: string;
   readonly avatarRemove: string;
+  readonly avatarDropPrompt: string;
+  readonly avatarLoadedTemplate: string;
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly submit: string;
@@ -58,6 +62,14 @@ const readFileAsDataUri = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+};
+
+const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif']);
+
 export interface AdminIdentityFormProps {
   readonly initial: AdminIdentityDto;
   readonly copy: AdminIdentityFormCopy;
@@ -73,11 +85,10 @@ export function AdminIdentityForm({
   const [description, setDescription] = useState(initialIdentity.description ?? '');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialIdentity.avatarUrl);
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
+  const [avatarFileMeta, setAvatarFileMeta] = useState<{ name: string; size: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Quand l'API confirme une mutation, on rebascule l'aperçu sur
-  // l'URL CDN qu'elle a retournée — la data URI temporaire ne
-  // reflète plus la vérité Discord.
   const stateAvatarUrl =
     state.kind === 'success' && state.data.avatarUrl !== null ? state.data.avatarUrl : null;
   const effectivePreviewUrl = stateAvatarUrl ?? avatarPreview;
@@ -85,25 +96,57 @@ export function AdminIdentityForm({
   const errorMessage = state.kind === 'error' ? (copy.errors[state.code] ?? state.message) : null;
   const rateLimitMs = state.kind === 'error' ? state.retryAfterMs : undefined;
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = event.target.files?.[0];
-    if (!file) {
+  const ingestFile = async (file: File): Promise<void> => {
+    if (!ACCEPTED_TYPES.has(file.type)) {
       setAvatarDataUri(null);
-      setAvatarPreview(initialIdentity.avatarUrl);
+      setAvatarFileMeta(null);
       return;
     }
     try {
       const dataUri = await readFileAsDataUri(file);
       setAvatarDataUri(dataUri);
       setAvatarPreview(dataUri);
+      setAvatarFileMeta({ name: file.name, size: file.size });
     } catch {
       setAvatarDataUri(null);
+      setAvatarFileMeta(null);
     }
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setAvatarDataUri(null);
+      setAvatarPreview(initialIdentity.avatarUrl);
+      setAvatarFileMeta(null);
+      return;
+    }
+    await ingestFile(file);
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLButtonElement>): Promise<void> => {
+    event.preventDefault();
+    setIsDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      await ingestFile(file);
+    }
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLButtonElement>): void => {
+    event.preventDefault();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLButtonElement>): void => {
+    event.preventDefault();
+    setIsDragging(false);
   };
 
   const handleRemoveAvatar = (): void => {
     setAvatarDataUri(null);
     setAvatarPreview(initialIdentity.avatarUrl);
+    setAvatarFileMeta(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -114,6 +157,14 @@ export function AdminIdentityForm({
     setDescription(initialIdentity.description ?? '');
     handleRemoveAvatar();
   };
+
+  const dropZoneClass = `flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
+    isDragging
+      ? 'border-primary bg-primary/10'
+      : avatarDataUri !== null
+        ? 'border-emerald-500/60 bg-emerald-500/10'
+        : 'border-border-muted bg-card-muted/30 hover:border-primary hover:bg-card-muted/50'
+  }`;
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -142,19 +193,45 @@ export function AdminIdentityForm({
         </div>
 
         <div className="space-y-1.5">
-          <label
-            htmlFor="admin-identity-avatar-file"
-            className="block text-sm font-medium text-foreground"
+          <span className="block text-sm font-medium text-foreground">{copy.avatarLabel}</span>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`${dropZoneClass} w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+            data-testid="admin-identity-avatar-dropzone"
           >
-            {copy.avatarLabel}
-          </label>
+            {avatarDataUri !== null && avatarFileMeta !== null ? (
+              <>
+                <span aria-hidden="true" className="text-2xl text-emerald-500">
+                  ✓
+                </span>
+                <span className="text-sm font-medium text-foreground">
+                  {copy.avatarLoadedTemplate
+                    .replace('{name}', avatarFileMeta.name)
+                    .replace('{size}', formatFileSize(avatarFileMeta.size))}
+                </span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true" className="text-2xl text-muted-foreground">
+                  📎
+                </span>
+                <span className="text-sm text-muted-foreground">{copy.avatarDropPrompt}</span>
+              </>
+            )}
+          </button>
           <input
             ref={fileInputRef}
             id="admin-identity-avatar-file"
             type="file"
             accept="image/png,image/jpeg,image/gif"
             onChange={handleFileChange}
-            className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-secondary/80"
+            className="sr-only"
+            aria-hidden="true"
+            tabIndex={-1}
           />
           {avatarDataUri !== null ? (
             <button
@@ -252,10 +329,16 @@ export function AdminIdentityForm({
             <div className="h-12 w-12 shrink-0 rounded-full border border-border-muted bg-muted" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">
+            <p
+              className="truncate text-sm font-semibold text-foreground"
+              data-testid="admin-identity-preview-name"
+            >
               {name.length > 0 ? name : copy.previewEmptyName}
             </p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+            <p
+              className="mt-1 whitespace-pre-wrap wrap-break-word text-sm text-muted-foreground"
+              data-testid="admin-identity-preview-description"
+            >
               {description.length > 0 ? description : copy.previewEmptyDescription}
             </p>
           </div>

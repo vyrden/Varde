@@ -371,7 +371,9 @@
         "avatar": {
           "label": "Avatar",
           "hint": "PNG, JPEG ou GIF. Le fichier est envoyé à Discord puis remplacé par l'URL CDN officielle dans l'aperçu.",
-          "remove": "Annuler la sélection"
+          "remove": "Annuler la sélection",
+          "dropPrompt": "Glissez une image ici, ou cliquez pour parcourir.",
+          "loadedTemplate": "Image chargée : {name} ({size})"
         },
         "description": {
           "label": "Description",
