@@ -88,16 +88,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   logger: {
     error(error) {
       if (error.name === 'JWTSessionError') return;
-      // biome-ignore lint/suspicious/noConsole: Auth.js attend un sink synchrone, console est le sink standard côté Next.js (pas de Pino injectable ici sans recâblage massif).
       console.error(`[auth][error] ${error.name}: ${error.message}`);
     },
     warn(code) {
-      // biome-ignore lint/suspicious/noConsole: idem error — sink Auth.js, pas un log applicatif.
       console.warn(`[auth][warn] ${code}`);
     },
     debug(code, metadata) {
       if (process.env['VARDE_AUTH_DEBUG'] === '1') {
-        // biome-ignore lint/suspicious/noConsole: gated derrière VARDE_AUTH_DEBUG=1, opt-in dev only.
+        // biome-ignore lint/suspicious/noConsole: gated derrière VARDE_AUTH_DEBUG=1, opt-in dev only — les méthodes error/warn ci-dessus sont autorisées par défaut (sink Auth.js standard), seul `debug` est flaggé par la règle.
         console.debug(`[auth][debug] ${code}`, metadata);
       }
     },

@@ -95,6 +95,11 @@ export {
   registerGuildsRoutes,
 } from './routes/guilds.js';
 export {
+  type InternalOauthCredentialsResponse,
+  type RegisterInternalCredentialsRoutesOptions,
+  registerInternalCredentialsRoutes,
+} from './routes/internal-credentials.js';
+export {
   type RegisterLogsRoutesOptions,
   registerLogsRoutes,
 } from './routes/logs.js';

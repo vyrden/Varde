@@ -24,6 +24,7 @@ import {
   registerDiscordChannelsRoutes,
   registerDiscordEmojisRoutes,
   registerGuildsRoutes,
+  registerInternalCredentialsRoutes,
   registerLogsRoutes,
   registerModulePermissionsRoutes,
   registerModulesRoutes,
@@ -789,6 +790,20 @@ export async function createServer<D extends DbDriver>(
     client,
     masterKey,
   });
+  // Endpoint interne `/internal/oauth-credentials` (jalon 7 PR 7.5) :
+  // permet au dashboard de récupérer `clientId` + `clientSecret` Discord
+  // déchiffrés depuis la DB, plutôt que via env. Le Bearer attendu est
+  // `options.api.authSecret`, déjà partagé pour signer/lire les JWT.
+  // En l'absence d'authSecret (cas tests qui injectent un Authenticator
+  // custom), on n'enregistre pas la route — un dashboard qui voudrait
+  // l'appeler recevrait 404, ce qui est cohérent avec un setup test-only.
+  if (options.api.authSecret !== undefined) {
+    registerInternalCredentialsRoutes(api, {
+      instanceConfig,
+      internalAuthSecret: options.api.authSecret,
+      logger,
+    });
+  }
   registerAdminOwnershipRoutes(api, { ownership, instanceConfig, logger, instanceAudit });
   registerAdminIdentityRoutes(api, { ownership, instanceConfig, logger, instanceAudit });
   registerAdminDiscordRoutes(api, {
