@@ -13,6 +13,7 @@ import {
   fetchGuildUserLevel,
   fetchModules,
 } from '../../../lib/api-client';
+import { getOAuthCredentialsClient } from '../../../lib/oauth-credentials';
 
 /**
  * Modules qui ont leur page dédiée dans la sidebar (un lien par
@@ -38,6 +39,17 @@ export default async function GuildLayout({
   let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>> = [];
   let modules: Awaited<ReturnType<typeof fetchModules>> = [];
   let userLevel: Awaited<ReturnType<typeof fetchGuildUserLevel>> | null = null;
+  // Résolution de l'App ID Discord pour l'URL d'invitation du bouton « + »
+  // du rail (ADR 0016). Source unique : `instance_config` via l'endpoint
+  // interne `/internal/oauth-credentials`. Échec silencieux → bouton masqué,
+  // pas de crash du layout pour autant.
+  let inviteClientId: string | null = null;
+  try {
+    const oauthCreds = await getOAuthCredentialsClient().get();
+    inviteClientId = oauthCreds?.clientId ?? null;
+  } catch {
+    inviteClientId = null;
+  }
   try {
     [guilds, modules, userLevel] = await Promise.all([
       fetchAdminGuilds(),
@@ -73,7 +85,7 @@ export default async function GuildLayout({
     <Toaster>
       <RouterRefreshOnFocus />
       <div className="flex min-h-screen bg-rail text-foreground">
-        <GuildRail guilds={guilds} currentGuildId={guildId} />
+        <GuildRail guilds={guilds} currentGuildId={guildId} inviteClientId={inviteClientId} />
         <GuildSidebar
           guildId={guildId}
           guildName={currentGuild.name}

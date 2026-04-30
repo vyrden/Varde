@@ -12,13 +12,22 @@ interface RailGuild {
 export interface GuildRailProps {
   readonly guilds: readonly RailGuild[];
   readonly currentGuildId: string;
+  /**
+   * App ID Discord à utiliser pour l'URL d'invitation du bot. `null`
+   * quand le wizard d'instance n'est pas terminé (pas encore de
+   * `discordAppId` en BDD) — le bouton « + » est alors masqué. Fourni
+   * par le layout parent qui le résout via le client OAuth interne.
+   * Plus de lecture `process.env` ici (jalon 7 PR 7.5, ADR 0016 :
+   * BDD = source unique pour les credentials Discord).
+   */
+  readonly inviteClientId: string | null;
 }
 
 /**
- * Construit l'URL OAuth2 d'invitation du bot. Le client ID Discord
- * est lu depuis `VARDE_DISCORD_CLIENT_ID` côté serveur. Permissions
- * fixées à `8` (Administrator) — ajustable en cas de durcissement
- * sécu, mais pour un bot auto-hébergé c'est l'usage habituel.
+ * Construit l'URL OAuth2 d'invitation du bot à partir d'un App ID
+ * Discord déjà résolu. Permissions fixées à `8` (Administrator) —
+ * ajustable en cas de durcissement sécu, mais pour un bot auto-hébergé
+ * c'est l'usage habituel.
  *
  * Scope volontairement réduit à `bot` — pas d'`applications.commands`.
  * Inclure `applications.commands` dans le scope force Discord à
@@ -30,9 +39,8 @@ export interface GuildRailProps {
  * inutile au moment de l'invitation et imposerait une étape de
  * config supplémentaire à l'admin pour rien.
  */
-function buildInviteUrl(): string | null {
-  const clientId = process.env['VARDE_DISCORD_CLIENT_ID'];
-  if (!clientId) return null;
+function buildInviteUrl(clientId: string | null): string | null {
+  if (clientId === null || clientId.length === 0) return null;
   const params = new URLSearchParams({
     client_id: clientId,
     scope: 'bot',
@@ -49,11 +57,15 @@ function buildInviteUrl(): string | null {
  * icônes (`Tooltip side="right"`).
  *
  * Sous la liste des guilds, un bouton « + » ouvre la flow d'invitation
- * Discord OAuth2 dans un nouvel onglet — masqué si
- * `VARDE_DISCORD_CLIENT_ID` n'est pas défini.
+ * Discord OAuth2 dans un nouvel onglet — masqué quand l'App ID n'est
+ * pas (encore) en BDD.
  */
-export function GuildRail({ guilds, currentGuildId }: GuildRailProps): ReactElement {
-  const inviteUrl = buildInviteUrl();
+export function GuildRail({
+  guilds,
+  currentGuildId,
+  inviteClientId,
+}: GuildRailProps): ReactElement {
+  const inviteUrl = buildInviteUrl(inviteClientId);
 
   return (
     <nav
