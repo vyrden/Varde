@@ -88,6 +88,12 @@ contourner.
 Standard pour l'auth Next.js. Session JWT côté dashboard, validation serveur
 via l'API Discord pour savoir quels serveurs l'utilisateur administre.
 
+Les `clientId` / `clientSecret` Discord ne viennent **pas** d'`.env`. Ils
+sont saisis dans le wizard, persistés chiffrés en DB (`instance_config`),
+et lus à la volée par Auth.js v5 en config dynamique (`NextAuth(async () => ...)`)
+via l'endpoint interne `GET /internal/oauth-credentials` (cache mémoire
+60 s côté dashboard). Voir ADR 0016.
+
 ### Redis
 
 Indispensable pour :

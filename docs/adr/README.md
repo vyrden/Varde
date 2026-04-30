@@ -81,3 +81,6 @@ Liens, issues, PR, discussions liées.
 - [0011 - Internationalisation du dashboard avec `next-intl`, dispatch par cookie](./0011-i18n-next-intl-cookie.md) — accepted
 - [0012 - Tokens design CSS-first dans `@varde/ui` consommés via Tailwind 4](./0012-design-tokens-css-first.md) — accepted
 - [0013 - Persistance des credentials Discord en DB chiffrée plutôt qu'en `.env`](./0013-credentials-discord-en-db-chiffree.md) — accepted
+- [0014 - Ownership claim-first à la connexion Discord](./0014-ownership-claim-first.md) — accepted
+- [0015 - Permissions extensibles via niveaux déclarés par les modules](./0015-permissions-niveaux-modules.md) — accepted
+- [0016 - Credentials Discord — la BDD est la source unique](./0016-credentials-discord-source-unique.md) — accepted

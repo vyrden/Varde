@@ -175,24 +175,37 @@ Tout passe par Docker Compose à partir d'ici.
    d'accueil du dashboard.
 
    > 🛠️ **Chemin legacy.** Si vous avez déjà renseigné
-   > `VARDE_DISCORD_TOKEN` + `VARDE_DISCORD_CLIENT_ID` +
-   > `VARDE_DISCORD_CLIENT_SECRET` dans `.env`, le bot se connecte
-   > directement avec ces valeurs et le wizard est court-circuité.
-   > Un warning explicite est posé dans les logs pour vous inviter
-   > à migrer vers la persistance DB chiffrée (cf. ADR 0013).
+   > `VARDE_DISCORD_TOKEN` dans `.env`, le bot se connecte
+   > directement avec ce token et le wizard est court-circuité (un
+   > warning explicite est posé dans les logs pour vous inviter à
+   > migrer vers la persistance DB chiffrée — cf. ADR 0013).
+   >
+   > Les variables `VARDE_DISCORD_CLIENT_ID` et
+   > `VARDE_DISCORD_CLIENT_SECRET` ne sont **plus lues** depuis le
+   > jalon 7 PR 7.5 (cf. ADR 0016) : tout passe par le wizard. Si
+   > elles traînent dans un vieux `.env`, supprimez-les — un warning
+   > au boot vous le rappellera.
 
-4. **Inviter le bot sur votre serveur Discord** : ouvrez l'URL
-   suivante dans un navigateur, en remplaçant `CLIENT_ID` par
-   l'Application ID que vous avez collé à l'étape « Discord App »
-   du wizard :
+4. **Inviter le bot sur votre serveur Discord** : une fois loggué
+   au dashboard, le rail vertical à gauche affiche un bouton « + »
+   en bas — cliquer ouvre la flow d'invitation Discord directement,
+   avec le bon `client_id` (lu depuis la BDD, donc forcément cohérent
+   avec l'app dont le bot tourne).
+
+   Si vous préférez fabriquer l'URL à la main, le format est :
 
    ```text
-   https://discord.com/oauth2/authorize?client_id=CLIENT_ID&permissions=8&scope=bot+applications.commands
+   https://discord.com/oauth2/authorize?client_id=CLIENT_ID&permissions=8&scope=bot
    ```
 
-   `permissions=8` correspond à « Administrator », recommandé en
-   première installation pour que tous les modules fonctionnent
-   sans blocage de permissions. Vous pourrez restreindre plus tard.
+   en remplaçant `CLIENT_ID` par l'Application ID saisi à l'étape
+   « Discord App » du wizard. `permissions=8` correspond à
+   « Administrator », recommandé en première installation pour que
+   tous les modules fonctionnent sans blocage de permissions ; vous
+   pourrez restreindre plus tard. **Pas d'`applications.commands`** dans
+   le scope : le bot enregistre ses slash commands lui-même via REST
+   après chaque join, et ce scope demanderait à Discord d'avoir des
+   redirect URIs OAuth2 enregistrées sur l'app pour rien.
 
 ---
 
