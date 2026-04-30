@@ -18,6 +18,14 @@ export interface GuildSidebarProps {
   readonly guildName: string;
   readonly modules: readonly ModuleEntry[];
   /**
+   * Niveau d'accès du user courant sur la guild (jalon 7 PR 7.3
+   * sub-livrable 9). Sert à conditionner les liens admin-only
+   * (« Permissions du dashboard », bot settings…). Quand absent,
+   * on retombe sur l'ancien comportement (tout visible) — utile
+   * en transition.
+   */
+  readonly userLevel?: 'admin' | 'moderator';
+  /**
    * Slot footer rendu en bas de la sidebar (pinned `mt-auto`). Le
    * layout y branche typiquement `<UserPanel>` (Server Component
    * avec server action signOut). Sidebar est `'use client'` donc on
@@ -176,9 +184,14 @@ export function GuildSidebar({
   guildId,
   guildName,
   modules,
+  userLevel,
   footer,
 }: GuildSidebarProps): ReactElement {
   const pathname = usePathname() ?? '';
+  // `isAdmin = true` quand le niveau n'est pas fourni (compat
+  // pré-PR 7.3 où la sidebar montrait tout). Une fois la migration
+  // des layouts complète, le défaut deviendra `userLevel === 'admin'`.
+  const isAdmin = userLevel === undefined || userLevel === 'admin';
 
   const gestion: NavLink[] = [
     {
@@ -197,26 +210,36 @@ export function GuildSidebar({
     },
   ];
 
-  const settings: NavLink[] = [
-    {
-      key: 'bot',
-      label: 'Bot',
-      href: `/guilds/${guildId}/settings/bot`,
-      icon: iconBotSettings,
-    },
-    {
-      key: 'permissions',
-      label: 'Permissions',
-      href: `/guilds/${guildId}/settings/permissions`,
-      icon: iconPermissions,
-    },
-    {
-      key: 'ai',
-      label: 'Fournisseur IA',
-      href: `/guilds/${guildId}/settings/ai`,
-      icon: iconAi,
-    },
-  ];
+  // Section settings — admin-only. Un modérateur n'y accède pas
+  // (les routes API correspondantes répondraient 404 de toute façon).
+  const settings: NavLink[] = isAdmin
+    ? [
+        {
+          key: 'bot',
+          label: 'Bot',
+          href: `/guilds/${guildId}/settings/bot`,
+          icon: iconBotSettings,
+        },
+        {
+          key: 'permissions',
+          label: 'Permissions',
+          href: `/guilds/${guildId}/settings/permissions`,
+          icon: iconPermissions,
+        },
+        {
+          key: 'dashboard-permissions',
+          label: 'Permissions du dashboard',
+          href: `/guilds/${guildId}/permissions`,
+          icon: iconPermissions,
+        },
+        {
+          key: 'ai',
+          label: 'Fournisseur IA',
+          href: `/guilds/${guildId}/settings/ai`,
+          icon: iconAi,
+        },
+      ]
+    : [];
 
   const moduleLinks: NavLink[] = modules
     .filter((m) => m.hasDedicatedPage)
@@ -244,7 +267,9 @@ export function GuildSidebar({
 
       <div className="space-y-1 py-2">
         <SidebarSection label="Gestion" items={gestion} currentPath={pathname} />
-        <SidebarSection label="Paramètres" items={settings} currentPath={pathname} />
+        {settings.length > 0 ? (
+          <SidebarSection label="Paramètres" items={settings} currentPath={pathname} />
+        ) : null}
         {moduleLinks.length > 0 ? (
           <SidebarSection label="Modules" items={moduleLinks} currentPath={pathname} />
         ) : null}

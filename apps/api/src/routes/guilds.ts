@@ -1,4 +1,4 @@
-import type { GuildId, UserId } from '@varde/contracts';
+import type { GuildId, PermissionLevel, UserId } from '@varde/contracts';
 import type { GuildPermissionsService } from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
 import { pgSchema, sqliteSchema } from '@varde/db';
@@ -129,4 +129,36 @@ export function registerGuildsRoutes<D extends DbDriver>(
     }
     return result;
   });
+
+  /**
+   * `GET /guilds/:guildId/me` — niveau d'accès du user sur la guild
+   * (jalon 7 PR 7.3). Sert au dashboard (layout sidebar) à savoir
+   * quels liens conditionnels afficher. 401 sans session, 404 si
+   * pas de niveau d'accès — `requireGuildAccess('moderator')` couvre
+   * exactement ces deux cas (admin satisfait aussi).
+   */
+  app.get<{ Params: { guildId: string } }>(
+    '/guilds/:guildId/me',
+    async (request): Promise<{ readonly level: PermissionLevel }> => {
+      const { guildId } = request.params;
+      const session = await app.ensureSession(request);
+      if (typeof session.userId !== 'string' || session.userId.length === 0) {
+        const err: Error & { statusCode?: number; code?: string } = new Error('Not Found');
+        err.statusCode = 404;
+        err.code = 'not_found';
+        throw err;
+      }
+      const level = await options.guildPermissions.getUserLevel(
+        guildId as GuildId,
+        session.userId as UserId,
+      );
+      if (level === null) {
+        const err: Error & { statusCode?: number; code?: string } = new Error('Not Found');
+        err.statusCode = 404;
+        err.code = 'not_found';
+        throw err;
+      }
+      return { level };
+    },
+  );
 }

@@ -344,3 +344,17 @@ export async function fetchGuildPermissionsConfig(
 ): Promise<GuildPermissionsConfigDto> {
   return apiGet<GuildPermissionsConfigDto>(`/guilds/${encodeURIComponent(guildId)}/permissions`);
 }
+
+/** Niveau d'accès du user courant sur la guild (jalon 7 PR 7.3). */
+export type GuildUserLevel = 'admin' | 'moderator';
+
+/**
+ * Récupère le niveau d'accès du user courant sur la guild. Le
+ * layout dashboard l'utilise pour conditionner les liens de la
+ * sidebar (la section « Permissions du dashboard » n'apparaît
+ * qu'aux admins).
+ */
+export async function fetchGuildUserLevel(guildId: string): Promise<GuildUserLevel> {
+  const body = await apiGet<{ level: GuildUserLevel }>(`/guilds/${encodeURIComponent(guildId)}/me`);
+  return body.level;
+}

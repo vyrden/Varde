@@ -7,7 +7,12 @@ import { GuildRail } from '../../../components/shell/GuildRail';
 import { GuildSidebar } from '../../../components/shell/GuildSidebar';
 import { RouterRefreshOnFocus } from '../../../components/shell/RouterRefreshOnFocus';
 import { UserPanel } from '../../../components/shell/UserPanel';
-import { ApiError, fetchAdminGuilds, fetchModules } from '../../../lib/api-client';
+import {
+  ApiError,
+  fetchAdminGuilds,
+  fetchGuildUserLevel,
+  fetchModules,
+} from '../../../lib/api-client';
 
 /**
  * Modules qui ont leur page dédiée dans la sidebar (un lien par
@@ -32,8 +37,13 @@ export default async function GuildLayout({
 
   let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>> = [];
   let modules: Awaited<ReturnType<typeof fetchModules>> = [];
+  let userLevel: Awaited<ReturnType<typeof fetchGuildUserLevel>> | null = null;
   try {
-    [guilds, modules] = await Promise.all([fetchAdminGuilds(), fetchModules(guildId)]);
+    [guilds, modules, userLevel] = await Promise.all([
+      fetchAdminGuilds(),
+      fetchModules(guildId),
+      fetchGuildUserLevel(guildId),
+    ]);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
@@ -68,12 +78,13 @@ export default async function GuildLayout({
           guildId={guildId}
           guildName={currentGuild.name}
           modules={sidebarModules}
+          {...(userLevel !== null ? { userLevel } : {})}
           footer={
             <UserPanel
               name={userName}
               avatarUrl={avatarUrl}
               avatarDecorationUrl={avatarDecorationUrl}
-              userRole="admin"
+              userRole={userLevel ?? 'admin'}
             />
           }
         />
