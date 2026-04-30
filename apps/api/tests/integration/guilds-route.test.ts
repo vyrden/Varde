@@ -1,4 +1,8 @@
-import { createLogger } from '@varde/core';
+import {
+  createGuildPermissionsService,
+  createLogger,
+  type GuildPermissionsContext,
+} from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient, sqliteSchema } from '@varde/db';
 import type { FastifyRequest } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,14 +54,30 @@ describe('GET /guilds — end-to-end', () => {
     await client.close();
   });
 
-  const buildApp = (fetchImpl: FetchLike) => {
+  /**
+   * Stub permissions service où chaque guild listée par Discord
+   * accorde admin au user '42' (les tests pré-existants assument
+   * l'utilisateur autorisé partout). Les tests qui veulent
+   * matérialiser un refus surcharge ce comportement via
+   * `accessibleGuilds`.
+   */
+  const buildApp = (
+    fetchImpl: FetchLike,
+    accessibleGuilds: ReadonlySet<string> = new Set(['111', '222', '333', '444', '999']),
+  ) => {
     const discord = createDiscordClient({ fetch: fetchImpl });
+    const context: GuildPermissionsContext = {
+      getAdminRoleIds: async () => ['role-admin'],
+      getOwnerId: async () => null,
+      getUserRoleIds: async (guildId) => (accessibleGuilds.has(guildId) ? ['role-admin'] : []),
+    };
+    const guildPermissions = createGuildPermissionsService({ client, context });
     return createApiServer({
       logger: silentLogger(),
       version: 'test',
       authenticator: headerAuthenticator,
     }).then(async (app) => {
-      registerGuildsRoutes(app, { client, discord });
+      registerGuildsRoutes(app, { client, discord, guildPermissions });
       return app;
     });
   };
@@ -91,7 +111,7 @@ describe('GET /guilds — end-to-end', () => {
     }
   });
 
-  it('renvoie l intersection des guilds admin du user et des guilds où le bot est présent', async () => {
+  it('renvoie l intersection des guilds où le user a un niveau d accès et où le bot est présent', async () => {
     // Seed : bot présent sur 111 et 222, pas sur 333.
     await client.db
       .insert(sqliteSchema.guilds)
@@ -101,8 +121,7 @@ describe('GET /guilds — end-to-end', () => {
       ])
       .run();
 
-    // Discord renvoie 4 guilds pour le user : 111 admin, 222 non-admin,
-    // 333 admin, 444 non-admin.
+    // Discord renvoie 4 guilds dont le user est membre.
     const fetch = vi
       .fn<FetchLike>()
       .mockResolvedValue(
@@ -113,7 +132,8 @@ describe('GET /guilds — end-to-end', () => {
           guildFixture('444', '0x8'),
         ]),
       );
-    const app = await buildApp(fetch);
+    // Accès admin uniquement sur 111 → seul 111 ressort.
+    const app = await buildApp(fetch, new Set(['111']));
     try {
       const response = await app.inject({
         method: 'GET',

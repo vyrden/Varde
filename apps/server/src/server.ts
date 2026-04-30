@@ -706,7 +706,7 @@ export async function createServer<D extends DbDriver>(
     logger,
   });
 
-  registerGuildsRoutes(api, { client, discord });
+  registerGuildsRoutes(api, { client, discord, guildPermissions });
   registerDiscordChannelsRoutes(api, {
     discord,
     // Réutilise le bridge onboarding pour la création de salon.
@@ -741,7 +741,7 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
     ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
   });
-  registerModulesRoutes(api, { loader, config, discord });
+  registerModulesRoutes(api, { loader, config, discord, guildPermissions });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
   registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });

@@ -1,9 +1,10 @@
-import type { GuildId, ModuleId, UserId } from '@varde/contracts';
-import type { CoreConfigService, PluginLoader } from '@varde/core';
+import type { GuildId, ModuleId, PermissionLevel, UserId } from '@varde/contracts';
+import type { CoreConfigService, GuildPermissionsService, PluginLoader } from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { type ZodType, z } from 'zod';
 
 import type { DiscordClient } from '../discord-client.js';
+import { requireGuildAccess } from '../middleware/require-guild-access.js';
 import { requireGuildAdmin } from '../middleware/require-guild-admin.js';
 
 /**
@@ -62,7 +63,17 @@ export interface RegisterModulesRoutesOptions {
   readonly loader: PluginLoader;
   readonly config: CoreConfigService;
   readonly discord: DiscordClient;
+  readonly guildPermissions: GuildPermissionsService;
 }
+
+/**
+ * Niveau requis par un module — `requiredPermission` du runtime
+ * `ModuleDefinition`. Défaut implicite : `'admin'` (cf. spec
+ * jalon 7 PR 7.3).
+ */
+const moduleLevel = (
+  def: { readonly requiredPermission?: PermissionLevel } | undefined,
+): PermissionLevel => def?.requiredPermission ?? 'admin';
 
 const extractModuleConfig = (
   snapshot: unknown,
@@ -126,12 +137,27 @@ export function registerModulesRoutes(
 ): void {
   app.get<{ Params: { guildId: string } }>('/guilds/:guildId/modules', async (request) => {
     const { guildId } = request.params;
-    await requireGuildAdmin(app, request, guildId, options.discord);
+    // Niveau d'entrée : `moderator` (admin satisfait aussi). Le
+    // filtrage par module suit selon `requiredPermission` du module.
+    const session = await requireGuildAccess(
+      app,
+      request,
+      guildId as GuildId,
+      options.guildPermissions,
+      'moderator',
+    );
+    const userLevel = await options.guildPermissions.getUserLevel(
+      guildId as GuildId,
+      session.userId as UserId,
+    );
 
     const items: ModuleListItemDto[] = [];
     for (const id of options.loader.loadOrder()) {
       const def = options.loader.get(id);
       if (!def) continue;
+      // Un user `moderator` ne voit que les modules taggés
+      // `'moderator'`. Un `admin` voit tout.
+      if (userLevel !== 'admin' && moduleLevel(def) !== 'moderator') continue;
       items.push({
         id,
         version: def.manifest.version,

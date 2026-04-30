@@ -1,25 +1,37 @@
+import type { GuildId, UserId } from '@varde/contracts';
+import type { GuildPermissionsService } from '@varde/core';
 import type { DbClient, DbDriver } from '@varde/db';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
-import { type DiscordClient, hasManageGuild } from '../discord-client.js';
+import type { DiscordClient } from '../discord-client.js';
 
 /**
  * Enregistre les routes `/guilds` sur l'instance Fastify fournie.
  *
- * `GET /guilds` : retourne la liste des serveurs administrables par
- * l'utilisateur connecté ET où le bot est présent. Pipeline :
+ * `GET /guilds` : retourne la liste des serveurs accessibles à
+ * l'utilisateur connecté ET où le bot est présent. Pipeline (jalon
+ * 7 PR 7.3 — migration depuis check binaire MANAGE_GUILD) :
  *
  * 1. `ensureSession(request)` — 401 si pas de session.
  * 2. Refus 400 si la session n'a pas d'`accessToken` (le dashboard
- *    doit avoir passé le token Discord dans le JWT).
+ *    doit avoir passé le token Discord dans le JWT — sert à
+ *    matérialiser quelles guilds le user voit côté Discord).
  * 3. `discord.fetchUserGuilds(accessToken)` — appel Discord API
- *    avec cache TTL 60 s par défaut (voir DiscordClient).
- * 4. Filtre : bit `MANAGE_GUILD` (0x20) dans `permissions`.
- * 5. Intersection avec la table `guilds` locale (seuls les servers
+ *    avec cache TTL 60 s par défaut.
+ * 4. Intersection avec la table `guilds` locale (seuls les servers
  *    où le bot est enregistré ressortent).
+ * 5. Pour chaque candidat, `guildPermissions.getUserLevel(guildId,
+ *    userId)` — exclu si `null` (l'user n'a aucun rôle d'accès).
+ *    Cache LRU 60 s sur le service, donc une visite typique tape
+ *    une seule fois la DB par guild + 1 fois le cache discord.js
+ *    pour les rôles utilisateur.
  * 6. Retourne `{ id, name, iconUrl | null }[]`.
+ *
+ * **Note** : on ne filtre plus par MANAGE_GUILD côté Discord. La
+ * vérité d'accès vit désormais dans `guild_permissions` (cf.
+ * `guildPermissionsService`).
  */
 
 export interface AdminGuildDto {
@@ -31,6 +43,7 @@ export interface AdminGuildDto {
 export interface RegisterGuildsRoutesOptions<D extends DbDriver> {
   readonly client: DbClient<D>;
   readonly discord: DiscordClient;
+  readonly guildPermissions: GuildPermissionsService;
 }
 
 const iconUrlOf = (guildId: string, iconHash: string | null): string | null =>
@@ -92,19 +105,28 @@ export function registerGuildsRoutes<D extends DbDriver>(
     }
 
     const userGuilds = await options.discord.fetchUserGuilds(session.accessToken);
-    const adminGuilds = userGuilds.filter((g) => hasManageGuild(g.permissions));
     const knownIds = await selectKnownGuildIds(
       options.client,
-      adminGuilds.map((g) => g.id),
+      userGuilds.map((g) => g.id),
     );
 
-    const result: AdminGuildDto[] = adminGuilds
-      .filter((g) => knownIds.has(g.id))
-      .map((g) => ({
+    // Filtre par niveau d'accès via `guildPermissionsService` (cf.
+    // doc en tête du module). Sequential await accepté : le cache
+    // LRU couvre les hits, une page typique a < 30 guilds.
+    const result: AdminGuildDto[] = [];
+    for (const g of userGuilds) {
+      if (!knownIds.has(g.id)) continue;
+      const level = await options.guildPermissions.getUserLevel(
+        g.id as GuildId,
+        session.userId as UserId,
+      );
+      if (level === null) continue;
+      result.push({
         id: g.id,
         name: g.name,
         iconUrl: iconUrlOf(g.id, g.icon),
-      }));
+      });
+    }
     return result;
   });
 }

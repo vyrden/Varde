@@ -5,9 +5,11 @@ import {
   createConfigService,
   createCtxFactory,
   createEventBus,
+  createGuildPermissionsService,
   createLogger,
   createPermissionService,
   createPluginLoader,
+  type GuildPermissionsContext,
 } from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient, sqliteSchema } from '@varde/db';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -100,7 +102,7 @@ describe('routes /guilds/:guildId/modules — permission', () => {
     await client.close();
   });
 
-  const build = async (fetchImpl: FetchLike) => {
+  const build = async (fetchImpl: FetchLike, hasAccess = true) => {
     const logger = silentLogger();
     const eventBus = createEventBus({ logger });
     const config = createConfigService({ client });
@@ -122,6 +124,12 @@ describe('routes /guilds/:guildId/modules — permission', () => {
       ctxFactory: bundle.factory,
     });
     const discord = createDiscordClient({ fetch: fetchImpl });
+    const context: GuildPermissionsContext = {
+      getAdminRoleIds: async () => ['role-admin'],
+      getOwnerId: async () => null,
+      getUserRoleIds: async () => (hasAccess ? ['role-admin'] : []),
+    };
+    const guildPermissions = createGuildPermissionsService({ client, context });
 
     await client.db
       .insert(sqliteSchema.modulesRegistry)
@@ -137,7 +145,7 @@ describe('routes /guilds/:guildId/modules — permission', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, discord });
+    registerModulesRoutes(app, { loader, config, discord, guildPermissions });
     return { app, config, loader, bundle };
   };
 
@@ -151,36 +159,17 @@ describe('routes /guilds/:guildId/modules — permission', () => {
     }
   });
 
-  it('403 quand le user n a pas MANAGE_GUILD sur la guild', async () => {
-    const fetch = vi
-      .fn<FetchLike>()
-      .mockImplementation(async () => jsonResponse([discordGuild(GUILD, '0x8')]));
-    const { app } = await build(fetch);
+  it('404 quand le user n a aucun rôle d accès sur la guild', async () => {
+    const { app } = await build(vi.fn(), false);
     try {
       const res = await app.inject({
         method: 'GET',
         url: `/guilds/${GUILD}/modules`,
         headers: authHeader,
       });
-      expect(res.statusCode).toBe(403);
-      expect(res.json()).toMatchObject({ error: 'forbidden' });
-    } finally {
-      await app.close();
-    }
-  });
-
-  it('403 quand la guild n est pas dans la liste des guilds du user', async () => {
-    const fetch = vi
-      .fn<FetchLike>()
-      .mockImplementation(async () => jsonResponse([discordGuild('999', '0x20')]));
-    const { app } = await build(fetch);
-    try {
-      const res = await app.inject({
-        method: 'GET',
-        url: `/guilds/${GUILD}/modules`,
-        headers: authHeader,
-      });
-      expect(res.statusCode).toBe(403);
+      // jalon 7 PR 7.3 : on retourne 404 (pas 403) pour ne pas
+      // révéler l'existence de la guild à un user non autorisé.
+      expect(res.statusCode).toBe(404);
     } finally {
       await app.close();
     }
@@ -224,6 +213,12 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
       ctxFactory: bundle.factory,
     });
     const discord = createDiscordClient({ fetch: adminFetch });
+    const context: GuildPermissionsContext = {
+      getAdminRoleIds: async () => ['role-admin'],
+      getOwnerId: async () => null,
+      getUserRoleIds: async () => ['role-admin'],
+    };
+    const guildPermissions = createGuildPermissionsService({ client, context });
 
     for (const id of moduleIds) {
       await client.db
@@ -240,7 +235,7 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, discord });
+    registerModulesRoutes(app, { loader, config, discord, guildPermissions });
     return { app, config, loader };
   };
 
