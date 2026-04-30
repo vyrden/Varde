@@ -22,3 +22,34 @@ export async function setMockConfigured(configured: boolean): Promise<void> {
     throw new Error(`mock configure failed: HTTP ${response.status}`);
   }
 }
+
+/**
+ * Etat des champs renvoyés par `GET /setup/status` côté mock. Permet
+ * aux specs E2E (PR 7.6 — persistance form) de simuler un retour en
+ * arrière dans le wizard avec valeurs déjà enregistrées en DB.
+ *
+ * Champs partiels : seuls les champs fournis sont mis à jour ; les
+ * autres conservent leur valeur précédente. Pour réinitialiser, passer
+ * explicitement `null` (ou `false` pour les booléens).
+ */
+export interface MockSetupState {
+  readonly currentStep?: number;
+  readonly discordAppId?: string | null;
+  readonly discordPublicKey?: string | null;
+  readonly hasBotToken?: boolean;
+  readonly hasClientSecret?: boolean;
+  readonly botName?: string | null;
+  readonly botDescription?: string | null;
+  readonly botAvatarUrl?: string | null;
+}
+
+export async function setMockSetupState(patch: MockSetupState): Promise<void> {
+  const response = await fetch(`${MOCK_API_URL}/__test/setup-state`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw new Error(`mock setup-state failed: HTTP ${response.status}`);
+  }
+}

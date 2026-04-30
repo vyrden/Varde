@@ -22,6 +22,20 @@ import { createServer } from 'node:http';
 // minted dans `tests/e2e/fixtures/admin-session.ts`.
 const state = {
   configured: false,
+  // État retourné par GET /setup/status quand non-configured. Les
+  // tests E2E peuvent muter via POST /__test/setup-state pour
+  // simuler un retour en arrière dans le wizard avec données
+  // déjà persistées (PR 7.6 — persistance form).
+  setup: {
+    currentStep: 1,
+    discordAppId: null,
+    discordPublicKey: null,
+    hasBotToken: false,
+    hasClientSecret: false,
+    botName: null,
+    botDescription: null,
+    botAvatarUrl: null,
+  },
   admin: {
     owners: [
       {
@@ -144,7 +158,28 @@ const handlers = {
       json(res, 403, { error: 'setup_completed', message: 'setup déjà terminée' });
       return;
     }
-    json(res, 200, { configured: false, currentStep: 1 });
+    json(res, 200, {
+      configured: false,
+      currentStep: state.setup.currentStep,
+      discordAppId: state.setup.discordAppId,
+      discordPublicKey: state.setup.discordPublicKey,
+      hasBotToken: state.setup.hasBotToken,
+      hasClientSecret: state.setup.hasClientSecret,
+      botName: state.setup.botName,
+      botDescription: state.setup.botDescription,
+      botAvatarUrl: state.setup.botAvatarUrl,
+    });
+  },
+  // Mutateur de test pour basculer l'état des champs persistés du
+  // wizard. Permet aux specs E2E PR 7.6 de simuler un retour en
+  // arrière avec des valeurs déjà enregistrées en DB sans avoir à
+  // jouer tout le wizard.
+  'POST /__test/setup-state': async (req, res) => {
+    const body = await readBody(req);
+    if (typeof body === 'object' && body !== null) {
+      Object.assign(state.setup, body);
+    }
+    json(res, 200, state.setup);
   },
   'GET /setup/redirect-uri': async (_req, res) => {
     if (state.configured) {

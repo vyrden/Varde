@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { setMockConfigured } from './fixtures/mock-state';
+import { setMockConfigured, setMockSetupState } from './fixtures/mock-state';
 
 /**
  * E2E du wizard de setup (jalon 7 PR 7.1, sous-livrable 6).
@@ -125,5 +125,80 @@ test.describe('wizard de setup — étapes formulaire', () => {
     await page.goto('/setup/summary');
     await expect(page.getByTestId('summary-checklist')).toBeVisible();
     await expect(page.getByTestId('summary-start')).toBeVisible();
+  });
+});
+
+test.describe('wizard de setup — persistance des formulaires (PR 7.6)', () => {
+  test.beforeEach(async () => {
+    // Réinitialise l'état entre tests pour qu'un test ne pollue
+    // pas les suivants avec ses valeurs persistées.
+    await setMockSetupState({
+      currentStep: 1,
+      discordAppId: null,
+      discordPublicKey: null,
+      hasBotToken: false,
+      hasClientSecret: false,
+      botName: null,
+      botDescription: null,
+      botAvatarUrl: null,
+    });
+  });
+
+  test('discord-app pré-remplit l identifiant et la clé publique déjà saisis', async ({ page }) => {
+    await setMockSetupState({
+      discordAppId: '987654321098765432',
+      discordPublicKey: 'a'.repeat(64),
+    });
+    await page.goto('/setup/discord-app');
+    await expect(page.getByLabel(/Identifiant d'application/i)).toHaveValue('987654321098765432');
+    await expect(page.getByLabel(/Clé publique/i)).toHaveValue('a'.repeat(64));
+  });
+
+  test('bot-token affiche le banner « enregistré » quand hasBotToken=true', async ({ page }) => {
+    await setMockSetupState({ hasBotToken: true });
+    await page.goto('/setup/bot-token');
+    await expect(page.getByTestId('bot-token-saved-banner')).toBeVisible();
+    await expect(page.getByTestId('bot-token-keep-button')).toBeVisible();
+    await expect(page.getByTestId('bot-token-edit-button')).toBeVisible();
+    // L'input password n'est PAS rendu tant qu'on n'a pas cliqué Modifier.
+    await expect(page.locator('input[name="token"]')).toHaveCount(0);
+  });
+
+  // Note : le test « click sur Modifier révèle l'input » est volontairement
+  // absent ici. La bascule `useState` est trivialement vérifiable en unit
+  // (jsdom + React Testing Library), et la jouer en E2E ouvre une course
+  // hydratation React vs Playwright (le click peut arriver avant que
+  // l'`onClick` ne soit attaché). On garde l'E2E sur la sémantique
+  // persistance (banner visible / absent, pas de leak), et on laissera
+  // un test unit dédié couvrir l'interactivité.
+
+  test('oauth affiche le banner « enregistré » quand hasClientSecret=true', async ({ page }) => {
+    await setMockSetupState({ hasClientSecret: true });
+    await page.goto('/setup/oauth');
+    await expect(page.getByTestId('oauth-saved-banner')).toBeVisible();
+    await expect(page.getByTestId('oauth-keep-button')).toBeVisible();
+    await expect(page.getByTestId('oauth-edit-button')).toBeVisible();
+    await expect(page.locator('input[name="clientSecret"]')).toHaveCount(0);
+  });
+
+  test('identity pré-remplit nom et description, et affiche l avatar enregistré', async ({
+    page,
+  }) => {
+    await setMockSetupState({
+      botName: 'Mon Bot',
+      botDescription: 'Description test',
+      botAvatarUrl: 'https://cdn.discordapp.com/app-icons/123/abc.png',
+    });
+    await page.goto('/setup/identity');
+    await expect(page.getByLabel(/Nom du bot/i)).toHaveValue('Mon Bot');
+    await expect(page.getByLabel(/Description/i)).toHaveValue('Description test');
+    await expect(page.getByTestId('identity-avatar-saved')).toBeVisible();
+  });
+
+  test('discord-app sans valeur persistée : champs vides (pas de leak)', async ({ page }) => {
+    // beforeEach a déjà reset l'état → tous les champs null/false
+    await page.goto('/setup/discord-app');
+    await expect(page.getByLabel(/Identifiant d'application/i)).toHaveValue('');
+    await expect(page.getByLabel(/Clé publique/i)).toHaveValue('');
   });
 });
