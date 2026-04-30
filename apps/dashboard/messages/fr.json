@@ -24,8 +24,9 @@
   "home": {
     "empty": {
       "title": "Aucun serveur",
-      "descriptionLine1": "Le bot Varde n'est présent sur aucun de tes serveurs administrables — ou les permissions Discord n'ont pas encore été synchronisées.",
-      "descriptionLine2": "Invite le bot sur ton serveur via le portail développeur Discord, puis recharge cette page."
+      "descriptionLine1": "Le bot Varde n'est présent sur aucun de tes serveurs administrables. Invite-le maintenant pour pouvoir le configurer.",
+      "inviteButton": "Inviter le bot sur un serveur",
+      "descriptionLine2": "Une fois le bot ajouté à un serveur, recharge cette page — il apparaîtra dans le rail à gauche."
     }
   },
   "notFound": {
