@@ -348,12 +348,15 @@ export interface IdentityResponse {
 
 /**
  * Forme minimale de la réponse `PATCH /applications/@me` côté Discord.
- * Tous les champs intéressants sont retournés en cas de succès.
+ * `icon` est le hash retourné quand on a envoyé un nouvel icon. Discord
+ * peut aussi retourner `avatar` selon la version de l'API ; on lit les
+ * deux pour robustesse.
  */
 const applicationPatchSchema = z.object({
   id: z.string(),
   name: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
 });
 
@@ -791,19 +794,75 @@ export function registerSetupRoutes(
         );
       }
       const appId = config.discordAppId;
+      const authHeader = `Bot ${config.discordBotToken}`;
 
-      // PATCH /applications/@me — partial update : Discord met à
-      // jour uniquement les champs présents dans le body.
+      // **Deux endpoints Discord à appeler.** L'identité « visible »
+      // d'un bot est éclatée en deux côtés Discord :
+      //
+      // - `PATCH /users/@me` → met à jour le **bot user** (username
+      //   et avatar affichés sur les serveurs, dans les messages,
+      //   dans la liste des membres). Sans cet appel, le username
+      //   reste « Bot{appId} » par défaut.
+      // - `PATCH /applications/@me` → met à jour l'**application**
+      //   (nom et icône dans le portail Developer, description visible
+      //   sur la bio du bot).
+      //
+      // L'admin a saisi un seul champ « nom » dans notre wizard ; on
+      // l'envoie aux deux endpoints pour que tout reste cohérent (nom
+      // dans les serveurs == nom de l'app dans le portail). Pareil pour
+      // l'avatar (qui sert et d'avatar de bot et d'icône d'app).
+
+      // 1. PATCH /users/@me — bot user (username + avatar). Skippé
+      //    si ni name ni avatar dans le patch.
+      if (patch.name !== undefined || patch.avatar !== undefined) {
+        const userPatch: { username?: string; avatar?: string } = {};
+        if (patch.name !== undefined) userPatch.username = patch.name;
+        if (patch.avatar !== undefined) userPatch.avatar = patch.avatar;
+        let userResponse: Response;
+        try {
+          userResponse = await fetchImpl(`${discordBaseUrl}/users/@me`, {
+            method: 'PATCH',
+            headers: {
+              authorization: authHeader,
+              'content-type': 'application/json',
+              accept: 'application/json',
+            },
+            body: JSON.stringify(userPatch),
+          });
+        } catch (err) {
+          throw httpError(
+            502,
+            'discord_unreachable',
+            `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+          );
+        }
+        if (!userResponse.ok) {
+          throw httpError(
+            502,
+            'discord_unreachable',
+            `Discord a répondu ${userResponse.status} sur PATCH /users/@me.`,
+          );
+        }
+      }
+
+      // 2. PATCH /applications/@me — app metadata (name, description,
+      //    icon). Mappe `avatar` du body wizard vers `icon` Discord
+      //    (l'API distingue avatar utilisateur et icône d'app, mais
+      //    on les unifie côté UX).
+      const appPatch: { name?: string; description?: string; icon?: string } = {};
+      if (patch.name !== undefined) appPatch.name = patch.name;
+      if (patch.description !== undefined) appPatch.description = patch.description;
+      if (patch.avatar !== undefined) appPatch.icon = patch.avatar;
       let response: Response;
       try {
         response = await fetchImpl(`${discordBaseUrl}/applications/@me`, {
           method: 'PATCH',
           headers: {
-            authorization: `Bot ${config.discordBotToken}`,
+            authorization: authHeader,
             'content-type': 'application/json',
             accept: 'application/json',
           },
-          body: JSON.stringify(patch),
+          body: JSON.stringify(appPatch),
         });
       } catch (err) {
         throw httpError(
@@ -839,7 +898,7 @@ export function registerSetupRoutes(
       // Compose l'URL CDN à partir du hash retourné par Discord —
       // c'est ce que la dashboard affichera (le data URI brut serait
       // énorme à stocker à long terme).
-      const avatarHash = patchResult.data.avatar;
+      const avatarHash = patchResult.data.icon ?? patchResult.data.avatar;
       const avatarUrl =
         avatarHash != null
           ? `https://cdn.discordapp.com/app-icons/${appId}/${avatarHash}.png`

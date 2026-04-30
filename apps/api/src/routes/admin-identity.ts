@@ -50,6 +50,7 @@ const applicationPatchSchema = z.object({
   id: z.string(),
   name: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
 });
 
@@ -149,17 +150,64 @@ export function registerAdminIdentityRoutes(
       );
     }
     const appId = config.discordAppId;
+    const authHeader = `Bot ${config.discordBotToken}`;
 
+    // Identité bot = deux endpoints Discord (cf. setup.ts pour le
+    // raisonnement complet). On envoie aux deux pour cohérence
+    // username serveur ↔ nom application portail Developer.
+
+    // PATCH /users/@me — username + avatar du bot user. Skippé si
+    // ni name ni avatar dans le patch.
+    if (patch.name !== undefined || patch.avatar !== undefined) {
+      const userPatch: { username?: string; avatar?: string } = {};
+      if (patch.name !== undefined) userPatch.username = patch.name;
+      if (patch.avatar !== undefined) userPatch.avatar = patch.avatar;
+      let userResponse: Response;
+      try {
+        userResponse = await fetchImpl(`${discordBaseUrl}/users/@me`, {
+          method: 'PATCH',
+          headers: {
+            authorization: authHeader,
+            'content-type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify(userPatch),
+        });
+      } catch (err) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Impossible d'atteindre Discord : ${errorDetail(err)}`,
+        );
+      }
+      if (!userResponse.ok && userResponse.status !== 429) {
+        throw httpError(
+          502,
+          'discord_unreachable',
+          `Discord a répondu ${userResponse.status} sur PATCH /users/@me.`,
+        );
+      }
+      // Si /users/@me renvoie 429 on continue quand même vers
+      // /applications/@me — la suite gère son propre 429 et l'admin
+      // pourra retenter, le username sera à jour au coup d'après.
+    }
+
+    // PATCH /applications/@me — name (app), description, icon (icône
+    // application). Mappe `avatar` du body wizard vers `icon` Discord.
+    const appPatch: { name?: string; description?: string; icon?: string } = {};
+    if (patch.name !== undefined) appPatch.name = patch.name;
+    if (patch.description !== undefined) appPatch.description = patch.description;
+    if (patch.avatar !== undefined) appPatch.icon = patch.avatar;
     let response: Response;
     try {
       response = await fetchImpl(`${discordBaseUrl}/applications/@me`, {
         method: 'PATCH',
         headers: {
-          authorization: `Bot ${config.discordBotToken}`,
+          authorization: authHeader,
           'content-type': 'application/json',
           accept: 'application/json',
         },
-        body: JSON.stringify(patch),
+        body: JSON.stringify(appPatch),
       });
     } catch (err) {
       throw httpError(
@@ -215,7 +263,7 @@ export function registerAdminIdentityRoutes(
       );
     }
 
-    const avatarHash = patchResult.data.avatar;
+    const avatarHash = patchResult.data.icon ?? patchResult.data.avatar;
     const avatarUrl =
       avatarHash != null ? `https://cdn.discordapp.com/app-icons/${appId}/${avatarHash}.png` : null;
 
