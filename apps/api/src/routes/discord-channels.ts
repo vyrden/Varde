@@ -28,6 +28,12 @@ export interface GuildTextChannelDto {
 export interface GuildRoleDto {
   readonly id: string;
   readonly name: string;
+  /** Couleur du rôle (entier RGB Discord). Optionnel — sert à l'UI permissions (jalon 7 PR 7.3). */
+  readonly color?: number;
+  /** Position du rôle dans la hiérarchie (plus grand = plus haut). */
+  readonly position?: number;
+  /** Nombre de membres portant ce rôle. Best-effort depuis le cache. */
+  readonly memberCount?: number;
 }
 
 /**

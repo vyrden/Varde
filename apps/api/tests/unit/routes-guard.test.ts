@@ -122,11 +122,12 @@ const collectMutatingRoutes = async (): Promise<readonly MutatingRoute[]> => {
           );
         }
         const block = src.slice(openIdx, closeIdx);
-        // `requireGuildAdmin` est la garde standard pour les routes
-        // par-guild ; `requireOwner` couvre les routes admin instance
+        // `requireGuildAdmin` (legacy MANAGE_GUILD) ou `requireGuildAccess`
+        // (jalon 7 PR 7.3, niveau granulaire) gardent les routes par-guild ;
+        // `requireOwner` couvre les routes admin instance
         // (jalon 7 PR 7.2). Les deux sont reconnues comme acceptable
         // protection sur une route mutante.
-        const hasGuard = /\b(requireGuildAdmin|requireOwner)\s*\(/.test(block);
+        const hasGuard = /\b(requireGuildAdmin|requireGuildAccess|requireOwner)\s*\(/.test(block);
         // Ligne où apparaît `app.<verb>(`.
         const lineIdx = src.slice(0, match.index).split('\n').length - 1;
         // Cherche un commentaire `// public-route:` dans les 3

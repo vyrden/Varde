@@ -329,6 +329,20 @@ interface DiscordAttachment {
       guildName: string;
     }[];
   }>;
+  /**
+   * Liste best-effort des membres d'une guild depuis le cache
+   * discord.js. Utilisé par le preview de la page permissions
+   * (jalon 7 PR 7.3). Cache typiquement partiel — seuls les
+   * membres ayant été touchés par un event sont chargés.
+   */
+  readonly listGuildMembers: (guildId: string) => Promise<
+    readonly {
+      readonly id: string;
+      readonly username?: string;
+      readonly avatarUrl?: string | null;
+      readonly roleIds: readonly string[];
+    }[]
+  >;
 }
 
 interface DiscordBinding {
@@ -407,7 +421,15 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
     return Array.from(roles.values())
       .filter((r) => !r.managed && r.name !== '@everyone')
       .sort((a, b) => b.position - a.position)
-      .map((r) => ({ id: r.id, name: r.name }));
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        // Couleur 0 = pas de couleur custom Discord. On omet le champ
+        // dans ce cas pour que l'UI applique son fallback.
+        ...(r.color !== 0 ? { color: r.color } : {}),
+        position: r.position,
+        memberCount: r.members.size,
+      }));
   };
 
   const listGuildEmojis: DiscordAttachment['listGuildEmojis'] = async (guildId) => {
@@ -433,6 +455,24 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
     return { current, external };
   };
 
+  const listGuildMembers: DiscordAttachment['listGuildMembers'] = async (guildId) => {
+    const guild = holder.current.guilds.cache.get(guildId);
+    if (!guild) return [];
+    return Array.from(guild.members.cache.values()).map((member) => {
+      const avatar = member.user.avatar ?? null;
+      const avatarUrl =
+        avatar !== null
+          ? `https://cdn.discordapp.com/avatars/${member.user.id}/${avatar}.png?size=64`
+          : null;
+      return {
+        id: member.user.id,
+        username: member.user.username,
+        avatarUrl,
+        roleIds: [...member.roles.cache.keys()],
+      };
+    });
+  };
+
   return {
     holder,
     bridge,
@@ -440,6 +480,7 @@ function createDiscordAttachment(logger: Logger): DiscordAttachment {
     listGuildTextChannels,
     listGuildRoles,
     listGuildEmojis,
+    listGuildMembers,
   };
 }
 
@@ -650,6 +691,7 @@ async function main(): Promise<void> {
           listGuildTextChannels: discordAttachment.listGuildTextChannels,
           listGuildRoles: discordAttachment.listGuildRoles,
           listGuildEmojis: discordAttachment.listGuildEmojis,
+          listGuildMembers: discordAttachment.listGuildMembers,
           welcomeUploads,
           discordReconnect,
           guildPermissionsContext,
@@ -667,6 +709,7 @@ async function main(): Promise<void> {
           listGuildTextChannels: discordAttachment.listGuildTextChannels,
           listGuildRoles: discordAttachment.listGuildRoles,
           listGuildEmojis: discordAttachment.listGuildEmojis,
+          listGuildMembers: discordAttachment.listGuildMembers,
           welcomeUploads,
           discordReconnect,
           guildPermissionsContext,

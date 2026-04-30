@@ -117,6 +117,14 @@ export {
   registerOnboardingRoutes,
 } from './routes/onboarding.js';
 export {
+  type PermissionsConfigResponse,
+  type PermissionsMemberSnapshot,
+  type PermissionsPreviewMember,
+  type PermissionsPreviewResponse,
+  type RegisterPermissionsRoutesOptions,
+  registerPermissionsRoutes,
+} from './routes/permissions.js';
+export {
   type RegisterReactionRolesRoutesOptions,
   registerReactionRolesRoutes,
 } from './routes/reaction-roles.js';

@@ -28,6 +28,7 @@ import {
   registerModulePermissionsRoutes,
   registerModulesRoutes,
   registerOnboardingRoutes,
+  registerPermissionsRoutes,
   registerReactionRolesRoutes,
   registerSetupRoutes,
   registerUnboundPermissionsRoutes,
@@ -258,6 +259,19 @@ export interface CreateServerOptions<D extends DbDriver> {
       guildName: string;
     }[];
   }>;
+  /**
+   * Liste best-effort des membres d'une guild — utilisé par
+   * `POST /guilds/:guildId/permissions/preview` (jalon 7 PR 7.3).
+   * Absente → preview retourne `{ admins: [], moderators: [] }`.
+   */
+  readonly listGuildMembers?: (guildId: string) => Promise<
+    readonly {
+      readonly id: string;
+      readonly username?: string;
+      readonly avatarUrl?: string | null;
+      readonly roleIds: readonly string[];
+    }[]
+  >;
   /**
    * Service de persistance des images de fond welcome/goodbye.
    * Câblé par `bin.ts` à partir de `VARDE_UPLOADS_DIR`. Omis → les
@@ -742,6 +756,17 @@ export async function createServer<D extends DbDriver>(
     ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
   });
   registerModulesRoutes(api, { loader, config, discord, guildPermissions });
+
+  // Routes de configuration des permissions par-guild (jalon 7 PR
+  // 7.3). Nécessitent un `listGuildRoles` enrichi (color, position,
+  // memberCount) et un `listGuildMembers` pour le preview ; en
+  // l'absence on tombe sur des stubs vides — la route GET reste
+  // utilisable, le preview retourne juste `{ admins: [], moderators: [] }`.
+  registerPermissionsRoutes(api, {
+    guildPermissions,
+    listGuildRoles: options.listGuildRoles ?? (async () => []),
+    listGuildMembers: options.listGuildMembers ?? (async () => []),
+  });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
   registerModulePermissionsRoutes(api, { loader, permissions, discord });
   registerAuditRoutes(api, { audit, discord });
