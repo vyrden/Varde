@@ -548,6 +548,20 @@ async function main(): Promise<void> {
   const logger = createLogger({ level: logLevel });
   logger.info('VARDE_BASE_URL effective', { baseUrl });
 
+  // Variables obsolètes depuis le jalon 7 PR 7.5 (ADR 0016) : les
+  // credentials OAuth Discord ne se lisent plus depuis l'env, ils
+  // viennent de `instance_config` (BDD chiffrée, alimentée par le
+  // wizard). Si l'admin a un vieux `.env.local`, on l'avertit pour
+  // qu'il les supprime — pas de crash, le code ne les lit plus de
+  // toute façon.
+  for (const obsolete of ['VARDE_DISCORD_CLIENT_ID', 'VARDE_DISCORD_CLIENT_SECRET'] as const) {
+    if ((process.env[obsolete] ?? '').length > 0) {
+      logger.warn(
+        `${obsolete} est défini dans l'env mais n'est plus lu depuis le jalon 7 PR 7.5. Supprime cette variable de ton .env.local — la valeur saisie dans le wizard fait foi.`,
+      );
+    }
+  }
+
   // Le Client discord.js + son bridge onboarding sont instanciés
   // sans login. Le bridge ne capture pas de `guildId` à la
   // construction et résout les guilds au call-time depuis le cache
