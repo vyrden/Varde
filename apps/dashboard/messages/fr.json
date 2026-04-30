@@ -81,27 +81,27 @@
     },
     "discordApp": {
       "title": "Créer l'application Discord",
-      "subtitle": "Créez une application dans le portail Developer de Discord, puis collez son Application ID et sa Public Key.",
+      "subtitle": "Créez une application dans le portail Developer de Discord, puis collez son identifiant d'application et sa clé publique.",
       "openPortal": "Ouvrir le portail Discord Developer",
       "steps": {
         "openPortal": "Ouvrez https://discord.com/developers/applications dans un nouvel onglet.",
         "createApp": "Cliquez sur « New Application » et donnez-lui un nom (modifiable plus tard).",
-        "copyAppId": "Onglet « General Information » → copiez l'Application ID.",
-        "copyPublicKey": "Toujours dans « General Information » → copiez la Public Key."
+        "copyAppId": "Onglet « General Information » → copiez l'identifiant d'application (champ « Application ID » côté Discord).",
+        "copyPublicKey": "Toujours dans « General Information » → copiez la clé publique (champ « Public Key » côté Discord)."
       },
       "appId": {
-        "label": "Application ID",
+        "label": "Identifiant d'application",
         "placeholder": "ex. 1212345678901234567"
       },
       "publicKey": {
-        "label": "Public Key",
-        "placeholder": "64 caractères hex (Ed25519)"
+        "label": "Clé publique",
+        "placeholder": "64 caractères hexadécimaux"
       },
       "submit": "Valider",
       "success": "Application Discord détectée :",
       "errors": {
-        "invalidBody": "Application ID ou Public Key mal formé. Vérifiez qu'ils correspondent à ce que Discord affiche.",
-        "notFound": "Aucune application Discord trouvée pour cet Application ID. Vérifiez la valeur dans le portail Developer.",
+        "invalidBody": "Identifiant d'application ou clé publique mal formé. Vérifiez qu'ils correspondent à ce que Discord affiche.",
+        "notFound": "Aucune application Discord trouvée pour cet identifiant d'application. Vérifiez la valeur dans le portail Developer.",
         "unreachable": "Discord est injoignable. Réessayez dans un instant.",
         "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
         "unknown": "Une erreur inattendue s'est produite côté API."

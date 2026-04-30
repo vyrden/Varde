@@ -80,10 +80,12 @@ test.describe('wizard de setup — étape system-check', () => {
 });
 
 test.describe('wizard de setup — étapes formulaire', () => {
-  test('discord-app affiche les deux champs Application ID + Public Key', async ({ page }) => {
+  test('discord-app affiche les deux champs identifiant d application + clé publique', async ({
+    page,
+  }) => {
     await page.goto('/setup/discord-app');
-    await expect(page.getByLabel(/Application ID/i)).toBeVisible();
-    await expect(page.getByLabel(/Public Key/i)).toBeVisible();
+    await expect(page.getByLabel(/Identifiant d'application/i)).toBeVisible();
+    await expect(page.getByLabel(/Clé publique/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Valider/i })).toBeVisible();
   });
 
