@@ -234,15 +234,52 @@ plage de dates. C'est l'outil principal pour répondre à
 
 ## Permissions : qui peut faire quoi
 
-Varde a **deux niveaux de permissions** :
+Varde a **trois niveaux de permissions** qui se complètent :
 
-### 1. Permissions Discord natives
+### 1. Niveau d'accès au dashboard du serveur (jalon 7 PR 7.3)
 
-Le bot respecte scrupuleusement les permissions Discord. Si vous
-n'avez pas « Gérer le serveur » sur Discord, vous ne voyez même
-pas le serveur dans le dashboard.
+C'est le tout premier filtre — qui peut **voir** ce serveur dans le
+dashboard et y faire quoi que ce soit. Configurable depuis la page
+**Permissions du dashboard** (`/guilds/:id/permissions`), accessible
+aux administrateurs uniquement.
 
-### 2. Permissions applicatives (internes à Varde)
+Deux niveaux :
+
+- **Administrateur** : accès complet, voit tous les modules et toutes
+  les sections. Configurez ici les rôles Discord qui doivent
+  pouvoir tout gérer (typiquement `@Admin`, `@Owner`).
+- **Modérateur** : accès limité aux modules tagués comme tels (V1 :
+  uniquement `moderation`). Voit la vue d'ensemble du serveur et la
+  page de configuration des règles automod, ne voit pas la
+  configuration du bot, des logs, des permissions applicatives, etc.
+
+> ⚠️ **Au moins un rôle administrateur est obligatoire** — sans lui
+> personne ne pourrait gérer le serveur. La page refuse une
+> sauvegarde avec une liste admin vide.
+
+> 💡 **Le propriétaire Discord du serveur a toujours accès admin**,
+> indépendamment de la config. Filet de sécurité contre un lock-out
+> auto-infligé.
+
+Le bouton **Voir qui a accès** simule la config en cours et liste
+les membres qui auraient accès à chaque niveau, **sans persister**.
+Utile pour valider une nouvelle hiérarchie de rôles avant de la
+sauvegarder.
+
+> 🔄 **Migration transparente** : à la première visite d'un serveur
+> sans config explicite, Varde génère automatiquement la config par
+> défaut (rôles avec la permission Discord `Administrator` →
+> administrateurs). Aucune intervention requise — le comportement
+> reste identique à un serveur configuré « normalement ».
+
+### 2. Permissions Discord natives
+
+Le bot respecte scrupuleusement les permissions Discord. Sans présence
+sur le serveur, vous ne voyez pas le serveur dans le dashboard. Au
+delà de cette appartenance, c'est le niveau d'accès configuré
+ci-dessus qui filtre.
+
+### 3. Permissions applicatives (internes à Varde)
 
 Chaque module définit ses propres permissions, plus fines que
 celles de Discord :

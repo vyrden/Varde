@@ -193,6 +193,41 @@ target)`.
 Refuser une vérification de permission (pour "simplifier") est un bug
 critique.
 
+## Niveau d'accès dashboard (`requiredPermission`)
+
+À ne pas confondre avec les **permissions applicatives** ci-dessus. Le
+champ `requiredPermission` du `ModuleDefinition` (jalon 7 PR 7.3)
+contrôle qui voit le module dans le dashboard d'un serveur, à partir
+des **niveaux** `admin` ou `moderator` configurés par l'admin du
+serveur dans `/guilds/:id/permissions` :
+
+- `'admin'` (défaut implicite) : seuls les users avec un rôle dans
+  `adminRoleIds` ou le propriétaire Discord du serveur voient le
+  module.
+- `'moderator'` : également visible aux users avec un rôle dans
+  `moderatorRoleIds`. Cas typiques : modération, anti-spam — un
+  modérateur a besoin d'accéder aux outils de mod sans pouvoir
+  modifier la config technique de l'instance.
+
+Déclaration dans `defineModule` :
+
+```ts
+import { defineModule } from '@varde/contracts';
+
+export const moderation = defineModule({
+  manifest,
+  requiredPermission: 'moderator',
+  // ...
+});
+```
+
+Sans le champ, le module retombe sur le défaut restrictif (`'admin'`)
+— principe de moindre privilège côté contrat.
+
+L'enforcement vit côté API : `GET /api/guilds/:guildId/modules` filtre
+la liste retournée selon le niveau du user. La sidebar du dashboard
+masque les liens des modules invisibles côté serveur.
+
 ## Accès DB
 
 Un module accède à ses propres tables via `ctx.db` qui renvoie un client
