@@ -123,6 +123,11 @@
         "show": "Afficher",
         "hide": "Masquer"
       },
+      "savedBanner": {
+        "label": "Le token du bot est enregistré et chiffré au repos.",
+        "edit": "Saisir un nouveau token",
+        "keep": "Continuer avec ce token"
+      },
       "submit": "Valider",
       "success": "Bot identifié :",
       "invalidToken": "Token refusé par Discord. Re-générez-en un dans le portail Developer et réessayez.",
@@ -164,6 +169,11 @@
         "hint": "Chiffrée au repos avec votre master key. Jamais loggée, jamais affichée en clair.",
         "show": "Afficher",
         "hide": "Masquer"
+      },
+      "savedBanner": {
+        "label": "La clé secrète du client est enregistrée et chiffrée au repos.",
+        "edit": "Saisir une nouvelle clé secrète",
+        "keep": "Continuer avec cette clé"
       },
       "submit": "Valider",
       "success": "Clé secrète acceptée.",

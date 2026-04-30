@@ -5,6 +5,7 @@ import { CopyableField } from '../../../components/setup/CopyableField';
 import { OAuthForm } from '../../../components/setup/OAuthForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { fetchSetupStatus } from '../../../lib/setup-client';
 import { fetchRedirectUri } from '../../../lib/setup-redirect-uri';
 import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
@@ -30,6 +31,7 @@ export default async function OAuthPage(): Promise<ReactElement> {
 
   const redirectResult = await fetchRedirectUri(API_URL, fetch);
   const redirectUri = redirectResult.ok ? redirectResult.uri : '';
+  const status = await fetchSetupStatus(API_URL, fetch);
 
   return (
     <SetupShell
@@ -65,6 +67,7 @@ export default async function OAuthPage(): Promise<ReactElement> {
           </div>
         )}
         <OAuthForm
+          secretAlreadySaved={status?.hasClientSecret ?? false}
           copy={{
             secretLabel: t('secret.label'),
             secretPlaceholder: t('secret.placeholder'),
@@ -76,6 +79,9 @@ export default async function OAuthPage(): Promise<ReactElement> {
             previous: tActions('previous'),
             success: t('success'),
             invalidSecret: t('invalidSecret'),
+            savedBannerLabel: t('savedBanner.label'),
+            savedBannerEdit: t('savedBanner.edit'),
+            savedBannerKeep: t('savedBanner.keep'),
             errors: {
               invalid_body: t('errors.invalidBody'),
               missing_app_id: t('errors.missingAppId'),

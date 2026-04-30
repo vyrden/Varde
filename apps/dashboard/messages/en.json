@@ -116,6 +116,11 @@
         "enableIntents": "Enable the three Privileged Gateway Intents (Presence, Server Members, Message Content).",
         "pasteToken": "Paste the token below."
       },
+      "savedBanner": {
+        "label": "The bot token is saved and encrypted at rest.",
+        "edit": "Enter a new token",
+        "keep": "Continue with this token"
+      },
       "token": {
         "label": "Bot token",
         "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
@@ -157,6 +162,11 @@
         "copied": "Copied!",
         "hint": "You'll be able to add additional access URLs later from the instance administration page.",
         "unreachable": "Could not retrieve the redirect URI from the API."
+      },
+      "savedBanner": {
+        "label": "The client secret is saved and encrypted at rest.",
+        "edit": "Enter a new client secret",
+        "keep": "Continue with this secret"
       },
       "secret": {
         "label": "Client Secret",
