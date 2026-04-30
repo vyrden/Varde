@@ -76,24 +76,83 @@ describe('GET /setup/status', () => {
     await client.close();
   });
 
-  it('200 sur DB vide : configured=false, currentStep=1', async () => {
+  it('200 sur DB vide : configured=false, currentStep=1, tous les champs null/false', async () => {
     const { app } = await build(client);
     try {
       const res = await app.inject({ method: 'GET', url: '/setup/status' });
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ configured: false, currentStep: 1 });
+      expect(res.json()).toEqual({
+        configured: false,
+        currentStep: 1,
+        discordAppId: null,
+        discordPublicKey: null,
+        hasBotToken: false,
+        hasClientSecret: false,
+        botName: null,
+        botDescription: null,
+        botAvatarUrl: null,
+      });
     } finally {
       await app.close();
     }
   });
 
-  it('200 reflète setStep en cours', async () => {
+  it('200 reflète setStep en cours et expose discordAppId saisi', async () => {
     const { app, instanceConfig } = await build(client);
     try {
-      await instanceConfig.setStep(4, { discordAppId: '111111111111111111' });
+      await instanceConfig.setStep(4, {
+        discordAppId: '111111111111111111',
+        discordPublicKey: '0'.repeat(64),
+      });
       const res = await app.inject({ method: 'GET', url: '/setup/status' });
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ configured: false, currentStep: 4 });
+      expect(res.json()).toMatchObject({
+        configured: false,
+        currentStep: 4,
+        discordAppId: '111111111111111111',
+        discordPublicKey: '0'.repeat(64),
+        hasBotToken: false,
+        hasClientSecret: false,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('hasBotToken=true et hasClientSecret=true sans exposer leur valeur', async () => {
+    const { app, instanceConfig } = await build(client);
+    try {
+      await instanceConfig.setStep(4, { discordBotToken: 'super-secret-token-1234567890' });
+      await instanceConfig.setStep(5, { discordClientSecret: 'super-secret-client-secret' });
+      const res = await app.inject({ method: 'GET', url: '/setup/status' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as Record<string, unknown>;
+      expect(body['hasBotToken']).toBe(true);
+      expect(body['hasClientSecret']).toBe(true);
+      // Vérification cruciale : les valeurs sensibles ne fuitent PAS.
+      const serialized = JSON.stringify(body);
+      expect(serialized).not.toContain('super-secret-token-1234567890');
+      expect(serialized).not.toContain('super-secret-client-secret');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('expose les champs identité bot quand saisis', async () => {
+    const { app, instanceConfig } = await build(client);
+    try {
+      await instanceConfig.setStep(6, {
+        botName: 'Mon Super Bot',
+        botDescription: 'Description du bot',
+        botAvatarUrl: 'https://cdn.discordapp.com/app-icons/123/abc.png',
+      });
+      const res = await app.inject({ method: 'GET', url: '/setup/status' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        botName: 'Mon Super Bot',
+        botDescription: 'Description du bot',
+        botAvatarUrl: 'https://cdn.discordapp.com/app-icons/123/abc.png',
+      });
     } finally {
       await app.close();
     }

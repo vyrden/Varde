@@ -143,6 +143,7 @@ export {
   type PrivilegedIntentName,
   type RegisterSetupRoutesOptions,
   registerSetupRoutes,
+  type SetupStatusResponse,
   type SystemCheckResponse,
   type SystemCheckResult,
 } from './routes/setup.js';

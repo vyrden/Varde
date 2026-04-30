@@ -64,6 +64,33 @@ import type { FetchLike } from '../discord-client.js';
  * les tests E2E (sub-livrable 6).
  */
 
+/**
+ * Réponse du `GET /setup/status` (jalon 7 PR 7.1, étendu PR 7.6 pour
+ * la persistance des formulaires du wizard).
+ *
+ * **Champs sensibles exclus.** Le token bot et la clé secrète OAuth
+ * ne sortent pas en clair — on expose seulement des booléens
+ * `hasBotToken` / `hasClientSecret` pour que le dashboard sache si
+ * un re-saisie est nécessaire ou si l'utilisateur peut continuer
+ * sans toucher au champ.
+ *
+ * **Visibilité.** La route est gardée par `requireUnconfigured` →
+ * 403 dès que `setup_completed_at` est posé. L'exposition des
+ * valeurs claires (App ID, Public Key, identité) est donc limitée
+ * à la fenêtre du wizard, où aucun login n'existe encore.
+ */
+export interface SetupStatusResponse {
+  readonly configured: boolean;
+  readonly currentStep: number;
+  readonly discordAppId: string | null;
+  readonly discordPublicKey: string | null;
+  readonly hasBotToken: boolean;
+  readonly hasClientSecret: boolean;
+  readonly botName: string | null;
+  readonly botDescription: string | null;
+  readonly botAvatarUrl: string | null;
+}
+
 /** Forme d'un check du POST `/setup/system-check`. */
 export interface SystemCheckResult {
   readonly name: 'database' | 'master_key' | 'discord_connectivity';
@@ -407,9 +434,19 @@ export function registerSetupRoutes(
       config: { rateLimit: setupRateLimit },
       preHandler: requireUnconfigured,
     },
-    async () => {
-      const status = await instanceConfig.getStatus();
-      return status;
+    async (): Promise<SetupStatusResponse> => {
+      const config = await instanceConfig.getConfig();
+      return {
+        configured: config.setupCompletedAt !== null,
+        currentStep: config.setupStep,
+        discordAppId: config.discordAppId,
+        discordPublicKey: config.discordPublicKey,
+        hasBotToken: config.discordBotToken !== null,
+        hasClientSecret: config.discordClientSecret !== null,
+        botName: config.botName,
+        botDescription: config.botDescription,
+        botAvatarUrl: config.botAvatarUrl,
+      };
     },
   );
 
