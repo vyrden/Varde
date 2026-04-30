@@ -84,7 +84,7 @@
       "subtitle": "Create an application in Discord's Developer portal, then paste its Application ID and Public Key.",
       "openPortal": "Open the Discord Developer portal",
       "steps": {
-        "openPortal": "Open https://discord.com/developers/applications in a new tab.",
+        "openPortal": "Open <link>the Discord Developer portal</link> in a new tab.",
         "createApp": "Click \"New Application\" and give it a name (you can change it later).",
         "copyAppId": "Under \"General Information\" → copy the Application ID.",
         "copyPublicKey": "Still in \"General Information\" → copy the Public Key."

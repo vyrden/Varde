@@ -31,7 +31,20 @@ export default async function DiscordAppPage(): Promise<ReactElement> {
     >
       <SetupStep title={t('title')} description={t('subtitle')}>
         <ol className="list-decimal space-y-2 rounded-md border border-border-muted bg-sidebar p-4 pl-9 text-sm text-muted-foreground">
-          <li>{t('steps.openPortal')}</li>
+          <li>
+            {t.rich('steps.openPortal', {
+              link: (chunks) => (
+                <a
+                  href={PORTAL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  {chunks}
+                </a>
+              ),
+            })}
+          </li>
           <li>{t('steps.createApp')}</li>
           <li>{t('steps.copyAppId')}</li>
           <li>{t('steps.copyPublicKey')}</li>
