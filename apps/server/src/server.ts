@@ -60,6 +60,7 @@ import {
   createConfigService,
   createCtxFactory,
   createEventBus,
+  createGuildPermissionsService,
   createInstanceAuditService,
   createInstanceConfigService,
   createKeystoreService,
@@ -71,6 +72,8 @@ import {
   createPluginLoader,
   createSchedulerService,
   type DiscordReconnectService,
+  type GuildPermissionsContext,
+  type GuildPermissionsService,
   type I18nMessages,
   type InstanceConfigService,
   type OnboardingExecutor,
@@ -227,6 +230,13 @@ export interface CreateServerOptions<D extends DbDriver> {
    */
   readonly discordReconnect?: DiscordReconnectService;
   /**
+   * Adaptateur Discord pour `guildPermissionsService` (jalon 7 PR
+   * 7.3). Fourni par `bin.ts` à partir du holder du Client. Quand
+   * absent, le service est construit avec un context « stub » qui
+   * retourne tableaux vides — utile en CI / tests sans bot.
+   */
+  readonly guildPermissionsContext?: GuildPermissionsContext;
+  /**
    * Fonction listant les salons texte Discord d'une guild. Fournie par
    * `bin.ts` lorsque le bot est connecté. Absente → les routes GET
    * /discord/text-channels et /discord/roles répondent 503.
@@ -299,6 +309,8 @@ export interface ServerHandle<D extends DbDriver> {
   readonly instanceConfig: InstanceConfigService;
   /** Service de gestion des owners de l'instance (jalon 7 PR 7.2). */
   readonly ownership: OwnershipService;
+  /** Service de permissions par-guild (jalon 7 PR 7.3). */
+  readonly guildPermissions: GuildPermissionsService;
   /**
    * Pose le provider qui répond à `GET /admin/overview` pour les
    * champs `bot.connected` / `bot.latencyMs`. `apps/server/src/bin.ts`
@@ -544,6 +556,23 @@ export async function createServer<D extends DbDriver>(
   });
 
   const audit = createAuditService({ client });
+
+  // Service de permissions par-guild (jalon 7 PR 7.3). Le context
+  // adapter Discord est fourni par `bin.ts` ; en son absence on
+  // pose un stub neutre qui ne donne aucun accès — adapté aux
+  // tests / CI sans bot. Cache LRU 60 s pour les lectures hot
+  // path (`getUserLevel` appelé sur chaque route gardée).
+  const guildPermissionsContext: GuildPermissionsContext = options.guildPermissionsContext ?? {
+    getAdminRoleIds: async () => [],
+    getOwnerId: async () => null,
+    getUserRoleIds: async () => [],
+  };
+  const guildPermissions: GuildPermissionsService = createGuildPermissionsService({
+    client,
+    context: guildPermissionsContext,
+    audit,
+    cache: { maxSize: 1000, ttlMs: 60_000 },
+  });
 
   // Subscriber global : toute `config.changed` émise sur le bus
   // devient une entrée `core.config.updated` dans l audit log. On
@@ -806,6 +835,7 @@ export async function createServer<D extends DbDriver>(
     ctxBundle,
     instanceConfig,
     ownership,
+    guildPermissions,
     setDiscordStatusProvider(provider) {
       discordStatusProvider = provider;
     },

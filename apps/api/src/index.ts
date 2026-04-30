@@ -12,6 +12,7 @@ export {
   type CreateJwtAuthenticatorOptions,
   createJwtAuthenticator,
 } from './jwt-authenticator.js';
+export { requireGuildAccess } from './middleware/require-guild-access.js';
 export { requireGuildAdmin } from './middleware/require-guild-admin.js';
 export { requireOwner } from './middleware/require-owner.js';
 export { reconcileOnboardingSessions } from './onboarding-reconcile.js';

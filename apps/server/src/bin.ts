@@ -43,6 +43,7 @@ import {
 } from '@varde/api';
 import {
   attachDiscordClient,
+  attachGuildPermissionsListeners,
   createDiscordJsChannelSender,
   createDiscordService,
   createOnboardingDiscordBridge,
@@ -50,7 +51,7 @@ import {
   type OnboardingDiscordBridge,
   registerSlashCommandsForGuild,
 } from '@varde/bot';
-import type { DiscordService, GuildId, Logger, ModuleId } from '@varde/contracts';
+import type { DiscordService, GuildId, Logger, ModuleId, UserId } from '@varde/contracts';
 import { createDiscordReconnectService, createLogger } from '@varde/core';
 import { pgSchema, sqliteSchema } from '@varde/db';
 import { helloWorld, locales as helloWorldLocales } from '@varde/module-hello-world';
@@ -521,6 +522,36 @@ async function main(): Promise<void> {
   let discord: DiscordBinding | null = null;
 
   /**
+   * Adaptateur Discord pour `guildPermissionsService` (jalon 7 PR
+   * 7.3 sub-livrable 5). Lit le Client courant via le holder à
+   * chaque appel — suit donc une rotation de token sans
+   * reconstruction. Quand le bot n'est pas (encore) connecté ou
+   * que la guild n'est pas en cache, on retombe sur des listes
+   * vides — `getUserLevel` renverra `null`.
+   */
+  const guildPermissionsContext = {
+    getAdminRoleIds: async (guildId: string): Promise<readonly string[]> => {
+      const guild = discordAttachment.holder.current.guilds.cache.get(guildId);
+      if (!guild) return [];
+      return guild.roles.cache
+        .filter((role) => role.permissions.has('Administrator'))
+        .map((role) => role.id);
+    },
+    getOwnerId: async (guildId: string) => {
+      const guild = discordAttachment.holder.current.guilds.cache.get(guildId);
+      return (guild?.ownerId ?? null) as UserId | null;
+    },
+    getUserRoleIds: async (guildId: string, userId: string): Promise<readonly string[]> => {
+      const guild = discordAttachment.holder.current.guilds.cache.get(guildId);
+      if (!guild) return [];
+      const member =
+        guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+      if (!member) return [];
+      return [...member.roles.cache.keys()];
+    },
+  };
+
+  /**
    * Procédure de rotation à chaud du token bot Discord (jalon 7 PR
    * 7.2 sub-livrable 5).
    *
@@ -583,8 +614,14 @@ async function main(): Promise<void> {
         }
         throw err;
       }
-      // Succès : ré-attache dispatcher au nouveau client, détruit l'ancien.
+      // Succès : ré-attache dispatcher + listeners permissions au
+      // nouveau client, détruit l'ancien.
       discord = attachDiscordToHandle(discordAttachment, handle, logger);
+      permissionListeners.detach();
+      permissionListeners = attachGuildPermissionsListeners({
+        client: newClient,
+        service: handle.guildPermissions,
+      });
       try {
         await previousClient.destroy();
       } catch (err) {
@@ -615,6 +652,7 @@ async function main(): Promise<void> {
           listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
           discordReconnect,
+          guildPermissionsContext,
         })
       : await createServer({
           database: { driver: 'sqlite', url: databaseUrl },
@@ -631,7 +669,17 @@ async function main(): Promise<void> {
           listGuildEmojis: discordAttachment.listGuildEmojis,
           welcomeUploads,
           discordReconnect,
+          guildPermissionsContext,
         });
+
+  // Listeners Discord pour invalidation cache + auto-cleanup des
+  // rôles supprimés (jalon 7 PR 7.3 sub-livrable 4). Branchés à
+  // l'attachment courant — re-câblés sur le nouveau client à
+  // chaque rotation de token (cf. handler `discordReconnect`).
+  let permissionListeners = attachGuildPermissionsListeners({
+    client: discordAttachment.holder.current,
+    service: handle.guildPermissions,
+  });
 
   handle.loader.register(helloWorld);
   handle.loader.register(logs);
@@ -727,6 +775,7 @@ async function main(): Promise<void> {
         discord.detach();
         await discord.destroy();
       }
+      permissionListeners.detach();
       unsubscribeReady();
       unsubscribeAutoOnboard();
       await handle.stop();
