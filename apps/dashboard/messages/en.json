@@ -26,7 +26,7 @@
       "title": "No server",
       "descriptionLine1": "The Varde bot is not on any of your manageable servers yet. Invite it now to start configuring it.",
       "inviteButton": "Invite the bot to a server",
-      "descriptionLine2": "Once the bot is added to a server, reload this page — it will appear in the rail on the left."
+      "descriptionLine2": "Once the bot is added to a server, switch back to this tab — you'll be redirected automatically to the server's dashboard."
     }
   },
   "notFound": {

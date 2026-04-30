@@ -26,7 +26,7 @@
       "title": "Aucun serveur",
       "descriptionLine1": "Le bot Varde n'est présent sur aucun de tes serveurs administrables. Invite-le maintenant pour pouvoir le configurer.",
       "inviteButton": "Inviter le bot sur un serveur",
-      "descriptionLine2": "Une fois le bot ajouté à un serveur, recharge cette page — il apparaîtra dans le rail à gauche."
+      "descriptionLine2": "Une fois le bot ajouté à un serveur, reviens sur cet onglet — la redirection vers le dashboard du serveur est automatique."
     }
   },
   "notFound": {

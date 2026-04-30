@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 
 import { auth } from '../auth';
 import { SignInCard } from '../components/SignInCard';
+import { RouterRefreshOnFocus } from '../components/shell/RouterRefreshOnFocus';
 import { ApiError, fetchAdminGuilds } from '../lib/api-client';
 import { getOAuthCredentialsClient } from '../lib/oauth-credentials';
 
@@ -72,6 +73,15 @@ export default async function Page(): Promise<ReactElement> {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-rail p-6">
+      {/*
+       * Re-rend la page server-side dès que l'onglet redevient visible
+       * (l'admin a cliqué « Inviter », ouvert l'OAuth Discord dans un
+       * nouvel onglet, autorisé, puis est revenu sur ce dashboard) —
+       * `fetchAdminGuilds` se rejoue, et si le bot est entré dans une
+       * guild, `guilds.length > 0` et le `redirect(...)` plus haut
+       * envoie l'admin sur sa nouvelle guild sans clic manuel.
+       */}
+      <RouterRefreshOnFocus />
       <div className="max-w-md rounded-lg bg-sidebar p-8 text-center shadow-xl">
         <div
           aria-hidden="true"
