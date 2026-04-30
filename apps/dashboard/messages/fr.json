@@ -2,8 +2,20 @@
   "auth": {
     "signIn": {
       "title": "Bienvenue sur Varde",
-      "description": "Connectez-vous avec Discord pour accéder à la configuration des serveurs sur lesquels vous avez les droits d'administration.",
-      "button": "Se connecter avec Discord"
+      "description": "Dernière étape avant le dashboard.",
+      "setupCompleteBadge": "✓ Instance configurée.",
+      "stepExplainer": "Le bot lui-même est prêt à se connecter à Discord avec son token. Il manque juste à vous identifier pour que le dashboard sache quels serveurs vous administrez et puisse vous laisser y inviter le bot.",
+      "accountDistinction": "À ce moment-là, vous vous connectez avec votre compte Discord humain — celui que vous utilisez tous les jours. Rien à voir avec le compte du bot saisi à l'étape précédente.",
+      "button": "Se connecter avec Discord",
+      "redirectHint": {
+        "heading": "Erreur « redirect_uri OAuth2 non valide » au clic ?",
+        "cause": "Discord refuse l'OAuth tant que la redirect URI envoyée par le dashboard n'est pas enregistrée dans votre application Discord.",
+        "uriLabel": "URI à enregistrer",
+        "copy": "Copier",
+        "copied": "Copié !",
+        "portalLabel": "Ouvrir le portail Discord",
+        "instruction": "Sur le portail : votre app → OAuth2 → General → Redirects → coller → Save Changes. Puis revenez ici et réessayez."
+      }
     }
   },
   "header": {

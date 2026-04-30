@@ -19,13 +19,23 @@ export interface GuildRailProps {
  * est lu depuis `VARDE_DISCORD_CLIENT_ID` côté serveur. Permissions
  * fixées à `8` (Administrator) — ajustable en cas de durcissement
  * sécu, mais pour un bot auto-hébergé c'est l'usage habituel.
+ *
+ * Scope volontairement réduit à `bot` — pas d'`applications.commands`.
+ * Inclure `applications.commands` dans le scope force Discord à
+ * exiger qu'une redirect URI soit enregistrée côté portail dev,
+ * sinon le portail OAuth refuse avec « redirect_uri non valide ».
+ * Or les slash commands sont enregistrées par le bot lui-même via
+ * `PUT /applications/{appId}/guilds/{guildId}/commands` après chaque
+ * join (cf. `apps/bot/src/slash-registration.ts`) — ce scope est
+ * inutile au moment de l'invitation et imposerait une étape de
+ * config supplémentaire à l'admin pour rien.
  */
 function buildInviteUrl(): string | null {
   const clientId = process.env['VARDE_DISCORD_CLIENT_ID'];
   if (!clientId) return null;
   const params = new URLSearchParams({
     client_id: clientId,
-    scope: 'bot applications.commands',
+    scope: 'bot',
     permissions: '8',
   });
   return `https://discord.com/oauth2/authorize?${params.toString()}`;

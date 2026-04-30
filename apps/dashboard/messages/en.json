@@ -2,8 +2,20 @@
   "auth": {
     "signIn": {
       "title": "Welcome to Varde",
-      "description": "Sign in with Discord to manage the servers on which you have administrator rights.",
-      "button": "Sign in with Discord"
+      "description": "One last step before the dashboard.",
+      "setupCompleteBadge": "✓ Instance configured.",
+      "stepExplainer": "The bot itself is ready to connect to Discord with its token. We just need to identify you so the dashboard knows which servers you administer and can let you invite the bot there.",
+      "accountDistinction": "Right now, you sign in with your everyday human Discord account. This has nothing to do with the bot account whose token you set up earlier.",
+      "button": "Sign in with Discord",
+      "redirectHint": {
+        "heading": "Getting \"redirect_uri OAuth2 invalid\" when you click?",
+        "cause": "Discord refuses OAuth as long as the redirect URI sent by the dashboard isn't registered in your Discord application.",
+        "uriLabel": "URI to register",
+        "copy": "Copy",
+        "copied": "Copied!",
+        "portalLabel": "Open the Discord portal",
+        "instruction": "In the portal: your app → OAuth2 → General → Redirects → paste → Save Changes. Then come back here and retry."
+      }
     }
   },
   "header": {
