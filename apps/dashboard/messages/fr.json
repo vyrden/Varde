@@ -202,6 +202,42 @@
       }
     }
   },
+  "guildPermissions": {
+    "title": "Permissions du dashboard",
+    "subtitle": "Choisissez quels rôles Discord donnent accès au dashboard de ce serveur. Les administrateurs ont accès complet, les modérateurs voient uniquement les modules tagués comme tels.",
+    "admin": {
+      "heading": "Administrateurs",
+      "description": "Rôles Discord avec accès complet au dashboard du serveur. Au moins un rôle requis."
+    },
+    "moderator": {
+      "heading": "Modérateurs",
+      "description": "Rôles avec accès aux modules de modération uniquement (modération, anti-spam)."
+    },
+    "saveButton": "Enregistrer",
+    "previewButton": "Voir qui a accès",
+    "successMessage": "Permissions enregistrées.",
+    "emptyAdminWarning": "Au moins un rôle administrateur est requis.",
+    "removeSelfWarning": "Vous êtes en train de retirer un rôle qui vous donne accès. Confirmez-vous ?",
+    "previewHeading": "Aperçu des accès",
+    "previewAdminsLabel": "Administrateurs",
+    "previewModeratorsLabel": "Modérateurs",
+    "previewEmpty": "Aucun membre.",
+    "errors": {
+      "invalidForm": "Champs manquants.",
+      "invalidBody": "Format invalide.",
+      "invalidPermissions": "Configuration invalide. Vérifiez qu'il n'y a pas de doublons et qu'au moins un rôle admin est sélectionné.",
+      "unknownRoleIds": "Certains rôles n'existent plus sur le serveur.",
+      "notFound": "Page introuvable.",
+      "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
+      "unknown": "Une erreur inattendue s'est produite côté API."
+    },
+    "roleSelect": {
+      "searchPlaceholder": "Rechercher un rôle…",
+      "empty": "Aucun rôle trouvé.",
+      "memberCount": "{count, plural, =0 {aucun membre} one {# membre} other {# membres}}",
+      "disabledLabel": "verrouillé"
+    }
+  },
   "admin": {
     "shell": {
       "banner": "Administration de l'instance — zone réservée à l'hébergeur. Modifications appliquées immédiatement.",

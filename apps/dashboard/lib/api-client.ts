@@ -304,3 +304,43 @@ export async function fetchPermissionBindings(
   );
   return body.bindings;
 }
+
+/**
+ * Rôle enrichi retourné par `GET /guilds/:guildId/permissions`
+ * (jalon 7 PR 7.3). Inclut color/position/memberCount pour
+ * alimenter `RoleMultiSelect`.
+ */
+export interface EnrichedGuildRoleDto {
+  readonly id: string;
+  readonly name: string;
+  readonly color?: number;
+  readonly position?: number;
+  readonly memberCount?: number;
+}
+
+/** Réponse de `GET /guilds/:guildId/permissions` et `PUT`. */
+export interface GuildPermissionsConfigDto {
+  readonly adminRoleIds: readonly string[];
+  readonly moderatorRoleIds: readonly string[];
+  readonly roles: readonly EnrichedGuildRoleDto[];
+}
+
+/** Membre dans la réponse preview. */
+export interface GuildPermissionsPreviewMemberDto {
+  readonly id: string;
+  readonly username?: string;
+  readonly avatarUrl?: string | null;
+  readonly grantedBy: readonly string[];
+}
+
+/** Réponse de `POST /guilds/:guildId/permissions/preview`. */
+export interface GuildPermissionsPreviewDto {
+  readonly admins: readonly GuildPermissionsPreviewMemberDto[];
+  readonly moderators: readonly GuildPermissionsPreviewMemberDto[];
+}
+
+export async function fetchGuildPermissionsConfig(
+  guildId: string,
+): Promise<GuildPermissionsConfigDto> {
+  return apiGet<GuildPermissionsConfigDto>(`/guilds/${encodeURIComponent(guildId)}/permissions`);
+}

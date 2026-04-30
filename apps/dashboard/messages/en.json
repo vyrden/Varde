@@ -202,6 +202,42 @@
       }
     }
   },
+  "guildPermissions": {
+    "title": "Dashboard permissions",
+    "subtitle": "Choose which Discord roles grant access to this server's dashboard. Admins get full access, moderators only see modules tagged as such.",
+    "admin": {
+      "heading": "Admins",
+      "description": "Discord roles with full dashboard access on this server. At least one role required."
+    },
+    "moderator": {
+      "heading": "Moderators",
+      "description": "Roles with access to moderation-tagged modules only (moderation, anti-spam)."
+    },
+    "saveButton": "Save",
+    "previewButton": "See who has access",
+    "successMessage": "Permissions saved.",
+    "emptyAdminWarning": "At least one admin role is required.",
+    "removeSelfWarning": "You are removing a role that grants you access. Confirm?",
+    "previewHeading": "Access preview",
+    "previewAdminsLabel": "Admins",
+    "previewModeratorsLabel": "Moderators",
+    "previewEmpty": "No members.",
+    "errors": {
+      "invalidForm": "Missing fields.",
+      "invalidBody": "Invalid format.",
+      "invalidPermissions": "Invalid configuration. Check there are no duplicates and at least one admin role is selected.",
+      "unknownRoleIds": "Some roles no longer exist on the server.",
+      "notFound": "Page not found.",
+      "network": "Network issue. Check your connection and try again.",
+      "unknown": "An unexpected error occurred on the API side."
+    },
+    "roleSelect": {
+      "searchPlaceholder": "Search a role…",
+      "empty": "No role found.",
+      "memberCount": "{count, plural, =0 {no member} one {# member} other {# members}}",
+      "disabledLabel": "locked"
+    }
+  },
   "admin": {
     "shell": {
       "banner": "Instance administration — host-only area. Changes apply immediately.",
