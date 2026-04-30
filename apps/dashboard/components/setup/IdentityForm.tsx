@@ -26,6 +26,7 @@ export interface IdentityFormCopy {
   readonly avatarLabel: string;
   readonly avatarHint: string;
   readonly avatarRemove: string;
+  readonly avatarSavedLabel: string;
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly skip: string;
@@ -34,6 +35,14 @@ export interface IdentityFormCopy {
   readonly previous: string;
   readonly success: string;
   readonly errors: Readonly<Record<string, string>>;
+}
+
+export interface IdentityFormProps {
+  readonly copy: IdentityFormCopy;
+  /** Valeurs déjà persistées en DB (PR 7.6 — persistance form). */
+  readonly initialName?: string | null;
+  readonly initialDescription?: string | null;
+  readonly initialAvatarUrl?: string | null;
 }
 
 const initial: SetupActionState<IdentityResponse> = { kind: 'idle' };
@@ -52,7 +61,12 @@ const readFileAsDataUri = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-export function IdentityForm({ copy }: { readonly copy: IdentityFormCopy }): ReactElement {
+export function IdentityForm({
+  copy,
+  initialName,
+  initialDescription,
+  initialAvatarUrl,
+}: IdentityFormProps): ReactElement {
   const [state, action, pending] = useActionState(submitIdentity, initial);
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +108,7 @@ export function IdentityForm({ copy }: { readonly copy: IdentityFormCopy }): Rea
             type="text"
             maxLength={32}
             placeholder={copy.namePlaceholder}
+            defaultValue={initialName ?? ''}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -135,6 +150,16 @@ export function IdentityForm({ copy }: { readonly copy: IdentityFormCopy }): Rea
                 {copy.avatarRemove}
               </button>
             </div>
+          ) : initialAvatarUrl !== null && initialAvatarUrl !== undefined ? (
+            <div className="flex items-center gap-3" data-testid="identity-avatar-saved">
+              {/* biome-ignore lint/performance/noImgElement: avatar Discord déjà servi par leur CDN, pas besoin du loader Next */}
+              <img
+                src={initialAvatarUrl}
+                alt=""
+                className="h-12 w-12 rounded-full border border-border-muted object-cover"
+              />
+              <span className="text-xs text-muted-foreground">{copy.avatarSavedLabel}</span>
+            </div>
           ) : null}
           <p className="text-xs text-muted-foreground">{copy.avatarHint}</p>
           <input type="hidden" name="avatar" value={avatarDataUri ?? ''} />
@@ -153,6 +178,7 @@ export function IdentityForm({ copy }: { readonly copy: IdentityFormCopy }): Rea
             rows={3}
             maxLength={400}
             placeholder={copy.descriptionPlaceholder}
+            defaultValue={initialDescription ?? ''}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>

@@ -28,9 +28,24 @@ export interface DiscordAppFormCopy {
   readonly errors: Readonly<Record<string, string>>;
 }
 
+export interface DiscordAppFormProps {
+  readonly copy: DiscordAppFormCopy;
+  /**
+   * Valeurs déjà persistées en DB (PR 7.6 — persistance form). Quand
+   * fournies, l'admin retrouve sa saisie à un retour en arrière dans
+   * le wizard, et peut la corriger ou avancer sans la re-saisir.
+   */
+  readonly initialAppId?: string | null;
+  readonly initialPublicKey?: string | null;
+}
+
 const initial: SetupActionState<DiscordAppResponse> = { kind: 'idle' };
 
-export function DiscordAppForm({ copy }: { readonly copy: DiscordAppFormCopy }): ReactElement {
+export function DiscordAppForm({
+  copy,
+  initialAppId,
+  initialPublicKey,
+}: DiscordAppFormProps): ReactElement {
   const [state, action, pending] = useActionState(submitDiscordApp, initial);
   const errorMessage = state.kind === 'error' ? (copy.errors[state.code] ?? state.message) : null;
   const success = state.kind === 'success' ? state.data : null;
@@ -50,6 +65,7 @@ export function DiscordAppForm({ copy }: { readonly copy: DiscordAppFormCopy }):
             autoComplete="off"
             spellCheck={false}
             placeholder={copy.appIdPlaceholder}
+            defaultValue={initialAppId ?? ''}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -65,6 +81,7 @@ export function DiscordAppForm({ copy }: { readonly copy: DiscordAppFormCopy }):
             autoComplete="off"
             spellCheck={false}
             placeholder={copy.publicKeyPlaceholder}
+            defaultValue={initialPublicKey ?? ''}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>

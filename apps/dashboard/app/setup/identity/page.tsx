@@ -4,8 +4,11 @@ import type { ReactElement } from 'react';
 import { IdentityForm } from '../../../components/setup/IdentityForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { fetchSetupStatus } from '../../../lib/setup-client';
 import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
+
+const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 
 /**
  * Étape 6 du wizard — identité du bot (optionnelle). Server
@@ -19,6 +22,7 @@ export default async function IdentityPage(): Promise<ReactElement> {
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.identity');
   const stepperCopy = await loadStepperCopy();
+  const status = await fetchSetupStatus(API_URL, fetch);
 
   return (
     <SetupShell
@@ -34,12 +38,16 @@ export default async function IdentityPage(): Promise<ReactElement> {
           {t('editLater')}
         </p>
         <IdentityForm
+          initialName={status?.botName ?? null}
+          initialDescription={status?.botDescription ?? null}
+          initialAvatarUrl={status?.botAvatarUrl ?? null}
           copy={{
             nameLabel: t('name.label'),
             namePlaceholder: t('name.placeholder'),
             avatarLabel: t('avatar.label'),
             avatarHint: t('avatar.hint'),
             avatarRemove: t('avatar.remove'),
+            avatarSavedLabel: t('avatar.savedLabel'),
             descriptionLabel: t('description.label'),
             descriptionPlaceholder: t('description.placeholder'),
             skip: t('skip'),

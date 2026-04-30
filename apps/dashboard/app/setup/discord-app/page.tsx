@@ -4,10 +4,12 @@ import type { ReactElement } from 'react';
 import { DiscordAppForm } from '../../../components/setup/DiscordAppForm';
 import { SetupShell } from '../../../components/setup/SetupShell';
 import { SetupStep } from '../../../components/setup/SetupStep';
+import { fetchSetupStatus } from '../../../lib/setup-client';
 import { loadStepperCopy } from '../../../lib/setup-stepper-copy';
 import { SETUP_STEPS, setupStepIndex } from '../../../lib/setup-steps';
 
 const PORTAL_URL = 'https://discord.com/developers/applications';
+const API_URL = process.env['VARDE_API_URL'] ?? 'http://localhost:4000';
 
 /**
  * Étape 3 du wizard — Application ID + Public Key Discord. Server
@@ -19,6 +21,9 @@ export default async function DiscordAppPage(): Promise<ReactElement> {
   const tActions = await getTranslations('setup.actions');
   const t = await getTranslations('setup.discordApp');
   const stepperCopy = await loadStepperCopy();
+  // Pré-remplissage si l'admin revient sur cette étape (PR 7.6 —
+  // persistance form). Échec silencieux : `null` → champs vides.
+  const status = await fetchSetupStatus(API_URL, fetch);
 
   return (
     <SetupShell
@@ -58,6 +63,8 @@ export default async function DiscordAppPage(): Promise<ReactElement> {
           {t('openPortal')}
         </a>
         <DiscordAppForm
+          initialAppId={status?.discordAppId ?? null}
+          initialPublicKey={status?.discordPublicKey ?? null}
           copy={{
             appIdLabel: t('appId.label'),
             appIdPlaceholder: t('appId.placeholder'),

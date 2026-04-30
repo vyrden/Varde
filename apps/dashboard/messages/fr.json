@@ -187,7 +187,8 @@
       "avatar": {
         "label": "Avatar (PNG, JPG ou GIF)",
         "hint": "Laissez vide pour conserver l'avatar par défaut. Taille max 8 Mo.",
-        "remove": "Retirer"
+        "remove": "Retirer",
+        "savedLabel": "Avatar déjà enregistré. Choisissez un fichier ci-dessus pour le remplacer, ou laissez vide pour le garder."
       },
       "description": {
         "label": "Description",

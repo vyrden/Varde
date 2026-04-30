@@ -23,6 +23,24 @@ export interface SystemCheckPayload {
   readonly detectedBaseUrl: string;
 }
 
+/**
+ * Réponse de `GET /setup/status` (PR 7.6 — étendue pour la persistance
+ * des formulaires du wizard). Les valeurs sensibles (token, clé secrète)
+ * ne sortent pas en clair, seulement des booléens `hasBotToken` /
+ * `hasClientSecret`. Voir ADR 0013 / 0016.
+ */
+export interface SetupStatusPayload {
+  readonly configured: boolean;
+  readonly currentStep: number;
+  readonly discordAppId: string | null;
+  readonly discordPublicKey: string | null;
+  readonly hasBotToken: boolean;
+  readonly hasClientSecret: boolean;
+  readonly botName: string | null;
+  readonly botDescription: string | null;
+  readonly botAvatarUrl: string | null;
+}
+
 /** Réponse de `POST /setup/discord-app`. */
 export interface DiscordAppResponse {
   readonly appName: string;
@@ -124,4 +142,27 @@ export async function runSystemCheck(
     };
   }
   return { ok: true, checks: body.checks, detectedBaseUrl: body.detectedBaseUrl };
+}
+
+/**
+ * Récupère l'état courant du wizard (PR 7.6 — persistance des
+ * formulaires). Server-only : le call est effectué depuis chaque
+ * page du wizard pour pré-remplir les formulaires avec ce qui a déjà
+ * été saisi, pour qu'un retour arrière ne perde pas les données.
+ *
+ * Échec gracieux : retourne `null` si l'API est injoignable. La page
+ * fait alors un fallback sur des champs vides — mieux que de crasher
+ * le wizard pour un fetch raté.
+ */
+export async function fetchSetupStatus(
+  apiUrl: string,
+  fetchImpl: SetupFetch,
+): Promise<SetupStatusPayload | null> {
+  try {
+    const res = await fetchImpl(`${apiUrl}/setup/status`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as SetupStatusPayload;
+  } catch {
+    return null;
+  }
 }
