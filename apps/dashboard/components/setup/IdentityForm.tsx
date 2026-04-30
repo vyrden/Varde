@@ -2,22 +2,26 @@
 
 import Link from 'next/link';
 import type { ChangeEvent, ReactElement } from 'react';
-import { useActionState, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { type SetupActionState, submitIdentity } from '../../lib/setup-actions';
 import type { IdentityResponse } from '../../lib/setup-client';
 import { setupStepHref } from '../../lib/setup-steps';
+import { useDebounced } from '../../lib/use-debounced';
 
 /**
- * Formulaire client de l'étape « Identité du bot » du wizard.
- * Étape facultative — l'admin peut soumettre un body vide via le
- * bouton « Passer » qui n'envoie aucun champ (l'API skip alors
- * l'appel Discord et bumpe juste `setup_step`).
+ * Formulaire client de l'étape « Identité du bot » du wizard, refondu
+ * en auto-save (jalon 7 PR 7.7).
  *
- * Avatar : champ `<input type="file">` qui lit le fichier en data
- * URI côté navigateur. Pas de drag&drop ni de contrôle magic bytes
- * dans cette PR — l'API forward le data URI à `PATCH
- * /applications/@me`, et Discord refuse les non-images.
+ * Étape facultative — l'admin peut ne rien saisir et passer
+ * directement. Si l'admin saisit quelque chose, ça se persiste tout
+ * seul après 500 ms d'inactivité (PATCH `/applications/@me` côté
+ * Discord, qui peut renvoyer une URL CDN pour l'avatar).
+ *
+ * Avatar : champ `<input type="file">` qui lit le fichier en data URI
+ * côté navigateur. Le data URI est forwardé à l'API qui le
+ * transmet à Discord. Pas de drag&drop ni de magic-bytes check —
+ * Discord rejette les non-images, ça suffit.
  */
 
 export interface IdentityFormCopy {
@@ -30,22 +34,19 @@ export interface IdentityFormCopy {
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly skip: string;
-  readonly submit: string;
   readonly continueLabel: string;
   readonly previous: string;
-  readonly success: string;
+  readonly saving: string;
+  readonly saved: string;
   readonly errors: Readonly<Record<string, string>>;
 }
 
 export interface IdentityFormProps {
   readonly copy: IdentityFormCopy;
-  /** Valeurs déjà persistées en DB (PR 7.6 — persistance form). */
   readonly initialName?: string | null;
   readonly initialDescription?: string | null;
   readonly initialAvatarUrl?: string | null;
 }
-
-const initial: SetupActionState<IdentityResponse> = { kind: 'idle' };
 
 const readFileAsDataUri = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -61,18 +62,63 @@ const readFileAsDataUri = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+type SaveState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'saving' }
+  | { readonly kind: 'saved' }
+  | { readonly kind: 'error'; readonly code: string; readonly message: string };
+
 export function IdentityForm({
   copy,
   initialName,
   initialDescription,
   initialAvatarUrl,
 }: IdentityFormProps): ReactElement {
-  const [state, action, pending] = useActionState(submitIdentity, initial);
+  const [name, setName] = useState(initialName ?? '');
+  const [description, setDescription] = useState(initialDescription ?? '');
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const errorMessage = state.kind === 'error' ? (copy.errors[state.code] ?? state.message) : null;
-  const success = state.kind === 'success' ? state.data : null;
+  const debouncedName = useDebounced(name, 500);
+  const debouncedDescription = useDebounced(description, 500);
+
+  const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+  const lastSavedRef = useRef<string>(`${name} ${description}`);
+
+  // Auto-save sur changement stabilisé. On inclut l'avatar dans
+  // la même boucle : sa sélection met setAvatarDataUri, ce qui
+  // re-render et déclenche le submit ci-dessous.
+  useEffect(() => {
+    const fingerprint = `${debouncedName} ${debouncedDescription} ${avatarDataUri ?? ''}`;
+    if (fingerprint === lastSavedRef.current) return;
+    if (debouncedName.length === 0 && debouncedDescription.length === 0 && avatarDataUri === null) {
+      // Tout est vide ET aucun avatar choisi : pas de persist.
+      lastSavedRef.current = fingerprint;
+      return;
+    }
+    setSave({ kind: 'saving' });
+    let cancelled = false;
+    void (async () => {
+      const formData = new FormData();
+      if (debouncedName.length > 0) formData.append('name', debouncedName);
+      if (debouncedDescription.length > 0) formData.append('description', debouncedDescription);
+      if (avatarDataUri !== null) formData.append('avatar', avatarDataUri);
+      const result: SetupActionState<IdentityResponse> = await submitIdentity(
+        { kind: 'idle' },
+        formData,
+      );
+      if (cancelled) return;
+      lastSavedRef.current = fingerprint;
+      if (result.kind === 'success') {
+        setSave({ kind: 'saved' });
+      } else if (result.kind === 'error') {
+        setSave({ kind: 'error', code: result.code, message: result.message });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedName, debouncedDescription, avatarDataUri]);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0];
@@ -95,9 +141,11 @@ export function IdentityForm({
     }
   };
 
+  const errorMessage = save.kind === 'error' ? (copy.errors[save.code] ?? save.message) : null;
+
   return (
     <div className="space-y-6">
-      <form action={action} className="space-y-4">
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="identity-name" className="block text-sm font-medium text-foreground">
             {copy.nameLabel}
@@ -108,7 +156,8 @@ export function IdentityForm({
             type="text"
             maxLength={32}
             placeholder={copy.namePlaceholder}
-            defaultValue={initialName ?? ''}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -130,11 +179,6 @@ export function IdentityForm({
           />
           {avatarDataUri !== null ? (
             <div className="flex items-center gap-3">
-              {/*
-               * Preview en data URI inline — pas un asset externe à
-               * optimiser. Image de Next.js exige un loader pour les
-               * data URIs et la perf gain est nulle ici.
-               */}
               {/* biome-ignore lint/performance/noImgElement: data URI preview, not an external asset */}
               <img
                 src={avatarDataUri}
@@ -162,7 +206,6 @@ export function IdentityForm({
             </div>
           ) : null}
           <p className="text-xs text-muted-foreground">{copy.avatarHint}</p>
-          <input type="hidden" name="avatar" value={avatarDataUri ?? ''} />
         </div>
 
         <div className="space-y-1.5">
@@ -178,59 +221,64 @@ export function IdentityForm({
             rows={3}
             maxLength={400}
             placeholder={copy.descriptionPlaceholder}
-            defaultValue={initialDescription ?? ''}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             className="block w-full rounded-md border border-border-muted bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-muted pt-4">
-          <Link
-            href={setupStepHref('oauth')}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border-muted px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {copy.previous}
-          </Link>
-          <div className="flex gap-3">
-            <Link
-              href={setupStepHref('summary')}
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border-muted px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {copy.skip}
-            </Link>
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pending ? '…' : copy.submit}
-            </button>
-          </div>
-        </div>
-      </form>
-
+      {save.kind === 'saving' ? (
+        <p
+          className="rounded-md border border-border-muted bg-card-muted/40 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="identity-saving"
+          role="status"
+        >
+          {copy.saving}
+        </p>
+      ) : null}
+      {save.kind === 'saved' ? (
+        <p
+          className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100"
+          data-testid="identity-saved"
+          role="status"
+        >
+          {copy.saved}
+        </p>
+      ) : null}
       {errorMessage !== null ? (
-        <div
-          className="rounded-md border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
+        <p
+          className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
           data-testid="identity-error"
           role="alert"
         >
           {errorMessage}
-        </div>
+        </p>
       ) : null}
 
-      {success !== null ? (
-        <div className="space-y-3 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-3">
-          <p className="text-sm text-emerald-100" data-testid="identity-success">
-            {copy.success}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-muted pt-4">
+        <Link
+          href={setupStepHref('oauth')}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-border-muted px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {copy.previous}
+        </Link>
+        <div className="flex gap-3">
+          <Link
+            href={setupStepHref('summary')}
+            className="inline-flex h-9 items-center justify-center rounded-md border border-border-muted px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {copy.skip}
+          </Link>
           <Link
             href={setupStepHref('summary')}
             className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            data-testid="identity-continue"
           >
             {copy.continueLabel}
           </Link>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

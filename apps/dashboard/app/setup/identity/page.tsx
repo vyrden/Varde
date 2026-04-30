@@ -51,10 +51,10 @@ export default async function IdentityPage(): Promise<ReactElement> {
             descriptionLabel: t('description.label'),
             descriptionPlaceholder: t('description.placeholder'),
             skip: t('skip'),
-            submit: t('submit'),
             continueLabel: tActions('next'),
             previous: tActions('previous'),
-            success: t('success'),
+            saving: t('saving'),
+            saved: t('saved'),
             errors: {
               invalid_body: t('errors.invalidBody'),
               missing_bot_token: t('errors.missingBotToken'),

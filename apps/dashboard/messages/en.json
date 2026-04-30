@@ -91,13 +91,15 @@
       },
       "appId": {
         "label": "Application ID",
-        "placeholder": "e.g. 1212345678901234567"
+        "placeholder": "e.g. 1212345678901234567",
+        "formatError": "The Application ID must be 17 to 20 digits."
       },
       "publicKey": {
         "label": "Public Key",
-        "placeholder": "64 hex characters (Ed25519)"
+        "placeholder": "64 hex characters (Ed25519)",
+        "formatError": "The public key must be 64 hexadecimal characters (0-9, a-f)."
       },
-      "submit": "Validate",
+      "validating": "Validating with Discord…",
       "success": "Discord application detected:",
       "errors": {
         "invalidBody": "Application ID or Public Key is malformed. Verify the values shown by Discord.",
@@ -121,10 +123,12 @@
         "edit": "Enter a new token",
         "keep": "Continue with this token"
       },
+      "validating": "Validating token with Discord…",
       "token": {
         "label": "Bot token",
         "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
         "hint": "Never share this token. It is encrypted at rest with your master key.",
+        "formatError": "The token looks too short. Check that you pasted the full value from the Developer portal.",
         "show": "Show",
         "hide": "Hide"
       },
@@ -168,12 +172,14 @@
         "edit": "Enter a new client secret",
         "keep": "Continue with this secret"
       },
+      "validating": "Validating the client secret with Discord…",
       "secret": {
         "label": "Client Secret",
         "placeholder": "sgvGLh...",
         "hint": "Encrypted at rest with your master key. Never logged, never displayed in clear.",
         "show": "Show",
-        "hide": "Hide"
+        "hide": "Hide",
+        "formatError": "The client secret looks too short. Check that you pasted the full value from the Discord portal."
       },
       "submit": "Validate",
       "success": "Client secret accepted.",
@@ -205,8 +211,8 @@
         "placeholder": "Describe your bot in a few words (400 characters max)."
       },
       "skip": "Skip this step",
-      "submit": "Save",
-      "success": "Identity saved to Discord.",
+      "saving": "Saving…",
+      "saved": "Identity saved to Discord.",
       "errors": {
         "invalidBody": "One of the fields does not match the expected format (name 1–32 chars, description 0–400 chars, avatar valid image).",
         "missingBotToken": "Bot token is not yet stored. Go back to the \"Bot token\" step.",

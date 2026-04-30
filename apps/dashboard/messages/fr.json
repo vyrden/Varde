@@ -91,13 +91,15 @@
       },
       "appId": {
         "label": "Identifiant d'application",
-        "placeholder": "ex. 1212345678901234567"
+        "placeholder": "ex. 1212345678901234567",
+        "formatError": "L'identifiant doit faire 17 à 20 chiffres."
       },
       "publicKey": {
         "label": "Clé publique",
-        "placeholder": "64 caractères hexadécimaux"
+        "placeholder": "64 caractères hexadécimaux",
+        "formatError": "La clé publique doit faire 64 caractères hexadécimaux (0-9, a-f)."
       },
-      "submit": "Valider",
+      "validating": "Validation en cours auprès de Discord…",
       "success": "Application Discord détectée :",
       "errors": {
         "invalidBody": "Identifiant d'application ou clé publique mal formé. Vérifiez qu'ils correspondent à ce que Discord affiche.",
@@ -121,14 +123,15 @@
         "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
         "hint": "Ne partagez jamais ce token. Il est chiffré au repos avec votre master key.",
         "show": "Afficher",
-        "hide": "Masquer"
+        "hide": "Masquer",
+        "formatError": "Le token semble trop court. Vérifiez que vous avez collé la valeur complète depuis le portail Developer."
       },
       "savedBanner": {
         "label": "Le token du bot est enregistré et chiffré au repos.",
         "edit": "Saisir un nouveau token",
         "keep": "Continuer avec ce token"
       },
-      "submit": "Valider",
+      "validating": "Validation du token auprès de Discord…",
       "success": "Bot identifié :",
       "invalidToken": "Token refusé par Discord. Re-générez-en un dans le portail Developer et réessayez.",
       "intents": {
@@ -168,14 +171,15 @@
         "placeholder": "sgvGLh...",
         "hint": "Chiffrée au repos avec votre master key. Jamais loggée, jamais affichée en clair.",
         "show": "Afficher",
-        "hide": "Masquer"
+        "hide": "Masquer",
+        "formatError": "La clé secrète semble trop courte. Vérifiez que vous avez collé la valeur complète depuis le portail Discord."
       },
       "savedBanner": {
         "label": "La clé secrète du client est enregistrée et chiffrée au repos.",
         "edit": "Saisir une nouvelle clé secrète",
         "keep": "Continuer avec cette clé"
       },
-      "submit": "Valider",
+      "validating": "Validation de la clé secrète auprès de Discord…",
       "success": "Clé secrète acceptée.",
       "invalidSecret": "Clé secrète refusée par Discord. Re-générez-en une dans le portail (OAuth2 → Reset Secret) et réessayez.",
       "errors": {
@@ -205,8 +209,8 @@
         "placeholder": "Décrivez votre bot en quelques mots (400 caractères max)."
       },
       "skip": "Passer cette étape",
-      "submit": "Enregistrer",
-      "success": "Identité enregistrée auprès de Discord.",
+      "saving": "Enregistrement…",
+      "saved": "Identité enregistrée auprès de Discord.",
       "errors": {
         "invalidBody": "L'un des champs ne respecte pas le format attendu (nom 1–32 chars, description 0–400 chars, avatar image valide).",
         "missingBotToken": "Le token bot n'est pas encore enregistré. Reprenez l'étape « Token bot ».",

@@ -2,51 +2,52 @@
 
 import Link from 'next/link';
 import type { ReactElement } from 'react';
-import { useActionState, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { type SetupActionState, submitBotToken } from '../../lib/setup-actions';
 import type { BotTokenResponse, PrivilegedIntentName } from '../../lib/setup-client';
 import { setupStepHref } from '../../lib/setup-steps';
+import { useDebounced } from '../../lib/use-debounced';
 import { IntentsCheckList } from './IntentsCheckList';
 import { SecretField } from './SecretField';
 
 /**
  * Formulaire client de l'étape « Le Token du Bot et intents
- * privilégiés » du wizard.
+ * privilégiés » du wizard, refondu en auto-validation + auto-save
+ * (jalon 7 PR 7.7).
  *
- * Workflow nominal (premier passage) :
+ * Comportement :
  *
- * 1. L'admin colle son token depuis le portail Developer.
- * 2. On soumet à `POST /setup/bot-token` qui valide via Discord et
- *    renvoie `{ valid, botUser?, missingIntents? }`.
- * 3. Si `valid: false` → message ciblé « token refusé », pas
- *    d'avancement.
- * 4. Si `valid: true` → affichage du nom du bot + liste des 3
- *    intents privilégiés. Si l'un manque, le lien « Activer » pointe
- *    vers le portail. L'admin peut continuer même avec des intents
- *    manquants (certains modules tournent sans), avec un message
- *    explicite.
- *
- * **Persistance du token (PR 7.6 sub-livrable 4).** Quand le token
- * est déjà enregistré (retour en arrière dans le wizard), on n'affiche
- * pas l'input par défaut — le secret n'est jamais ré-affiché en clair,
- * même à l'admin qui l'a saisi. À la place, un encart « ✓ Token
- * enregistré » avec deux actions : « Continuer » (avance directement
- * à l'étape OAuth) et « Saisir un nouveau token » (révèle l'input
- * pour rotation).
+ * - **Token déjà persisté (`tokenAlreadySaved=true`).** Affiche un
+ *   banner « ✓ Token enregistré » + boutons Précédent / Modifier /
+ *   Continuer. Cliquer Modifier révèle l'input vide pour rotation.
+ * - **Saisie du token.** Format check inline (longueur min). Quand
+ *   le format est OK, après 500 ms d'inactivité, on appelle
+ *   automatiquement `POST /setup/bot-token`. L'API valide via Discord
+ *   et persiste si OK.
+ * - **Pendant l'appel** : bandeau « Validation auprès de Discord… ».
+ * - **Sur succès** : nom du bot détecté + checklist des intents
+ *   privilégiés (avec lien « Activer dans le portail » pour ceux qui
+ *   manquent) + bouton Continuer activé.
+ * - **Sur échec** (token refusé) : bandeau rouge avec lien vers le
+ *   portail pour re-générer un token.
  */
+
+const TOKEN_MIN_LENGTH = 30;
+const TOKEN_FORMAT_REGEX = new RegExp(`^\\S{${TOKEN_MIN_LENGTH},}$`, 'u');
 
 export interface BotTokenFormCopy {
   readonly tokenLabel: string;
   readonly tokenPlaceholder: string;
   readonly tokenHint: string;
+  readonly tokenFormatError: string;
   readonly secretShow: string;
   readonly secretHide: string;
-  readonly submit: string;
   readonly continueLabel: string;
   readonly previous: string;
   readonly successPrefix: string;
   readonly invalidToken: string;
+  readonly validating: string;
   readonly intentsHeading: string;
   readonly intentsAllOk: string;
   readonly intentsMissing: string;
@@ -61,27 +62,86 @@ export interface BotTokenFormCopy {
 
 export interface BotTokenFormProps {
   readonly copy: BotTokenFormCopy;
-  /**
-   * `true` quand le token est déjà persisté en DB (retour en arrière
-   * dans le wizard). On affiche alors le banner « enregistré » plutôt
-   * que l'input vide.
-   */
   readonly tokenAlreadySaved?: boolean;
 }
 
-const initial: SetupActionState<BotTokenResponse> = { kind: 'idle' };
+type ValidationState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'validating' }
+  | {
+      readonly kind: 'valid';
+      readonly botUser: { username: string };
+      readonly missingIntents: readonly PrivilegedIntentName[];
+    }
+  | { readonly kind: 'invalid'; readonly code: string; readonly message: string };
 
 export function BotTokenForm({ copy, tokenAlreadySaved }: BotTokenFormProps): ReactElement {
-  const [state, action, pending] = useActionState(submitBotToken, initial);
   const [isEditing, setIsEditing] = useState(!tokenAlreadySaved);
+  const [token, setToken] = useState('');
+  const debouncedToken = useDebounced(token, 500);
 
-  const errorMessage = state.kind === 'error' ? (copy.errors[state.code] ?? state.message) : null;
-  const validResult = state.kind === 'success' && state.data.valid ? state.data : null;
-  const invalid = state.kind === 'success' && !state.data.valid;
+  const [validation, setValidation] = useState<ValidationState>({ kind: 'idle' });
+  const lastValidatedRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isEditing) return;
+    if (debouncedToken === lastValidatedRef.current) return;
+    if (debouncedToken.length === 0) {
+      setValidation({ kind: 'idle' });
+      return;
+    }
+    if (!TOKEN_FORMAT_REGEX.test(debouncedToken)) {
+      setValidation({ kind: 'idle' });
+      return;
+    }
+    setValidation({ kind: 'validating' });
+    let cancelled = false;
+    void (async () => {
+      const formData = new FormData();
+      formData.append('token', debouncedToken);
+      const result: SetupActionState<BotTokenResponse> = await submitBotToken(
+        { kind: 'idle' },
+        formData,
+      );
+      if (cancelled) return;
+      lastValidatedRef.current = debouncedToken;
+      if (result.kind === 'success') {
+        if (result.data.valid) {
+          setValidation({
+            kind: 'valid',
+            botUser: { username: result.data.botUser.username },
+            missingIntents: result.data.missingIntents,
+          });
+        } else {
+          setValidation({ kind: 'invalid', code: 'invalid_token', message: copy.invalidToken });
+        }
+      } else if (result.kind === 'error') {
+        setValidation({ kind: 'invalid', code: result.code, message: result.message });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedToken, isEditing, copy.invalidToken]);
+
+  const tokenFormatStatus: 'neutral' | 'ko' =
+    token.length === 0 ? 'neutral' : TOKEN_FORMAT_REGEX.test(token) ? 'neutral' : 'ko';
+
+  const errorMessage =
+    validation.kind === 'invalid'
+      ? validation.code === 'invalid_token'
+        ? copy.invalidToken
+        : (copy.errors[validation.code] ?? validation.message)
+      : null;
+
+  // Continuer accessible si :
+  // - Token déjà persisté ET utilisateur n'a pas cliqué Modifier (banner mode)
+  // - Modification en cours et validation Discord OK
+  const canContinue = (!isEditing && tokenAlreadySaved) || validation.kind === 'valid';
 
   return (
     <div className="space-y-6">
-      {!isEditing ? (
+      {!isEditing && tokenAlreadySaved ? (
         <div
           className="space-y-3 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-3"
           data-testid="bot-token-saved-banner"
@@ -115,16 +175,65 @@ export function BotTokenForm({ copy, tokenAlreadySaved }: BotTokenFormProps): Re
           </div>
         </div>
       ) : (
-        <form action={action} className="space-y-4">
+        <>
           <SecretField
             name="token"
             label={copy.tokenLabel}
             placeholder={copy.tokenPlaceholder}
             hint={copy.tokenHint}
-            required
             showLabel={copy.secretShow}
             hideLabel={copy.secretHide}
+            onChange={(e) => setToken(e.target.value)}
           />
+          {tokenFormatStatus === 'ko' ? (
+            <p className="text-xs text-rose-400" data-testid="bot-token-format-error" role="alert">
+              {copy.tokenFormatError}
+            </p>
+          ) : null}
+
+          {validation.kind === 'validating' ? (
+            <p
+              className="rounded-md border border-border-muted bg-card-muted/40 px-3 py-2 text-sm text-muted-foreground"
+              data-testid="bot-token-validating"
+              role="status"
+            >
+              {copy.validating}
+            </p>
+          ) : null}
+
+          {validation.kind === 'valid' ? (
+            <div className="space-y-4 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-3">
+              <p className="text-sm text-emerald-100" data-testid="bot-token-success">
+                {copy.successPrefix}{' '}
+                <strong className="font-semibold">{validation.botUser.username}</strong>
+              </p>
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                  {copy.intentsHeading}
+                </h3>
+                <IntentsCheckList
+                  missing={validation.missingIntents}
+                  labels={copy.intentsLabels}
+                  enableLabel={copy.enableLabel}
+                  portalHref={copy.portalHref}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {validation.missingIntents.length === 0 ? copy.intentsAllOk : copy.intentsMissing}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {errorMessage !== null ? (
+            <p
+              className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+              data-testid="bot-token-error"
+              role="alert"
+            >
+              {errorMessage}
+            </p>
+          ) : null}
+
           <div className="flex items-center justify-between gap-3 border-t border-border-muted pt-4">
             <Link
               href={setupStepHref('discord-app')}
@@ -132,65 +241,26 @@ export function BotTokenForm({ copy, tokenAlreadySaved }: BotTokenFormProps): Re
             >
               {copy.previous}
             </Link>
-            <button
-              type="submit"
-              disabled={pending}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pending ? '…' : copy.submit}
-            </button>
+            {canContinue ? (
+              <Link
+                href={setupStepHref('oauth')}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid="bot-token-continue"
+              >
+                {copy.continueLabel}
+              </Link>
+            ) : (
+              <span
+                aria-disabled="true"
+                className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md bg-primary/40 px-5 text-sm font-medium text-primary-foreground opacity-60"
+                data-testid="bot-token-continue-disabled"
+              >
+                {copy.continueLabel}
+              </span>
+            )}
           </div>
-        </form>
+        </>
       )}
-
-      {errorMessage !== null ? (
-        <div
-          className="rounded-md border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
-          data-testid="bot-token-error"
-          role="alert"
-        >
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {invalid ? (
-        <div
-          className="rounded-md border border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
-          data-testid="bot-token-invalid"
-          role="alert"
-        >
-          {copy.invalidToken}
-        </div>
-      ) : null}
-
-      {validResult !== null ? (
-        <div className="space-y-4 rounded-md border border-emerald-500/50 bg-emerald-500/10 px-4 py-3">
-          <p className="text-sm text-emerald-100" data-testid="bot-token-success">
-            {copy.successPrefix}{' '}
-            <strong className="font-semibold">{validResult.botUser.username}</strong>
-          </p>
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground">
-              {copy.intentsHeading}
-            </h3>
-            <IntentsCheckList
-              missing={validResult.missingIntents}
-              labels={copy.intentsLabels}
-              enableLabel={copy.enableLabel}
-              portalHref={copy.portalHref}
-            />
-            <p className="text-xs text-muted-foreground">
-              {validResult.missingIntents.length === 0 ? copy.intentsAllOk : copy.intentsMissing}
-            </p>
-          </div>
-          <Link
-            href={setupStepHref('oauth')}
-            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            {copy.continueLabel}
-          </Link>
-        </div>
-      ) : null}
     </div>
   );
 }

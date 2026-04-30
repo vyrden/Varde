@@ -68,12 +68,14 @@ export default async function DiscordAppPage(): Promise<ReactElement> {
           copy={{
             appIdLabel: t('appId.label'),
             appIdPlaceholder: t('appId.placeholder'),
+            appIdFormatError: t('appId.formatError'),
             publicKeyLabel: t('publicKey.label'),
             publicKeyPlaceholder: t('publicKey.placeholder'),
-            submit: t('submit'),
+            publicKeyFormatError: t('publicKey.formatError'),
             continueLabel: tActions('next'),
             previous: tActions('previous'),
             successPrefix: t('success'),
+            validating: t('validating'),
             errors: {
               invalid_body: t('errors.invalidBody'),
               discord_app_not_found: t('errors.notFound'),
