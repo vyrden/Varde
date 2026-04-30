@@ -199,6 +199,33 @@ const handlers = {
     json(res, 200, { ok: true });
   },
 
+  // -- INTERNAL ENDPOINT (PR 7.5) --
+  // `/internal/oauth-credentials` est appelé par Auth.js et par
+  // `app/guilds/[guildId]/layout.tsx` pour récupérer
+  // `{ clientId, clientSecret }` depuis la BDD chiffrée. Le mock
+  // accepte tout Bearer non vide (le runtime valide l'égalité avec
+  // `VARDE_AUTH_SECRET` ; côté E2E on fait confiance à l'env).
+  'GET /internal/oauth-credentials': async (req, res) => {
+    const auth = req.headers.authorization ?? '';
+    if (!auth.startsWith('Bearer ')) {
+      json(res, 401, { error: 'unauthenticated' });
+      return;
+    }
+    const token = auth.slice('Bearer '.length).trim();
+    if (token.length === 0) {
+      json(res, 401, { error: 'unauthenticated' });
+      return;
+    }
+    if (!state.configured) {
+      json(res, 404, { error: 'not_configured' });
+      return;
+    }
+    json(res, 200, {
+      clientId: state.admin.discord.appId,
+      clientSecret: 'mock-client-secret-for-e2e',
+    });
+  },
+
   // -- ADMIN MOCK (sub-livrable 8 PR 7.2) --
 
   'POST /__test/admin-state': async (req, res) => {

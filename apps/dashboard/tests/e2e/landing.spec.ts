@@ -28,7 +28,35 @@ test.describe('landing publique', () => {
     // Le titre du card et le CTA Discord sont stables — assertions
     // tolérantes à une refonte du layout autour.
     await expect(page.getByRole('button', { name: /Se connecter avec Discord/i })).toBeVisible();
-    await expect(page.getByText(/Connectez-vous avec Discord/i)).toBeVisible();
+    await expect(page.getByText(/Bienvenue sur Varde/i)).toBeVisible();
+  });
+
+  test('affiche la redirect URI à enregistrer dans le SignInRedirectHint', async ({ page }) => {
+    // PR 7.5 : la card de connexion expose la redirect URI (calculée
+    // côté serveur depuis les headers de la requête) pour qu'un admin
+    // qui hit « redirect_uri non valide » puisse la copier sans
+    // relire la doc. L'encart est dans un `<details>` — visible mais
+    // collapsed par défaut.
+    await page.goto('/');
+    const uri = page.getByTestId('signin-redirect-uri');
+    // L'URI doit refléter l'origin de la requête (Playwright tape sur
+    // 127.0.0.1:3001) — pas une valeur figée en env.
+    await expect(uri).toHaveText(/127\.0\.0\.1:3001\/api\/auth\/callback\/discord$/u);
+  });
+
+  test('le bouton de connexion poste vers /api/auth/signin/* sans valeur env Discord', async ({
+    page,
+  }) => {
+    // PR 7.5 sub-livrable 7 : ce test garde la propriété qu'aucune
+    // variable `VARDE_DISCORD_CLIENT_ID` / `VARDE_DISCORD_CLIENT_SECRET`
+    // n'est nécessaire pour servir le SignInCard. Auth.js fetch les
+    // credentials depuis le mock `/internal/oauth-credentials` à la
+    // demande (cf. `playwright.config.ts` — l'env passé au dashboard
+    // n'inclut pas ces variables).
+    await page.goto('/');
+    const button = page.getByRole('button', { name: /Se connecter avec Discord/i });
+    await expect(button).toBeVisible();
+    await expect(button).toBeEnabled();
   });
 });
 
