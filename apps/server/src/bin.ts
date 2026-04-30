@@ -514,6 +514,19 @@ function attachDiscordToHandle(
       await registerSlashCommandsForGuild(readyClient, guild.id, commands, logger);
     }
   });
+  // Status provider live pour `GET /admin/overview` (jalon 7 PR 7.2
+  // sub-livrable 7d). Lit le Client courant via le holder à chaque
+  // appel, donc suit les rotations de token sans reconstruction.
+  // `ws.ping` vaut -1 tant que pas de heartbeat → on map sur null.
+  handle.setDiscordStatusProvider(() => {
+    const client = attachment.holder.current;
+    const ready = client.isReady();
+    const ping = client.ws.ping;
+    return {
+      connected: ready,
+      latencyMs: ready && ping >= 0 ? ping : null,
+    };
+  });
   const { detach } = attachDiscordClient(
     attachment.holder.current,
     handle.dispatcher,
