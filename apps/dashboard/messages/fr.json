@@ -44,7 +44,7 @@
           "welcome": "Accueil",
           "system-check": "Système",
           "discord-app": "App Discord",
-          "bot-token": "Token bot",
+          "bot-token": "Token du bot",
           "oauth": "OAuth",
           "identity": "Identité",
           "summary": "Récap"
@@ -108,16 +108,16 @@
       }
     },
     "botToken": {
-      "title": "Token bot et intents",
+      "title": "Le Token du Bot et intents privilégiés",
       "subtitle": "Le bot a besoin d'un token et de trois intents privilégiés activés dans le portail Developer.",
       "steps": {
         "openBotTab": "Dans votre application, ouvrez l'onglet « Bot ».",
-        "resetToken": "Cliquez sur « Reset Token » et copiez la valeur immédiatement (Discord ne la rejouera pas).",
+        "resetToken": "Cliquez sur « Réinitialiser le token » (bouton « Reset Token » côté Discord) et copiez la valeur immédiatement (Discord ne la rejouera pas).",
         "enableIntents": "Activez les trois Privileged Gateway Intents (Presence, Server Members, Message Content).",
         "pasteToken": "Collez le token ci-dessous."
       },
       "token": {
-        "label": "Token bot",
+        "label": "Le Token du Bot",
         "placeholder": "MTk4NjIyNDgzNDcxOTI1MjQ4...",
         "hint": "Ne partagez jamais ce token. Il est chiffré au repos avec votre master key.",
         "show": "Afficher",
@@ -146,31 +146,31 @@
       "title": "OAuth pour le dashboard",
       "subtitle": "On configure la connexion Discord du dashboard pour vos administrateurs.",
       "steps": {
-        "openOAuthTab": "Dans votre application Discord, ouvrez l'onglet « OAuth2 → General ».",
-        "pasteRedirect": "Sous « Redirects », ajoutez l'URL ci-dessous puis cliquez « Save Changes ».",
-        "copySecret": "Toujours dans « OAuth2 → General », cliquez « Reset Secret » et copiez la valeur (Discord ne la rejouera pas).",
-        "pasteSecret": "Collez le client secret ci-dessous."
+        "openOAuthTab": "Dans votre application Discord, ouvrez l'onglet « OAuth2 ».",
+        "pasteRedirect": "Sous « Redirections » (« Redirects » côté Discord), ajoutez l'URL ci-dessous puis cliquez sur « Save Changes ».",
+        "copySecret": "Toujours dans l'onglet « OAuth2 », cliquez sur « Réinitialiser la clé secrète » (« Reset Secret » côté Discord) et copiez la valeur (Discord ne la rejouera pas).",
+        "pasteSecret": "Collez la clé secrète ci-dessous."
       },
       "redirect": {
-        "label": "Redirect URI à coller dans Discord",
+        "label": "URI de redirection à coller dans Discord",
         "copy": "Copier",
         "copied": "Copié !",
         "hint": "Vous pourrez ajouter d'autres URLs d'accès plus tard depuis l'administration de l'instance.",
         "unreachable": "Impossible d'obtenir l'URI de redirection auprès de l'API."
       },
       "secret": {
-        "label": "Client Secret",
+        "label": "Clé secrète du client",
         "placeholder": "sgvGLh...",
-        "hint": "Chiffré au repos avec votre master key. Jamais loggué, jamais affiché en clair.",
+        "hint": "Chiffrée au repos avec votre master key. Jamais loggée, jamais affichée en clair.",
         "show": "Afficher",
         "hide": "Masquer"
       },
       "submit": "Valider",
-      "success": "Client secret accepté.",
-      "invalidSecret": "Client secret refusé par Discord. Re-générez-en un dans le portail (OAuth2 → Reset Secret) et réessayez.",
+      "success": "Clé secrète acceptée.",
+      "invalidSecret": "Clé secrète refusée par Discord. Re-générez-en une dans le portail (OAuth2 → Reset Secret) et réessayez.",
       "errors": {
-        "invalidBody": "Client secret absent ou trop court.",
-        "missingAppId": "L'Application ID n'est pas encore enregistré. Reprenez l'étape « Discord App ».",
+        "invalidBody": "Clé secrète absente ou trop courte.",
+        "missingAppId": "L'identifiant d'application n'est pas encore enregistré. Reprenez l'étape « Discord App ».",
         "unreachable": "Discord est injoignable. Réessayez dans un instant.",
         "network": "Problème réseau. Vérifiez votre connexion et réessayez.",
         "unknown": "Une erreur inattendue s'est produite côté API."
@@ -210,7 +210,7 @@
       "subtitle": "Tout est en place. On peut connecter le bot à Discord et ouvrir le dashboard.",
       "checklist": {
         "discordApp": "Application Discord enregistrée",
-        "botToken": "Token bot validé et chiffré au repos",
+        "botToken": "Token du bot validé et chiffré au repos",
         "oauth": "OAuth dashboard configuré",
         "identity": "Étape identité franchie"
       },

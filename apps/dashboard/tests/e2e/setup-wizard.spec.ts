@@ -107,7 +107,7 @@ test.describe('wizard de setup — étapes formulaire', () => {
     await expect(page.getByRole('button', { name: /Copier/i })).toBeVisible();
     // L'URI reflète le baseUrl renvoyé par le mock — on lit la valeur
     // du `<input readonly>` de `CopyableField`.
-    const redirectInput = page.getByLabel(/Redirect URI à coller dans Discord/i);
+    const redirectInput = page.getByLabel(/URI de redirection à coller dans Discord/i);
     await expect(redirectInput).toHaveValue(/\/api\/auth\/callback\/discord$/u);
   });
 
