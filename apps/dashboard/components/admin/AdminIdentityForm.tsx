@@ -198,12 +198,21 @@ export function AdminIdentityForm({
         <input type="hidden" name="avatar" value={avatarDataUri ?? ''} />
 
         <div className="space-y-1.5">
-          <label
-            htmlFor="admin-identity-name"
-            className="block text-sm font-medium text-foreground"
-          >
-            {copy.nameLabel}
-          </label>
+          <div className="flex items-baseline justify-between gap-2">
+            <label
+              htmlFor="admin-identity-name"
+              className="block text-sm font-medium text-foreground"
+            >
+              {copy.nameLabel}
+            </label>
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              data-testid="admin-identity-name-counter"
+              aria-live="polite"
+            >
+              {name.length} / 32
+            </span>
+          </div>
           <input
             id="admin-identity-name"
             name="name"
@@ -228,16 +237,24 @@ export function AdminIdentityForm({
             data-testid="admin-identity-avatar-dropzone"
           >
             {avatarDataUri !== null && avatarFileMeta !== null ? (
-              <>
-                <span aria-hidden="true" className="text-2xl text-emerald-500">
-                  ✓
-                </span>
-                <span className="text-sm font-medium text-foreground">
-                  {copy.avatarLoadedTemplate
-                    .replace('{name}', avatarFileMeta.name)
-                    .replace('{size}', formatFileSize(avatarFileMeta.size))}
-                </span>
-              </>
+              <div className="flex items-center gap-3">
+                {/* biome-ignore lint/performance/noImgElement: data URI thumbnail, not an external asset */}
+                <img
+                  src={avatarDataUri}
+                  alt=""
+                  className="h-14 w-14 rounded-md border border-border-muted object-cover"
+                  data-testid="admin-identity-avatar-dropzone-preview"
+                />
+                <div className="flex flex-col items-start text-left">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
+                    <span aria-hidden="true">✓</span>
+                    <span>{avatarFileMeta.name}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatFileSize(avatarFileMeta.size)}
+                  </span>
+                </div>
+              </div>
             ) : (
               <>
                 <span aria-hidden="true" className="text-2xl text-muted-foreground">
@@ -281,12 +298,21 @@ export function AdminIdentityForm({
         </div>
 
         <div className="space-y-1.5">
-          <label
-            htmlFor="admin-identity-description"
-            className="block text-sm font-medium text-foreground"
-          >
-            {copy.descriptionLabel}
-          </label>
+          <div className="flex items-baseline justify-between gap-2">
+            <label
+              htmlFor="admin-identity-description"
+              className="block text-sm font-medium text-foreground"
+            >
+              {copy.descriptionLabel}
+            </label>
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              data-testid="admin-identity-description-counter"
+              aria-live="polite"
+            >
+              {description.length} / 400
+            </span>
+          </div>
           <textarea
             id="admin-identity-description"
             name="description"
