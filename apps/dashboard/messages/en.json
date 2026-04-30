@@ -375,7 +375,9 @@
           "hint": "PNG, JPEG or GIF. The file is sent to Discord, then the preview switches to the official CDN URL.",
           "remove": "Cancel selection",
           "dropPrompt": "Drop an image here, or click to browse.",
-          "loadedTemplate": "Image loaded: {name} ({size})"
+          "loadedTemplate": "Image loaded: {name} ({size})",
+          "errorUnsupportedType": "Unsupported format. Use a PNG, JPEG or GIF.",
+          "errorTooLarge": "Image too large ({size}). Maximum: 2 MB."
         },
         "description": {
           "label": "Description",

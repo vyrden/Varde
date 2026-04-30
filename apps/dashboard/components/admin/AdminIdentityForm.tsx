@@ -34,6 +34,8 @@ export interface AdminIdentityFormCopy {
   readonly avatarRemove: string;
   readonly avatarDropPrompt: string;
   readonly avatarLoadedTemplate: string;
+  readonly avatarErrorUnsupportedType: string;
+  readonly avatarErrorTooLarge: string;
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly submit: string;
@@ -70,6 +72,19 @@ const formatFileSize = (bytes: number): string => {
 
 const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif']);
 
+/**
+ * Plafond côté client. Discord limite les avatars à 8 Mo, mais
+ * 2 Mo suffisent largement pour un PNG ou un GIF d'avatar — au-delà,
+ * la data URI base64 alourdit la requête HTTP au point de pouvoir
+ * timeout ou crasher le worker Next.js. Le filtre côté client évite
+ * que l'utilisateur upload un fichier de 20 Mo et fige le dashboard.
+ */
+const MAX_BYTES = 2 * 1024 * 1024;
+
+type FileError =
+  | { readonly kind: 'unsupported_type' }
+  | { readonly kind: 'too_large'; readonly size: number };
+
 export interface AdminIdentityFormProps {
   readonly initial: AdminIdentityDto;
   readonly copy: AdminIdentityFormCopy;
@@ -86,6 +101,7 @@ export function AdminIdentityForm({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialIdentity.avatarUrl);
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
   const [avatarFileMeta, setAvatarFileMeta] = useState<{ name: string; size: number } | null>(null);
+  const [fileError, setFileError] = useState<FileError | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -100,6 +116,13 @@ export function AdminIdentityForm({
     if (!ACCEPTED_TYPES.has(file.type)) {
       setAvatarDataUri(null);
       setAvatarFileMeta(null);
+      setFileError({ kind: 'unsupported_type' });
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      setAvatarDataUri(null);
+      setAvatarFileMeta(null);
+      setFileError({ kind: 'too_large', size: file.size });
       return;
     }
     try {
@@ -107,6 +130,7 @@ export function AdminIdentityForm({
       setAvatarDataUri(dataUri);
       setAvatarPreview(dataUri);
       setAvatarFileMeta({ name: file.name, size: file.size });
+      setFileError(null);
     } catch {
       setAvatarDataUri(null);
       setAvatarFileMeta(null);
@@ -241,6 +265,17 @@ export function AdminIdentityForm({
             >
               {copy.avatarRemove}
             </button>
+          ) : null}
+          {fileError !== null ? (
+            <p
+              className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
+              role="alert"
+              data-testid="admin-identity-avatar-file-error"
+            >
+              {fileError.kind === 'unsupported_type'
+                ? copy.avatarErrorUnsupportedType
+                : copy.avatarErrorTooLarge.replace('{size}', formatFileSize(fileError.size))}
+            </p>
           ) : null}
           <p className="text-xs text-muted-foreground">{copy.avatarHint}</p>
         </div>
