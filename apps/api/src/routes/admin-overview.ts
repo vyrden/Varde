@@ -1,6 +1,6 @@
 import type { OwnershipService, PluginLoader } from '@varde/core';
 import { type DbClient, type DbDriver, pgSchema, sqliteSchema } from '@varde/db';
-import { count, eq } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 import { requireOwner } from '../middleware/require-owner.js';
@@ -124,6 +124,59 @@ const countActiveModules = async <D extends DbDriver>(client: DbClient<D>): Prom
   return Number(row?.value ?? 0);
 };
 
+/**
+ * Taille du fichier (sqlite) ou de la base (pg) en octets. `null` si
+ * la requête échoue (permissions, erreur driver) — l'admin verra
+ * « inconnu » dans le dashboard, pas un crash de la page.
+ */
+const dbSizeBytes = async <D extends DbDriver>(client: DbClient<D>): Promise<number | null> => {
+  try {
+    if (client.driver === 'pg') {
+      const pg = client as DbClient<'pg'>;
+      const result = await pg.db.execute(
+        sql`SELECT pg_database_size(current_database())::bigint AS size`,
+      );
+      const rows = result as unknown as ReadonlyArray<{ size: number | bigint | string }>;
+      const value = rows[0]?.size;
+      if (value === undefined) return null;
+      return typeof value === 'bigint' ? Number(value) : Number(value);
+    }
+    const sqlite = client as DbClient<'sqlite'>;
+    const row = sqlite.db.get(
+      sql`SELECT page_count * page_size AS size FROM pragma_page_count(), pragma_page_size()`,
+    ) as { size?: number } | undefined;
+    return row?.size ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Nom de la dernière migration appliquée par drizzle. La table interne
+ * `drizzle.__drizzle_migrations` (pg) ou `__drizzle_migrations` (sqlite)
+ * porte la trace ; on lit la plus récente par `created_at`. `null` si
+ * pas de migration ou erreur.
+ */
+const lastMigration = async <D extends DbDriver>(client: DbClient<D>): Promise<string | null> => {
+  try {
+    if (client.driver === 'pg') {
+      const pg = client as DbClient<'pg'>;
+      const result = await pg.db.execute(
+        sql`SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at DESC LIMIT 1`,
+      );
+      const rows = result as unknown as ReadonlyArray<{ hash: string }>;
+      return rows[0]?.hash ?? null;
+    }
+    const sqlite = client as DbClient<'sqlite'>;
+    const row = sqlite.db.get(
+      sql`SELECT hash FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 1`,
+    ) as { hash?: string } | undefined;
+    return row?.hash ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export function registerAdminOverviewRoutes(
   app: FastifyInstance,
   options: RegisterAdminOverviewRoutesOptions,
@@ -134,9 +187,11 @@ export function registerAdminOverviewRoutes(
   app.get('/admin/overview', async (request): Promise<AdminOverviewResponse> => {
     await requireOwner(app, request, ownership);
     const status = getDiscordStatus();
-    const [guildCount, activeModules] = await Promise.all([
+    const [guildCount, activeModules, sizeBytes, lastMigrationHash] = await Promise.all([
       countGuilds(client),
       countActiveModules(client),
+      dbSizeBytes(client),
+      lastMigration(client),
     ]);
     return {
       bot: {
@@ -157,10 +212,8 @@ export function registerAdminOverviewRoutes(
       },
       db: {
         driver: client.driver,
-        // sizeBytes / lastMigration : SQL spécifique par driver,
-        // reportés à une PR ultérieure.
-        sizeBytes: null,
-        lastMigration: null,
+        sizeBytes,
+        lastMigration: lastMigrationHash,
       },
     };
   });
