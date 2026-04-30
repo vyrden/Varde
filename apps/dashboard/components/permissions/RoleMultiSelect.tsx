@@ -41,7 +41,13 @@ export interface RoleOption {
 export interface RoleMultiSelectCopy {
   readonly searchPlaceholder: string;
   readonly empty: string;
-  readonly memberCountLabel: (count: number) => string;
+  /**
+   * Template string avec placeholder `{count}` (ex. `"{count} membres"`).
+   * Pas de fonction côté props : ce composant est `'use client'` et
+   * la frontière server→client ne peut pas sérialiser une `Function`.
+   * Le pluriel ICU est résolu côté serveur dans une string statique.
+   */
+  readonly memberCountTemplate: string;
   readonly disabledLabel: string;
 }
 
@@ -151,7 +157,7 @@ export function RoleMultiSelect({
                     <span className="flex-1 truncate font-medium text-foreground">{role.name}</span>
                     {role.memberCount !== undefined ? (
                       <span className="text-xs text-muted-foreground">
-                        {copy.memberCountLabel(role.memberCount)}
+                        {copy.memberCountTemplate.replace('{count}', role.memberCount.toString())}
                       </span>
                     ) : null}
                     {isDisabled ? (

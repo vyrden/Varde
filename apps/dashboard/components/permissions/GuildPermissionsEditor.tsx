@@ -96,23 +96,19 @@ export function GuildPermissionsEditor({
     return initial.adminRoleIds.some((id) => userRoleSet.has(id) && !adminRoleIds.includes(id));
   }, [initial.adminRoleIds, userRoleSet, adminRoleIds]);
 
-  const handleSave = (formData: FormData): void => {
+  /**
+   * Annule le submit du form save quand l'admin retire son propre
+   * rôle et refuse la confirmation. Sinon laisse `<form
+   * action={saveAction}>` faire son travail — la formData est
+   * peuplée par les `<input type="hidden">` plutôt qu'une mutation
+   * client (plus fiable côté React 19 server action dispatch).
+   */
+  const handleSaveSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     if (removingSelfAdmin) {
       // eslint-disable-next-line no-alert -- modale dédiée prévue en itération ultérieure
       const ok = window.confirm(copy.removeSelfWarning);
-      if (!ok) return;
+      if (!ok) event.preventDefault();
     }
-    formData.set('guildId', guildId);
-    formData.set('adminRoleIds', adminRoleIds.join(','));
-    formData.set('moderatorRoleIds', moderatorRoleIds.join(','));
-    saveAction(formData);
-  };
-
-  const handlePreview = (formData: FormData): void => {
-    formData.set('guildId', guildId);
-    formData.set('adminRoleIds', adminRoleIds.join(','));
-    formData.set('moderatorRoleIds', moderatorRoleIds.join(','));
-    previewAction(formData);
   };
 
   const isAdminEmpty = adminRoleIds.length === 0;
@@ -177,7 +173,10 @@ export function GuildPermissionsEditor({
       </section>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <form action={handlePreview}>
+        <form action={previewAction}>
+          <input type="hidden" name="guildId" value={guildId} />
+          <input type="hidden" name="adminRoleIds" value={adminRoleIds.join(',')} />
+          <input type="hidden" name="moderatorRoleIds" value={moderatorRoleIds.join(',')} />
           <button
             type="submit"
             disabled={previewPending || isAdminEmpty}
@@ -187,7 +186,10 @@ export function GuildPermissionsEditor({
             {previewPending ? '…' : copy.previewButton}
           </button>
         </form>
-        <form action={handleSave}>
+        <form action={saveAction} onSubmit={handleSaveSubmit}>
+          <input type="hidden" name="guildId" value={guildId} />
+          <input type="hidden" name="adminRoleIds" value={adminRoleIds.join(',')} />
+          <input type="hidden" name="moderatorRoleIds" value={moderatorRoleIds.join(',')} />
           <button
             type="submit"
             disabled={savePending || isAdminEmpty}

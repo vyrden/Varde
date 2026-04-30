@@ -234,7 +234,7 @@
     "roleSelect": {
       "searchPlaceholder": "Rechercher un rôle…",
       "empty": "Aucun rôle trouvé.",
-      "memberCount": "{count, plural, =0 {aucun membre} one {# membre} other {# membres}}",
+      "memberCountTemplate": "{count} membres",
       "disabledLabel": "verrouillé"
     }
   },

@@ -66,7 +66,11 @@ export default async function GuildPermissionsPage({
     roleMultiSelect: {
       searchPlaceholder: t('roleSelect.searchPlaceholder'),
       empty: t('roleSelect.empty'),
-      memberCountLabel: (n) => t('roleSelect.memberCount', { count: n }),
+      // Template avec placeholder `{count}` — le client remplace
+      // au render. `t.raw()` retourne la chaîne brute sans
+      // tentative ICU (sinon next-intl exigerait un argument
+      // `count` à la résolution serveur).
+      memberCountTemplate: t.raw('roleSelect.memberCountTemplate') as string,
       disabledLabel: t('roleSelect.disabledLabel'),
     },
   };

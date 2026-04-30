@@ -10,7 +10,7 @@ import {
 const copy: RoleMultiSelectCopy = {
   searchPlaceholder: 'Rechercher un rôle…',
   empty: 'Aucun rôle trouvé.',
-  memberCountLabel: (n) => `${n} membre${n > 1 ? 's' : ''}`,
+  memberCountTemplate: '{count} membres',
   disabledLabel: 'verrouillé',
 };
 

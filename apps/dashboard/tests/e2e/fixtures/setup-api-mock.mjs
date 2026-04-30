@@ -49,6 +49,29 @@ const state = {
       db: { driver: 'sqlite', sizeBytes: null, lastMigration: null },
     },
   },
+  // Mock guild permissions state (jalon 7 PR 7.3 sub-livrable 10).
+  // `userLevels` map userId → level pour déterminer la réponse de
+  // `/guilds/:guildId/me`. `permissions` map guildId → config.
+  guildPermissions: {
+    userLevels: { '111111111111111111': 'admin' },
+    permissions: {
+      'guild-1': {
+        adminRoleIds: ['role-admin'],
+        moderatorRoleIds: ['role-mod'],
+        roles: [
+          { id: 'role-admin', name: 'Admin', color: 0xff0000, position: 10, memberCount: 3 },
+          { id: 'role-mod', name: 'Moderator', color: 0x00ff00, position: 5, memberCount: 7 },
+          { id: 'role-partner', name: 'Partner', position: 3, memberCount: 12 },
+        ],
+      },
+    },
+    members: {
+      'guild-1': [
+        { id: 'u1', username: 'Alice', avatarUrl: null, roleIds: ['role-admin'] },
+        { id: 'u2', username: 'Bob', avatarUrl: null, roleIds: ['role-mod'] },
+      ],
+    },
+  },
 };
 
 const isOwnerSession = (req) => {
@@ -268,6 +291,32 @@ const handlers = {
     }
     json(res, 200, { added: true });
   },
+
+  // -- GUILD PERMISSIONS MOCK (sub-livrable 10 PR 7.3) --
+
+  'POST /__test/guild-permissions': async (req, res) => {
+    const body = await readBody(req);
+    if (body.userLevels) state.guildPermissions.userLevels = body.userLevels;
+    if (body.permissions) state.guildPermissions.permissions = body.permissions;
+    if (body.members) state.guildPermissions.members = body.members;
+    json(res, 200, state.guildPermissions);
+  },
+
+  'GET /guilds': async (req, res) => {
+    const sub = isOwnerSession(req);
+    if (sub === null) {
+      json(res, 401, { error: 'unauthenticated' });
+      return;
+    }
+    const accessible = Object.keys(state.guildPermissions.permissions).filter(
+      (gid) => state.guildPermissions.userLevels[sub] !== undefined,
+    );
+    json(
+      res,
+      200,
+      accessible.map((id) => ({ id, name: `Guild ${id}`, iconUrl: null })),
+    );
+  },
 };
 
 // Routes paramétrées (suffixe variable). Évalués si le match exact
@@ -309,6 +358,136 @@ const paramHandlers = [
         (o) => o.discordUserId !== params.discordUserId,
       );
       json(res, 200, { removed: true });
+    },
+  },
+  // GET /guilds/:guildId/me — niveau du user courant.
+  {
+    match: (method, path) => {
+      if (method !== 'GET') return null;
+      const m = path.match(/^\/guilds\/([^/]+)\/me$/);
+      return m ? { guildId: decodeURIComponent(m[1]) } : null;
+    },
+    handler: async (req, res, _params) => {
+      const sub = isOwnerSession(req);
+      if (sub === null) {
+        json(res, 401, { error: 'unauthenticated' });
+        return;
+      }
+      const level = state.guildPermissions.userLevels[sub];
+      if (level === undefined) {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      json(res, 200, { level });
+    },
+  },
+  // GET /guilds/:guildId/modules — liste des modules pour la guild.
+  {
+    match: (method, path) => {
+      if (method !== 'GET') return null;
+      const m = path.match(/^\/guilds\/([^/]+)\/modules$/);
+      return m ? { guildId: decodeURIComponent(m[1]) } : null;
+    },
+    handler: async (req, res, _params) => {
+      const sub = isOwnerSession(req);
+      if (sub === null) {
+        json(res, 401, { error: 'unauthenticated' });
+        return;
+      }
+      // Mock retourne 0 modules — le shell de la sidebar sait gérer
+      // une liste vide. Suffisant pour valider la conditionalité de
+      // la section « Paramètres ».
+      json(res, 200, []);
+    },
+  },
+  // GET /guilds/:guildId/permissions
+  {
+    match: (method, path) => {
+      if (method !== 'GET') return null;
+      const m = path.match(/^\/guilds\/([^/]+)\/permissions$/);
+      return m ? { guildId: decodeURIComponent(m[1]) } : null;
+    },
+    handler: async (req, res, params) => {
+      const sub = isOwnerSession(req);
+      if (sub === null) {
+        json(res, 401, { error: 'unauthenticated' });
+        return;
+      }
+      if (state.guildPermissions.userLevels[sub] !== 'admin') {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      const perms = state.guildPermissions.permissions[params.guildId];
+      if (!perms) {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      json(res, 200, perms);
+    },
+  },
+  // PUT /guilds/:guildId/permissions
+  {
+    match: (method, path) => {
+      if (method !== 'PUT') return null;
+      const m = path.match(/^\/guilds\/([^/]+)\/permissions$/);
+      return m ? { guildId: decodeURIComponent(m[1]) } : null;
+    },
+    handler: async (req, res, params) => {
+      const sub = isOwnerSession(req);
+      if (sub === null) {
+        json(res, 401, { error: 'unauthenticated' });
+        return;
+      }
+      if (state.guildPermissions.userLevels[sub] !== 'admin') {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      const body = await readBody(req);
+      if (!Array.isArray(body.adminRoleIds) || body.adminRoleIds.length === 0) {
+        json(res, 422, { error: 'invalid_permissions', message: 'admin vide' });
+        return;
+      }
+      const perms = state.guildPermissions.permissions[params.guildId];
+      perms.adminRoleIds = body.adminRoleIds;
+      perms.moderatorRoleIds = body.moderatorRoleIds ?? [];
+      json(res, 200, perms);
+    },
+  },
+  // POST /guilds/:guildId/permissions/preview
+  {
+    match: (method, path) => {
+      if (method !== 'POST') return null;
+      const m = path.match(/^\/guilds\/([^/]+)\/permissions\/preview$/);
+      return m ? { guildId: decodeURIComponent(m[1]) } : null;
+    },
+    handler: async (req, res, params) => {
+      const sub = isOwnerSession(req);
+      if (sub === null) {
+        json(res, 401, { error: 'unauthenticated' });
+        return;
+      }
+      if (state.guildPermissions.userLevels[sub] !== 'admin') {
+        json(res, 404, { error: 'not_found' });
+        return;
+      }
+      const body = await readBody(req);
+      const adminSet = new Set(body.adminRoleIds ?? []);
+      const modSet = new Set(body.moderatorRoleIds ?? []);
+      const members = state.guildPermissions.members[params.guildId] ?? [];
+      const admins = [];
+      const moderators = [];
+      for (const m of members) {
+        const adminMatches = m.roleIds.filter((rid) => adminSet.has(rid));
+        if (adminMatches.length > 0) {
+          admins.push({ ...m, grantedBy: adminMatches });
+          continue;
+        }
+        const modMatches = m.roleIds.filter((rid) => modSet.has(rid));
+        if (modMatches.length > 0) {
+          moderators.push({ ...m, grantedBy: modMatches });
+        }
+      }
+      json(res, 200, { admins, moderators });
     },
   },
 ];
