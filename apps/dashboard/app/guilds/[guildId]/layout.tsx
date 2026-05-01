@@ -53,22 +53,31 @@ export default async function GuildLayout({
     inviteClientId = null;
   }
   try {
-    const [guildsResult, modulesResult, userLevelResult, preferencesResult] = await Promise.all([
+    [guilds, modules, userLevel] = await Promise.all([
       fetchAdminGuilds(),
       fetchModules(guildId),
       fetchGuildUserLevel(guildId),
-      fetchGuildPreferences(guildId),
     ]);
-    guilds = guildsResult;
-    modules = modulesResult;
-    userLevel = userLevelResult;
-    pinnedModules = preferencesResult.pinnedModules;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
       notFound();
     }
     throw error;
+  }
+
+  // Préférences user (jalon 7 PR 7.4.5) : non-bloquant. Une instance
+  // d'API antérieure à la PR 7.4.1 ne connaît pas la route et répond
+  // 404 ; un user qui n'a pas encore d'épingles voit aussi un payload
+  // vide. Dans les deux cas la sidebar s'affiche sans section
+  // « Épinglés », ce qui est le comportement attendu — pas de raison
+  // de casser tout le layout pour un défaut de préférences.
+  try {
+    const preferences = await fetchGuildPreferences(guildId);
+    pinnedModules = preferences.pinnedModules;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect('/');
+    pinnedModules = [];
   }
 
   const currentGuild = guilds.find((g) => g.id === guildId);
