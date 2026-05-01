@@ -27,6 +27,34 @@
       "grabHandle": "Réordonner {name} (drag ou Espace + flèches)"
     }
   },
+  "moduleConfig": {
+    "header": {
+      "breadcrumbLabel": "Fil d'Ariane",
+      "breadcrumbModules": "Modules",
+      "badgeActive": "Actif",
+      "badgeInactive": "Inactif"
+    },
+    "form": {
+      "label": "Configuration de {moduleName}",
+      "title": "Configuration générale",
+      "description": "Paramètres exposés par le module {moduleName}.",
+      "savedConfirmation": "Configuration enregistrée.",
+      "genericError": "Erreur {status} lors de l'enregistrement.",
+      "fieldErrorsHint": "Certains champs sont invalides, voir les messages ci-dessus.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "clean": "Aucune modification.",
+      "dirty": "{count} modification(s) non sauvegardée(s)."
+    },
+    "noConfigTitle": "Module sans configuration éditable",
+    "noConfigDescription": "Ce module n'expose pas de schéma de configuration. Rien à régler ici.",
+    "infoCard": {
+      "title": "Informations",
+      "versionLabel": "Version",
+      "toggleNote": "Désactiver un module coupe immédiatement ses handlers events et commandes pour ce serveur. La config est conservée — réactiver restaure tout."
+    }
+  },
   "modulesGrid": {
     "title": "Modules",
     "description": "Activez, configurez et épinglez les modules disponibles sur ce serveur.",

@@ -2,22 +2,23 @@
 
 import type { ConfigFieldSpec, ConfigUi } from '@varde/contracts';
 import {
-  Button,
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
   cn,
   Input,
   Label,
   Select,
+  StickyActionBar,
 } from '@varde/ui';
-import { type FormEvent, type ReactElement, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { type FormEvent, type ReactElement, useMemo, useState } from 'react';
 
 import { type SaveModuleConfigResult, saveModuleConfig } from '../lib/actions';
 import { validateAgainstSchema } from '../lib/client-validation';
+import { countFieldChanges } from '../lib/count-field-changes';
 
 export interface ConfigFormProps {
   readonly guildId: string;
@@ -122,14 +123,24 @@ export function ConfigForm({
   initialValues,
   schema,
 }: ConfigFormProps): ReactElement {
-  const fields = sortedFields(ui.fields);
-  const [state, setState] = useState<FormState>(() => {
+  const t = useTranslations('moduleConfig.form');
+  const fields = useMemo(() => sortedFields(ui.fields), [ui.fields]);
+  const buildInitialState = (): FormState => {
     const init: FormState = {};
     for (const field of fields) {
       init[field.path] = initialFieldState(field, initialValues);
     }
     return init;
-  });
+  };
+  // `initialState` est le pivot de la sticky save bar (jalon 7 PR
+  // 7.4.8). Il bouge à deux moments :
+  // - au mount (snapshot initial),
+  // - après chaque save réussi (le formulaire devient le nouveau
+  //   référentiel — les modifications suivantes sont à nouveau
+  //   « non sauvegardées »).
+  // Cancel revient à `initialState`. Counter = diff state ↔ initial.
+  const [initialState, setInitialState] = useState<FormState>(buildInitialState);
+  const [state, setState] = useState<FormState>(initialState);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<SaveModuleConfigResult | null>(null);
 
@@ -141,8 +152,15 @@ export function ConfigForm({
     }
   }
 
+  const changeCount = countFieldChanges(initialState, state);
+  const dirty = changeCount > 0;
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    await save();
+  };
+
+  const save = async (): Promise<void> => {
     setPending(true);
     setResult(null);
     try {
@@ -159,9 +177,20 @@ export function ConfigForm({
       }
       const next = await saveModuleConfig(guildId, moduleId, payload);
       setResult(next);
+      if (next.ok) {
+        // Save réussi : le state courant devient le nouveau référentiel.
+        // Le compteur retombe à 0 et la sticky bar passe en mode
+        // « propre ».
+        setInitialState(state);
+      }
     } finally {
       setPending(false);
     }
+  };
+
+  const onCancel = (): void => {
+    setState(initialState);
+    setResult(null);
   };
 
   const updateField = (path: string, value: FieldState): void => {
@@ -169,11 +198,11 @@ export function ConfigForm({
   };
 
   return (
-    <form onSubmit={onSubmit} aria-label={`Config ${moduleName}`}>
+    <form onSubmit={onSubmit} aria-label={t('label', { moduleName })}>
       <Card>
         <CardHeader>
-          <CardTitle>Configuration générale</CardTitle>
-          <CardDescription>Paramètres exposés par le module {moduleName}.</CardDescription>
+          <CardTitle>{t('title')}</CardTitle>
+          <CardDescription>{t('description', { moduleName })}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {fields.map((field) => (
@@ -187,27 +216,35 @@ export function ConfigForm({
           ))}
 
           {result?.ok === true ? (
-            <p role="status" className="text-sm text-emerald-600">
-              Configuration enregistrée.
+            <p role="status" className="text-sm text-success">
+              {t('savedConfirmation')}
             </p>
           ) : null}
           {result?.ok === false && !result.details ? (
             <p role="alert" className="text-sm text-destructive">
-              {result.message ?? `Erreur ${result.status ?? ''} lors de l'enregistrement.`}
+              {result.message ?? t('genericError', { status: result.status ?? '' })}
             </p>
           ) : null}
           {result?.ok === false && result.details ? (
             <p role="alert" className="text-sm text-destructive">
-              Certains champs sont invalides, voir les messages ci-dessus.
+              {t('fieldErrorsHint')}
             </p>
           ) : null}
         </CardContent>
-        <CardFooter className="justify-end">
-          <Button type="submit" disabled={pending}>
-            {pending ? 'Enregistrement...' : 'Enregistrer'}
-          </Button>
-        </CardFooter>
       </Card>
+      <StickyActionBar
+        dirty={dirty}
+        pending={pending}
+        onCancel={onCancel}
+        onSave={() => {
+          void save();
+        }}
+        cancelLabel={t('cancel')}
+        saveLabel={t('save')}
+        pendingLabel={t('saving')}
+        cleanLabel={t('clean')}
+        dirtyLabel={t('dirty', { count: changeCount })}
+      />
     </form>
   );
 }

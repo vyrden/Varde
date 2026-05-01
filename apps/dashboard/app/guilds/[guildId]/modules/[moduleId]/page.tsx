@@ -1,12 +1,11 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, Separator } from '@varde/ui';
+import { Card, CardContent, CardHeader, CardTitle, EmptyState } from '@varde/ui';
 import { notFound, redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../../../auth';
 import { ConfigForm } from '../../../../../components/ConfigForm';
-import { ModuleEnabledToggle } from '../../../../../components/ModuleEnabledToggle';
-import { moduleIcon } from '../../../../../components/shell/module-icons';
-import { PageBreadcrumb } from '../../../../../components/shell/PageBreadcrumb';
+import { ModuleConfigHeader } from '../../../../../components/module-config/ModuleConfigHeader';
 import {
   ApiError,
   fetchAdminGuilds,
@@ -19,15 +18,26 @@ interface ModuleConfigPageProps {
 }
 
 /**
- * Page de configuration d'un module pour une guild donnée. Charge
- * en parallèle le descripteur du module (pour le nom et le check
- * d'existence côté liste) et sa config + `configUi`. Le formulaire
- * est monté seulement si le module expose un `configUi` — sinon on
- * affiche un `EmptyState` explicite (module sans config éditable).
+ * Page de configuration générique d'un module (jalon 7 PR 7.4.8).
+ * Surface utilisée pour tout module qui s'appuie sur le rendu
+ * automatique depuis `configUi` ; les modules officiels (welcome,
+ * moderation, logs, reaction-roles) gardent leurs UI custom et
+ * seront harmonisés progressivement dans des PR séparées.
  *
- * Layout : header custom (breadcrumb + icône + titre + badge inline +
- * description), séparateur, puis grid 2/3 ↔ 1/3 (formulaire / sidebar
- * de métadonnées).
+ * Layout :
+ *
+ * - Header standardisé (`<ModuleConfigHeader>`) : breadcrumb,
+ *   icône, nom, badges actif/inactif + version, actions pin et
+ *   toggle on/off.
+ * - Formulaire généré par `<ConfigForm>` (refactoré PR 7.4.8 pour
+ *   utiliser `<StickyActionBar>` du DS avec dirty tracking +
+ *   compteur de modifications).
+ * - Carte « Informations » à droite : version + note explicative
+ *   sur l'effet du toggle.
+ *
+ * Le module sans `configUi` exposé voit un EmptyState — pas de
+ * formulaire à générer côté UI, le module reste utilisable côté
+ * runtime via les valeurs par défaut.
  */
 export default async function ModuleConfigPage({
   params,
@@ -57,34 +67,22 @@ export default async function ModuleConfigPage({
   const module = modules.find((m) => m.id === moduleId);
   if (!guild || !module) notFound();
 
-  const isEnabled = module.enabled !== false;
+  const t = await getTranslations('moduleConfig');
 
   return (
     <>
-      <header className="bg-surface px-6 pt-5 pb-4">
-        <PageBreadcrumb
-          items={[{ label: 'Modules', href: `/guilds/${guildId}` }, { label: module.name }]}
-        />
-        <div className="flex items-center gap-3">
-          <div
-            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
-              isEnabled ? 'bg-primary/15 text-primary' : 'bg-surface-active text-muted-foreground'
-            }`}
-          >
-            {moduleIcon(module.id, 20)}
-          </div>
-          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
-            {module.name}
-          </h1>
-          <Badge variant={isEnabled ? 'active' : 'inactive'}>
-            {isEnabled ? 'Actif' : 'Inactif'}
-          </Badge>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {module.description || `Configuration du module ${module.name}.`}
-        </p>
-      </header>
-      <Separator />
+      <ModuleConfigHeader
+        guildId={guildId}
+        module={{
+          id: module.id,
+          name: module.name,
+          version: module.version,
+          description: module.description,
+          shortDescription: module.shortDescription,
+          enabled: module.enabled,
+          isPinned: module.isPinned,
+        }}
+      />
       <div className="mx-auto w-full max-w-6xl px-6 py-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="flex flex-col gap-4 lg:col-span-2">
@@ -98,36 +96,21 @@ export default async function ModuleConfigPage({
                 schema={moduleConfig.configSchema}
               />
             ) : (
-              <EmptyState
-                title="Module sans configuration éditable"
-                description="Ce module n'expose pas de schéma de configuration. Rien à régler ici."
-              />
+              <EmptyState title={t('noConfigTitle')} description={t('noConfigDescription')} />
             )}
           </div>
 
           <aside className="flex flex-col gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Informations</CardTitle>
+                <CardTitle>{t('infoCard.title')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Version</span>
+                  <span className="text-muted-foreground">{t('infoCard.versionLabel')}</span>
                   <span className="font-mono text-foreground">v{module.version}</span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Statut</span>
-                  <ModuleEnabledToggle
-                    guildId={guildId}
-                    moduleId={module.id}
-                    moduleName={module.name}
-                    initialEnabled={isEnabled}
-                  />
-                </div>
-                <p className="pt-1 text-xs text-muted-foreground">
-                  Désactiver un module coupe immédiatement ses handlers events et commandes pour ce
-                  serveur. La config est conservée — réactiver restaure tout.
-                </p>
+                <p className="pt-1 text-xs text-muted-foreground">{t('infoCard.toggleNote')}</p>
               </CardContent>
             </Card>
           </aside>

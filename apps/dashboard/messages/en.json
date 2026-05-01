@@ -27,6 +27,34 @@
       "grabHandle": "Reorder {name} (drag or Space + arrows)"
     }
   },
+  "moduleConfig": {
+    "header": {
+      "breadcrumbLabel": "Breadcrumb",
+      "breadcrumbModules": "Modules",
+      "badgeActive": "Active",
+      "badgeInactive": "Inactive"
+    },
+    "form": {
+      "label": "{moduleName} configuration",
+      "title": "General configuration",
+      "description": "Settings exposed by the {moduleName} module.",
+      "savedConfirmation": "Configuration saved.",
+      "genericError": "Error {status} while saving.",
+      "fieldErrorsHint": "Some fields are invalid, see the messages above.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "clean": "No unsaved changes.",
+      "dirty": "{count} unsaved change(s)."
+    },
+    "noConfigTitle": "Module without editable configuration",
+    "noConfigDescription": "This module does not expose a configuration schema. Nothing to tune here.",
+    "infoCard": {
+      "title": "Information",
+      "versionLabel": "Version",
+      "toggleNote": "Disabling a module immediately stops its event and command handlers for this server. The config is preserved — re-enabling restores everything."
+    }
+  },
   "modulesGrid": {
     "title": "Modules",
     "description": "Enable, configure, and pin the modules available on this server.",

@@ -8,6 +8,16 @@ vi.mock('../../lib/actions', () => ({
   saveModuleConfig: (...args: unknown[]) => saveModuleConfig(...args),
 }));
 
+// `useTranslations` requiert normalement un `NextIntlClientProvider`
+// au-dessus du composant. Pour les tests unitaires de `ConfigForm`,
+// on remplace le hook par un stub identité — la valeur des libellés
+// n'est pas l'objet du test, on vérifie juste les comportements
+// (préremplissage, soumission, erreurs Zod).
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string, params?: Record<string, unknown>) =>
+    params ? `${key}:${JSON.stringify(params)}` : key,
+}));
+
 import { ConfigForm } from '../../components/ConfigForm';
 
 const helloWorldUi: ConfigUi = {
@@ -75,14 +85,14 @@ describe('ConfigForm', () => {
     );
     const input = screen.getByLabelText("Délai d'accueil (ms)") as HTMLInputElement;
     fireEvent.change(input, { target: { value: '1200' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
     expect(saveModuleConfig).toHaveBeenCalledWith('g1', 'hello-world', {
       welcomeDelayMs: 1200,
     });
     const status = await screen.findByRole('status');
-    expect(status.textContent).toContain('Configuration enregistrée.');
+    expect(status.textContent).toContain('savedConfirmation');
   });
 
   it('affiche les issues Zod par champ quand la sauvegarde échoue en 400', async () => {
@@ -101,7 +111,12 @@ describe('ConfigForm', () => {
         initialValues={{ welcomeDelayMs: 300 }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    // PR 7.4.8 : le bouton Save n'est actif qu'en état dirty.
+    // On modifie d'abord la valeur pour pouvoir soumettre.
+    fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
+      target: { value: '500' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() => expect(screen.getByText('Expected number, received string')).toBeDefined());
     // Pas de message de succès
@@ -124,7 +139,10 @@ describe('ConfigForm', () => {
         initialValues={{}}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
+      target: { value: '500' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('Pas les droits.');
@@ -149,7 +167,7 @@ describe('ConfigForm', () => {
     fireEvent.change(screen.getByLabelText('Ton'), { target: { value: 'formal' } });
     fireEvent.change(screen.getByLabelText('Bio'), { target: { value: 'Bonjour.' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
     await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
 
     expect(saveModuleConfig).toHaveBeenCalledWith('g1', 'multi', {
@@ -181,7 +199,7 @@ describe('ConfigForm', () => {
     fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
       target: { value: '-1' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() =>
       expect(
@@ -214,7 +232,7 @@ describe('ConfigForm', () => {
     fireEvent.change(screen.getByLabelText("Délai d'accueil (ms)"), {
       target: { value: '1200' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
     expect(saveModuleConfig).toHaveBeenCalledWith('g1', 'hello-world', {
@@ -239,7 +257,7 @@ describe('ConfigForm', () => {
     const input = screen.getByLabelText('Seuil') as HTMLInputElement;
     expect(input.value).toBe('3');
     fireEvent.change(input, { target: { value: '7' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'save' }));
 
     await waitFor(() => expect(saveModuleConfig).toHaveBeenCalledTimes(1));
     expect(saveModuleConfig).toHaveBeenCalledWith('g1', 'mod', {
