@@ -54,7 +54,13 @@ export {
   type SidebarItemProps,
   type SidebarProps,
 } from './components/Sidebar.js';
-export { Skeleton } from './components/Skeleton.js';
+export {
+  Skeleton,
+  SkeletonCard,
+  type SkeletonCardProps,
+  SkeletonText,
+  type SkeletonTextProps,
+} from './components/Skeleton.js';
 export {
   StickyActionBar,
   type StickyActionBarProps,
