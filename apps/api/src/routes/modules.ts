@@ -1,5 +1,11 @@
-import type { GuildId, ModuleId, PermissionLevel, UserId } from '@varde/contracts';
-import type { CoreConfigService, GuildPermissionsService, PluginLoader } from '@varde/core';
+import type { ActionId, GuildId, ModuleId, PermissionLevel, UserId } from '@varde/contracts';
+import type {
+  CoreAuditService,
+  CoreConfigService,
+  GuildPermissionsService,
+  PluginLoader,
+  UserPreferencesService,
+} from '@varde/core';
 import type { FastifyInstance } from 'fastify';
 import { type ZodType, z } from 'zod';
 
@@ -51,6 +57,23 @@ interface ModuleListItemDto {
   readonly description: string;
   readonly enabled: boolean;
   readonly permissions: readonly PermissionDefinitionDto[];
+  /**
+   * Champs d'enrichissement (jalon 7 PR 7.4.3) consommés par la
+   * grille de modules du dashboard. Sources :
+   * - `category`, `icon`, `shortDescription` : manifeste du module
+   *   (PR 7.4.0). `null` pour un module tiers qui ne les fournit pas.
+   * - `isPinned` : présence du moduleId dans
+   *   `user_guild_preferences.pinnedModules` pour le couple
+   *   (sessionUser, guildId).
+   * - `lastConfiguredAt` : timestamp ISO de la dernière entrée
+   *   `core.config.updated` avec scope `modules.<id>` dans l'audit
+   *   log de la guild. `null` si jamais configuré.
+   */
+  readonly category: string | null;
+  readonly icon: string | null;
+  readonly shortDescription: string | null;
+  readonly isPinned: boolean;
+  readonly lastConfiguredAt: string | null;
 }
 
 interface ModuleConfigDto {
@@ -64,6 +87,25 @@ export interface RegisterModulesRoutesOptions {
   readonly config: CoreConfigService;
   readonly discord: DiscordClient;
   readonly guildPermissions: GuildPermissionsService;
+  /**
+   * Sert à calculer `isPinned` par-utilisateur sur la liste des
+   * modules (jalon 7 PR 7.4.3).
+   */
+  readonly userPreferences: UserPreferencesService;
+  /**
+   * Sert à calculer `lastConfiguredAt` par module en lisant l'audit
+   * log filtré sur `core.config.updated` (jalon 7 PR 7.4.3).
+   */
+  readonly audit: CoreAuditService;
+  /**
+   * Plafond du nombre d'entrées audit lues pour calculer
+   * `lastConfiguredAt`. Au-delà, les modules dont la dernière
+   * configuration est plus ancienne que cette fenêtre voient
+   * `lastConfiguredAt` à `null`. Défaut : 200 — couvre largement
+   * les serveurs typiques (≤ 4 modules officiels × historique
+   * récent). Réduit à l'essentiel par les tests.
+   */
+  readonly lastConfiguredAuditLimit?: number;
 }
 
 /**
@@ -135,6 +177,32 @@ export function registerModulesRoutes(
   app: FastifyInstance,
   options: RegisterModulesRoutesOptions,
 ): void {
+  const lastConfiguredLimit = options.lastConfiguredAuditLimit ?? 200;
+
+  /**
+   * Lit les N dernières entrées `core.config.updated` pour cette
+   * guild et construit une Map<moduleId, latestTimestamp>. Le
+   * `audit.query` est ordonné desc par défaut, donc le premier
+   * `metadata.scope = modules.<id>` rencontré pour un moduleId
+   * donné est aussi le plus récent.
+   */
+  const buildLastConfiguredMap = async (guildId: GuildId): Promise<Map<string, string>> => {
+    const rows = await options.audit.query({
+      guildId,
+      action: 'core.config.updated' as ActionId,
+      limit: lastConfiguredLimit,
+    });
+    const result = new Map<string, string>();
+    for (const row of rows) {
+      const scope = row.metadata['scope'];
+      if (typeof scope !== 'string' || !scope.startsWith('modules.')) continue;
+      const moduleId = scope.slice('modules.'.length);
+      if (moduleId.length === 0 || result.has(moduleId)) continue;
+      result.set(moduleId, row.createdAt);
+    }
+    return result;
+  };
+
   app.get<{ Params: { guildId: string } }>('/guilds/:guildId/modules', async (request) => {
     const { guildId } = request.params;
     // Niveau d'entrée : `moderator` (admin satisfait aussi). Le
@@ -146,10 +214,12 @@ export function registerModulesRoutes(
       options.guildPermissions,
       'moderator',
     );
-    const userLevel = await options.guildPermissions.getUserLevel(
-      guildId as GuildId,
-      session.userId as UserId,
-    );
+    const [userLevel, guildPrefs, lastConfiguredMap] = await Promise.all([
+      options.guildPermissions.getUserLevel(guildId as GuildId, session.userId as UserId),
+      options.userPreferences.getGuildPreferences(session.userId as UserId, guildId as GuildId),
+      buildLastConfiguredMap(guildId as GuildId),
+    ]);
+    const pinnedSet = new Set(guildPrefs.pinnedModules.map((p) => p.moduleId));
 
     const items: ModuleListItemDto[] = [];
     for (const id of options.loader.loadOrder()) {
@@ -170,6 +240,11 @@ export function registerModulesRoutes(
           defaultLevel: p.defaultLevel,
           description: p.description,
         })),
+        category: def.manifest.category ?? null,
+        icon: def.manifest.icon ?? null,
+        shortDescription: def.manifest.shortDescription ?? null,
+        isPinned: pinnedSet.has(id),
+        lastConfiguredAt: lastConfiguredMap.get(id) ?? null,
       });
     }
     return items;

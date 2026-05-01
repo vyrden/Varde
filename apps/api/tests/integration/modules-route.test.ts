@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { GuildId, ModuleId } from '@varde/contracts';
 import { defineModule } from '@varde/contracts';
 import {
+  createAuditService,
   createConfigService,
   createCtxFactory,
   createEventBus,
@@ -9,6 +10,7 @@ import {
   createLogger,
   createPermissionService,
   createPluginLoader,
+  createUserPreferencesService,
   type GuildPermissionsContext,
 } from '@varde/core';
 import { applyMigrations, createDbClient, type DbClient, sqliteSchema } from '@varde/db';
@@ -145,7 +147,16 @@ describe('routes /guilds/:guildId/modules — permission', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, discord, guildPermissions });
+    const userPreferences = createUserPreferencesService({ client });
+    const audit = createAuditService({ client });
+    registerModulesRoutes(app, {
+      loader,
+      config,
+      discord,
+      guildPermissions,
+      userPreferences,
+      audit,
+    });
     return { app, config, loader, bundle };
   };
 
@@ -235,7 +246,16 @@ describe('routes /guilds/:guildId/modules — flow nominal', () => {
       version: 'test',
       authenticator: headerAuthenticator,
     });
-    registerModulesRoutes(app, { loader, config, discord, guildPermissions });
+    const userPreferences = createUserPreferencesService({ client });
+    const audit = createAuditService({ client });
+    registerModulesRoutes(app, {
+      loader,
+      config,
+      discord,
+      guildPermissions,
+      userPreferences,
+      audit,
+    });
     return { app, config, loader };
   };
 

@@ -776,7 +776,14 @@ export async function createServer<D extends DbDriver>(
     ...(options.discordService !== undefined ? { discordService: options.discordService } : {}),
     ...(options.welcomeUploads !== undefined ? { uploads: options.welcomeUploads } : {}),
   });
-  registerModulesRoutes(api, { loader, config, discord, guildPermissions });
+  registerModulesRoutes(api, {
+    loader,
+    config,
+    discord,
+    guildPermissions,
+    userPreferences,
+    audit,
+  });
 
   // Routes de configuration des permissions par-guild (jalon 7 PR
   // 7.3). Nécessitent un `listGuildRoles` enrichi (color, position,
