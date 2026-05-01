@@ -22,6 +22,11 @@ const badgeVariants = cva(
       variant: {
         active: 'bg-success/20 text-success',
         inactive: 'bg-muted/40 text-muted-foreground',
+        // Pastille « informationnelle » bleue (jalon 7 PR 7.4.7) —
+        // pour signaler un état neutre positif (ex. « Configuré »)
+        // distinct de active/inactive et sans imiter le bandeau iris
+        // primaire utilisé pour les CTAs.
+        info: 'bg-info/20 text-info',
         bot: 'bg-primary text-primary-foreground rounded-sm tracking-normal',
         warning: 'bg-warning/20 text-warning',
         danger: 'bg-destructive/20 text-destructive',

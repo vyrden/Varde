@@ -29,15 +29,15 @@ export function PinnedShortcutsCard({ guildId, pinned }: PinnedShortcutsCardProp
 
   if (pinned.length === 0) {
     return (
-      <Card>
+      <Card className="flex h-full flex-col">
         <CardHeader>
           <CardTitle className="text-sm">{t('title')}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-1 flex-col gap-3">
           <p className="text-sm text-muted-foreground">{t('emptyDescription')}</p>
           <Link
             href={`/guilds/${guildId}`}
-            className="inline-flex text-sm font-medium text-primary hover:underline"
+            className="mt-auto inline-flex text-sm font-medium text-primary hover:underline"
           >
             {t('emptyCta')} →
           </Link>
@@ -47,11 +47,11 @@ export function PinnedShortcutsCard({ guildId, pinned }: PinnedShortcutsCardProp
   }
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <CardTitle className="text-sm">{t('title')}</CardTitle>
       </CardHeader>
-      <CardContent className="-mt-2">
+      <CardContent className="-mt-2 flex-1">
         <ul className="flex flex-col">
           {pinned.map((m) => (
             <li key={m.id}>

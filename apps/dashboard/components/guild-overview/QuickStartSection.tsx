@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@varde/ui';
+import { buttonVariants, Card, CardContent } from '@varde/ui';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { ReactElement } from 'react';
@@ -69,7 +69,7 @@ export function QuickStartSection({
               </div>
               <Link
                 href={`/guilds/${guildId}/modules/${m.id}`}
-                className="rounded-md border border-border bg-bg-surface-2 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover"
+                className={buttonVariants({ variant: 'outline', size: 'sm' })}
               >
                 {t('configure')}
               </Link>

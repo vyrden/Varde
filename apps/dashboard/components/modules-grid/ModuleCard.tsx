@@ -56,7 +56,7 @@ export function ModuleCard({ guildId, module, onPinError }: ModuleCardProps): Re
   const href = `/guilds/${guildId}/modules/${module.id}`;
 
   return (
-    <Card className="group relative interactive-lift hover:border-border-strong/60">
+    <Card className="group relative flex h-full flex-col interactive-lift hover:border-border-strong/60">
       <Link
         href={href}
         aria-label={t('cardLabel', { name: module.name })}
@@ -64,7 +64,7 @@ export function ModuleCard({ guildId, module, onPinError }: ModuleCardProps): Re
       >
         <span className="sr-only">{module.name}</span>
       </Link>
-      <CardContent className="relative z-10 flex flex-col gap-3 p-4">
+      <CardContent className="relative z-10 flex flex-1 flex-col gap-3 p-4">
         <div className="pointer-events-none flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-bg-surface-3 text-fg-secondary">
             {moduleIcon(module.id, 18)}
@@ -83,7 +83,7 @@ export function ModuleCard({ guildId, module, onPinError }: ModuleCardProps): Re
                 {module.enabled ? t('badgeActive') : t('badgeInactive')}
               </Badge>
               <Badge
-                variant={isConfigured ? 'default' : 'outline'}
+                variant={isConfigured ? 'info' : 'outline'}
                 className="text-[10px] uppercase tracking-wider"
               >
                 {isConfigured ? t('badgeConfigured') : t('badgeUnconfigured')}
@@ -95,7 +95,7 @@ export function ModuleCard({ guildId, module, onPinError }: ModuleCardProps): Re
           <p className="pointer-events-none line-clamp-2 text-xs text-muted-foreground">{desc}</p>
         ) : null}
         <div
-          className="mt-1 flex items-center justify-between border-t border-border pt-3"
+          className="mt-auto flex items-center justify-between border-t border-border pt-3"
           // Cette zone contient les éléments interactifs ; on désactive
           // explicitement la navigation pour qu'un clic dans la zone
           // (mais hors des contrôles eux-mêmes) ne navigue pas non

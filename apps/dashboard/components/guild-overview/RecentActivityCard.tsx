@@ -32,11 +32,11 @@ export function RecentActivityCard({ guildId, activity }: RecentActivityCardProp
   const entries = Object.entries(activity.byCategory);
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <CardTitle className="text-sm">{t('title')}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-1 flex-col gap-3">
         {entries.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('empty')}</p>
         ) : (
@@ -51,7 +51,7 @@ export function RecentActivityCard({ guildId, activity }: RecentActivityCardProp
             ))}
           </ul>
         )}
-        <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+        <p className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
           {t('totalLast24h', { count: numberFormat.format(activity.totalLast24h) })}
         </p>
         <Link

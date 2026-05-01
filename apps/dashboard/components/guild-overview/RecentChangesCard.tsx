@@ -37,11 +37,11 @@ export function RecentChangesCard({
   const moduleChanges = changes.filter((c) => c.moduleId !== null);
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
         <CardTitle className="text-sm">{t('title')}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {moduleChanges.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('empty')}</p>
         ) : (
