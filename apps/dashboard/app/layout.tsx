@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Noto_Sans } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import type { ReactElement, ReactNode } from 'react';
@@ -7,15 +7,31 @@ import type { ReactElement, ReactNode } from 'react';
 import './globals.css';
 
 /**
- * Police principale du dashboard — Noto Sans (substitut public à
- * gg sans qui n'est pas distribuable hors de Discord). Cf. DA.md §
- * Typographie. `display: 'swap'` évite le FOIT en gardant la
- * substitution système immédiate.
+ * Stack typo du dashboard — Inter pour le texte courant, Inter
+ * (variant Display via la même famille) pour les titres. Décision
+ * tracée dans `docs/design-system/decisions.md` D-04 :
+ *
+ * - Famille unique avec deux variantes optiques pour un couplage sans
+ *   friction entre titre et corps.
+ * - Self-host via `next/font/google` — bundle ≈ 80 KB woff2 sous-ensemble
+ *   latin avec poids 400/500/600/700.
+ * - Licence SIL Open Font, conforme au principe self-host first
+ *   (D-04, principe 7 du design system).
+ *
+ * `display: 'swap'` évite le FOIT en gardant la substitution système
+ * immédiate (cf. globals.css fallback chain dans `--font-sans`).
+ *
+ * Note transitoire : Next.js 16 expose Inter avec `variable: '--font-inter'`.
+ * `Inter Display` n'est pas (encore) une famille séparée chez Google
+ * Fonts ; le hint optique 28+ se fait via `font-feature-settings` ou
+ * via une distribution dédiée à charger plus tard. Le token CSS
+ * `--font-display` pointe sur `--font-inter` aujourd'hui — bascule
+ * automatique le jour où on injecte une variable distincte.
  */
-const notoSans = Noto_Sans({
+const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-noto-sans',
+  variable: '--font-inter',
   weight: ['400', '500', '600', '700'],
 });
 
@@ -35,7 +51,7 @@ export default async function RootLayout({
   const locale = await getLocale();
   const messages = await getMessages();
   return (
-    <html lang={locale} className={`${notoSans.variable} dark`}>
+    <html lang={locale} className={`${inter.variable} dark`}>
       <body className="font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}

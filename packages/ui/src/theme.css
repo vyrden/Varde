@@ -1,210 +1,390 @@
 /*
- * Theme Varde — palette Discord (dark-only V1).
+ * Theme Varde — refonte jalon 7 PR 7.4.4.
  *
- * Mapping des couches DA :
- *   --rail            (#1e1f22) — couche la plus sombre, rail des guilds + inputs
- *   --sidebar         (#2b2d31) — sidebar nav + cards + popovers
- *   --surface         (#313338) — zone de contenu principale
- *   --surface-hover   (#35373c) — hover sur éléments de liste
- *   --surface-active  (#404249) — élément sélectionné / actif
+ * Tokens du design system documentés dans `docs/design-system/02-tokens.md`
+ * et arbitrés dans `decisions.md` (D-01 pivot palette ash, D-02 iris,
+ * D-03 ratio typo 1.25, D-04 Inter Display + Inter, D-06 light mode
+ * livré en tokens / câblage en PR 7.4.9, D-08 espacement étendu).
  *
- * Les tokens shadcn classiques (--background, --card, --primary…) sont
- * mappés sur ces couches pour rétrocompatibilité avec les classes
- * existantes (bg-background, bg-card, etc.).
+ * Structure :
  *
- * Pas de mode clair en V1 (cf. DA.md). Les classes `dark:` deviennent
- * inutiles — on applique une seule couleur quel que soit le mode.
+ * 1. Palettes brutes (ash dark / paper light / iris primaire /
+ *    sémantiques success/warning/danger/info).
+ * 2. Rôles abstraits (`--bg-page`, `--fg-primary`, `--border-default`…)
+ *    qui pointent vers une palette selon le mode actif.
+ * 3. Aliases rétrocompat (anciens noms shadcn `--background`, `--card`…
+ *    et anciens noms Discord `--rail`, `--sidebar`, `--surface`).
+ *    Conservés pour ne pas casser les ~30 composants existants ; à
+ *    migrer progressivement vers les rôles abstraits.
+ * 4. Espacement, typo, rayons, ombres, motion, z-index.
+ * 5. Mode clair via `[data-theme="light"]` qui réécrit uniquement les
+ *    rôles abstraits — les composants n'ont rien à changer.
+ * 6. Mapping `@theme inline` qui expose tous les tokens en classes
+ *    Tailwind 4.
+ *
+ * Convention impérative : un composant lit toujours via les rôles
+ * abstraits (`var(--bg-surface-2)`, `var(--fg-primary)`), jamais
+ * directement les paliers de palette (`var(--ash-700)`). Les rôles
+ * sont la frontière entre le système et l'UI ; ils basculent en
+ * mode clair sans réécrire le composant.
  */
 
 @layer base {
   :root {
-    /* Couches DA */
-    --rail: #1e1f22;
-    --sidebar: #2b2d31;
-    --surface: #313338;
-    --surface-hover: #35373c;
-    --surface-active: #404249;
+    /* === Palette neutre dark — ash (11 paliers) === */
+    --ash-50: #f6f7f8;
+    --ash-100: #e3e5e8;
+    --ash-200: #c7cbd1;
+    --ash-300: #989ba1;
+    --ash-400: #6e7077;
+    --ash-500: #4f5258;
+    --ash-600: #383a40;
+    --ash-700: #2b2d31;
+    --ash-800: #1e1f22;
+    --ash-900: #16181a;
+    --ash-950: #0c0e10;
 
-    /* Tokens sémantiques (mappent sur les couches ci-dessus) */
-    --background: #313338;
-    --foreground: #dbdee1;
+    /* === Palette neutre light — paper (11 paliers, posée à blanc) === */
+    --paper-50: #ffffff;
+    --paper-100: #f7f8f9;
+    --paper-200: #ebedef;
+    --paper-300: #d4d7dc;
+    --paper-400: #b5bac1;
+    --paper-500: #80848e;
+    --paper-600: #5e6066;
+    --paper-700: #3d4046;
+    --paper-800: #1e1f22;
+    --paper-900: #0c0e10;
+    --paper-950: #000000;
 
-    --card: #2b2d31;
-    --card-foreground: #dbdee1;
+    /* === Iris — primaire dérivée du blurple Discord (cf. D-02) === */
+    --iris-100: #e0e3ff;
+    --iris-300: #a3acff;
+    --iris-500: #5b6cff;
+    --iris-600: #4858e8;
+    --iris-700: #3a48cc;
+    --iris-900: #1c2380;
 
-    --popover: #2b2d31;
-    --popover-foreground: #dbdee1;
+    /* === Sémantiques — 3 paliers chacune (cf. 02-tokens.md §3) === */
+    --success-bg: #0d3a23;
+    --success-border: #1f7a48;
+    --success-text: #3ed482;
+    --warning-bg: #3d2f0a;
+    --warning-border: #9c7615;
+    --warning-text: #f5c542;
+    --danger-bg: #3d1416;
+    --danger-border: #a8262a;
+    --danger-text: #ff6b6f;
+    --info-bg: #082b3d;
+    --info-border: #1d6fa5;
+    --info-text: #5cb8ed;
 
-    /* Accent blurple Discord */
-    --primary: #5865F2;
-    --primary-foreground: #ffffff;
-    --primary-hover: #4752C4;
+    /* === Rôles abstraits — défaut dark (cf. 02-tokens.md §4) === */
+    --bg-page: var(--ash-900);
+    --bg-rail: var(--ash-950);
+    --bg-surface-1: var(--ash-800);
+    --bg-surface-2: var(--ash-700);
+    --bg-surface-3: var(--ash-600);
+    --bg-overlay: rgba(12, 14, 16, 0.8);
 
-    /* Bouton « secondary » Discord (gris neutre) */
-    --secondary: #4e5058;
-    --secondary-foreground: #ffffff;
-    --secondary-hover: #6d6f78;
+    --fg-primary: var(--ash-100);
+    --fg-secondary: var(--ash-200);
+    --fg-muted: var(--ash-300);
+    --fg-disabled: var(--ash-400);
+    --fg-on-accent: var(--ash-50);
 
-    --muted: #383a40;
-    --muted-foreground: #80848e;
+    --border-subtle: var(--ash-700);
+    --border-default: var(--ash-600);
+    --border-strong: var(--ash-500);
 
-    --accent: #35373c;
-    --accent-foreground: #dbdee1;
+    --iris-on-surface: var(--ash-50);
 
-    /* Couleurs fonctionnelles Discord */
-    --destructive: #ed4245;
-    --destructive-foreground: #ffffff;
-    --destructive-hover: #c03537;
+    /* === Aliases rétrocompat (shadcn) === */
+    --background: var(--bg-page);
+    --foreground: var(--fg-primary);
+    --card: var(--bg-surface-2);
+    --card-foreground: var(--fg-primary);
+    --popover: var(--bg-surface-2);
+    --popover-foreground: var(--fg-primary);
+    --primary: var(--iris-500);
+    --primary-foreground: var(--iris-on-surface);
+    --primary-hover: var(--iris-600);
+    --secondary: var(--ash-600);
+    --secondary-foreground: var(--ash-50);
+    --secondary-hover: var(--ash-500);
+    --muted: var(--ash-700);
+    --muted-foreground: var(--fg-muted);
+    --accent: var(--bg-surface-3);
+    --accent-foreground: var(--fg-primary);
+    --destructive: var(--danger-text);
+    --destructive-foreground: var(--ash-50);
+    --destructive-hover: var(--danger-border);
+    --success: var(--success-text);
+    --success-foreground: var(--ash-50);
+    --warning: var(--warning-text);
+    --warning-foreground: var(--ash-950);
+    --info: var(--info-text);
+    --info-foreground: var(--ash-50);
+    --border: var(--border-subtle);
+    --input: var(--bg-surface-1);
+    --ring: var(--iris-500);
 
-    --success: #23a55a;
-    --success-foreground: #ffffff;
+    /* === Aliases rétrocompat (anciens noms Discord) === */
+    --rail: var(--bg-rail);
+    --sidebar: var(--bg-surface-1);
+    --surface: var(--bg-page);
+    --surface-hover: var(--bg-surface-3);
+    --surface-active: var(--bg-surface-3);
 
-    --warning: #fee75c;
-    --warning-foreground: #1e1f22;
+    /* === Rayons (cf. 02-tokens.md §7) === */
+    --radius-none: 0;
+    --radius-xs: 0.1875rem; /* 3px */
+    --radius-sm: 0.25rem;   /* 4px */
+    --radius-md: 0.5rem;    /* 8px */
+    --radius-lg: 0.75rem;   /* 12px */
+    --radius-xl: 1rem;      /* 16px */
+    --radius-full: 9999px;
+    /* Alias historique : la valeur radius par défaut était 0.5rem. */
+    --radius: var(--radius-md);
 
-    --info: #00a8fc;
-    --info-foreground: #ffffff;
+    /* === Ombres dark (5 paliers + glow iris, cf. 02-tokens.md §8) === */
+    --shadow-xs:
+      0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+      0 1px 2px rgba(0, 0, 0, 0.20);
+    --shadow-sm:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 2px 4px rgba(0, 0, 0, 0.28);
+    --shadow-md:
+      0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+      0 4px 12px rgba(0, 0, 0, 0.36);
+    --shadow-lg:
+      0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+      0 12px 32px rgba(0, 0, 0, 0.44);
+    --shadow-xl:
+      0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
+      0 24px 64px rgba(0, 0, 0, 0.55);
+    --shadow-glow-iris:
+      0 0 0 1px rgba(91, 108, 255, 0.55),
+      0 4px 16px rgba(91, 108, 255, 0.32);
+    /* Aliases historiques pour ne pas casser les composants
+       qui consomment `var(--shadow-glow-primary)`. */
+    --shadow-glow-primary: var(--shadow-glow-iris);
 
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --input: #1e1f22;
-    --ring: #5865F2;
+    /* === Dégradés iris (réservé CTAs primaires) === */
+    --gradient-primary: linear-gradient(135deg, var(--iris-500) 0%, var(--iris-700) 100%);
+    --gradient-primary-hover: linear-gradient(135deg, var(--iris-300) 0%, var(--iris-500) 100%);
 
-    --radius: 0.5rem;
-
-    /*
-     * Ombres — barème inspiré du site marketing Discord. Trois paliers :
-     * ─ sm   : élévation discrète (cards calmes, panels en repos)
-     * ─ md   : éléments interactifs au hover (cards, popovers actifs)
-     * ─ lg   : ouvertures modales, drawers, overlays
-     * Les ombres restent neutres (noires, opacité variable) ; le glow
-     * blurple est gardé pour les éléments qui doivent vraiment
-     * « ressortir » (CTAs, focus ring).
-     */
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.16);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.32);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.42);
-    --shadow-glow-primary: 0 0 0 1px rgba(88, 101, 242, 0.55), 0 4px 16px rgba(88, 101, 242, 0.32);
-
-    /*
-     * Dégradés blurple — utilisés sur les CTAs principaux et certains
-     * accents (icône d'en-tête, badges premium). Légère diagonale pour
-     * rappeler le style des boutons de discord.com.
-     */
-    --gradient-primary: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
-    --gradient-primary-hover: linear-gradient(135deg, #6571f4 0%, #5865f2 100%);
-
-    /*
-     * Courbes d'easing standardisées. `--ease-out` pour les
-     * apparitions/hover, `--ease-spring` pour les retours interactifs
-     * (légère décélération qui rappelle le rebond Discord sans en
-     * faire trop). Durations en variables pour pouvoir resserrer
-     * partout d'un coup.
-     */
-    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-    --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+    /* === Motion (cf. 02-tokens.md §11 et 05-motion-grammar.md) === */
+    --duration-instant: 0ms;
     --duration-fast: 120ms;
     --duration-base: 180ms;
     --duration-slow: 260ms;
+    --duration-deliberate: 360ms;
 
-    /*
-     * Échelle d'espacement (4px-base). Utilisable en CSS via
-     * `var(--space-*)` ou directement via les utilitaires Tailwind
-     * (`p-2` = 8px, `gap-3` = 12px, etc., qui partagent la même base).
-     * Documentée ici pour donner une référence unique côté revue UI.
+    --ease-standard: cubic-bezier(0.2, 0.0, 0, 1);
+    --ease-accelerate: cubic-bezier(0.4, 0.0, 1, 1);
+    --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1);
+    --ease-emphasized: cubic-bezier(0.2, 0.0, 0, 1.2);
+    --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+    /* Alias historique : `--ease-out` était la courbe par défaut
+       d'apparition. Pointée sur `--ease-standard` qui est le nouveau
+       nom. */
+    --ease-out: var(--ease-standard);
+
+    /* === Espacement (4 px de base, étendu cf. D-08) === */
+    --space-0: 0;
+    --space-0-5: 0.125rem; /* 2px */
+    --space-1: 0.25rem;    /* 4px */
+    --space-1-5: 0.375rem; /* 6px */
+    --space-2: 0.5rem;     /* 8px */
+    --space-3: 0.75rem;    /* 12px */
+    --space-4: 1rem;       /* 16px */
+    --space-5: 1.25rem;    /* 20px */
+    --space-6: 1.5rem;     /* 24px */
+    --space-8: 2rem;       /* 32px */
+    --space-10: 2.5rem;    /* 40px */
+    --space-12: 3rem;      /* 48px */
+    --space-16: 4rem;      /* 64px */
+    --space-24: 6rem;      /* 96px */
+
+    /* === Typographie — échelle ratio 1.25 (cf. D-03) === */
+    --text-caption: 0.6875rem; /* 11px */
+    --text-xs: 0.75rem;        /* 12px */
+    --text-sm: 0.875rem;       /* 14px */
+    --text-base: 1rem;         /* 16px */
+    --text-lg: 1.125rem;       /* 18px */
+    --text-xl: 1.25rem;        /* 20px */
+    --text-2xl: 1.5rem;        /* 24px */
+    --text-3xl: 1.875rem;      /* 30px */
+    --text-4xl: 2.5rem;        /* 40px */
+    --text-display: 3.75rem;   /* 60px */
+
+    /* Aliases historiques (--font-size-*). */
+    --font-size-xs: var(--text-xs);
+    --font-size-sm: var(--text-sm);
+    --font-size-base: var(--text-base);
+    --font-size-lg: var(--text-lg);
+    --font-size-xl: var(--text-xl);
+    --font-size-2xl: var(--text-2xl);
+    --font-size-3xl: var(--text-3xl);
+
+    --line-height-xs: 1rem;       /* 16px — pour text-caption + text-xs */
+    --line-height-sm: 1.25rem;    /* 20px — text-sm */
+    --line-height-base: 1.5rem;   /* 24px — text-base */
+    --line-height-lg: 1.75rem;    /* 28px — text-lg */
+    --line-height-xl: 1.75rem;    /* 28px — text-xl */
+    --line-height-2xl: 2rem;      /* 32px — text-2xl */
+    --line-height-3xl: 2.25rem;   /* 36px — text-3xl */
+    --line-height-4xl: 2.75rem;   /* 44px — text-4xl */
+    --line-height-display: 4rem;  /* 64px — text-display */
+
+    /* === Stack typo (cf. D-04 Inter Display + Inter) ===
+     *
+     * Les variables CSS `--font-inter-display` et `--font-inter` sont
+     * injectées par `apps/dashboard/app/layout.tsx` via
+     * `next/font/google`. Sans ces variables (storybook, tests),
+     * fallback sur la police système.
+     *
+     * `--font-noto-sans` reste comme alias pour ne pas casser un
+     * consommateur résiduel ; il pointe sur la nouvelle variable Inter.
      */
-    --space-1: 0.25rem; /* 4px */
-    --space-2: 0.5rem;  /* 8px */
-    --space-3: 0.75rem; /* 12px */
-    --space-4: 1rem;    /* 16px */
-    --space-5: 1.25rem; /* 20px */
-    --space-6: 1.5rem;  /* 24px */
-    --space-8: 2rem;    /* 32px */
-    --space-10: 2.5rem; /* 40px */
-    --space-12: 3rem;   /* 48px */
-
-    /*
-     * Échelle typographique. `--font-size-*` accompagnés des
-     * `--line-height-*` correspondants pour ne pas avoir à recalculer
-     * à la main à chaque usage. Mêmes valeurs que les utilitaires
-     * Tailwind (`text-xs`, `text-sm`, …) — exposés en variables pour
-     * les contextes hors-classes (CSS bruts, modules tiers).
-     */
-    --font-size-xs: 0.75rem;   /* 12px */
-    --font-size-sm: 0.875rem;  /* 14px */
-    --font-size-base: 1rem;    /* 16px */
-    --font-size-lg: 1.125rem;  /* 18px */
-    --font-size-xl: 1.25rem;   /* 20px */
-    --font-size-2xl: 1.5rem;   /* 24px */
-    --font-size-3xl: 1.875rem; /* 30px */
-
-    --line-height-xs: 1rem;       /* 16px */
-    --line-height-sm: 1.25rem;    /* 20px */
-    --line-height-base: 1.5rem;   /* 24px */
-    --line-height-lg: 1.75rem;    /* 28px */
-    --line-height-xl: 1.75rem;    /* 28px */
-    --line-height-2xl: 2rem;      /* 32px */
-    --line-height-3xl: 2.25rem;   /* 36px */
-
-    /*
-     * Police principale — Noto Sans (substitut public à gg sans Discord).
-     * Le consommateur (apps/dashboard) injecte la variable
-     * `--font-noto-sans` via `next/font/google` ; le fallback couvre
-     * les contextes sans Next (storybook, tests).
-     */
+    --font-display:
+      var(--font-inter-display, var(--font-inter, var(--font-noto-sans))),
+      'Inter Display', 'Inter', 'Helvetica Neue', Helvetica, Arial,
+      'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
     --font-sans:
-      var(--font-noto-sans, 'Noto Sans'), 'Helvetica Neue', Helvetica, Arial,
+      var(--font-inter, var(--font-noto-sans)),
+      'Inter', 'Helvetica Neue', Helvetica, Arial,
       'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
     --font-mono:
       ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
       monospace;
+
+    /* === Z-index — échelle plate (cf. 02-tokens.md §12) === */
+    --z-base: 0;
+    --z-elevated: 10;
+    --z-dropdown: 100;
+    --z-overlay: 200;
+    --z-modal: 300;
+    --z-toast: 400;
+    --z-tooltip: 500;
   }
 
   /*
-   * Mécanique mode clair / sombre.
+   * Mode clair — réécrit uniquement les rôles abstraits. Tous les
+   * composants qui consomment `var(--bg-page)`, `var(--fg-primary)`,
+   * etc. basculent automatiquement.
    *
-   * V1 : dark-only. Les valeurs de `:root` ci-dessus correspondent au
-   * thème sombre, qui est le seul rendu actuellement par le dashboard.
-   *
-   * Préparation V1.x (PR 7.4) : un éventuel mode clair s'activera via
-   * `[data-theme="light"]` posé sur `<html>`, qui réécrira chacune
-   * des variables ci-dessus avec les valeurs claires correspondantes.
-   * Aucun composant ne doit faire d'hypothèse sur "il fait sombre" :
-   * lire les tokens via `var(--*)` rend le code automatiquement
-   * compatible quand le mode clair sera réellement câblé.
-   *
+   * Câblage applicatif (sélecteur, persistance par utilisateur,
+   * provider SSR-safe) en PR 7.4.9 (cf. D-06).
+   */
+  [data-theme="light"] {
+    color-scheme: light;
+
+    --bg-page: var(--paper-50);
+    --bg-rail: var(--paper-100);
+    --bg-surface-1: var(--paper-100);
+    --bg-surface-2: var(--paper-200);
+    --bg-surface-3: var(--paper-300);
+    --bg-overlay: rgba(12, 14, 16, 0.4);
+
+    --fg-primary: var(--paper-800);
+    --fg-secondary: var(--paper-700);
+    --fg-muted: var(--paper-500);
+    --fg-disabled: var(--paper-600);
+    --fg-on-accent: var(--paper-50);
+
+    --border-subtle: var(--paper-300);
+    --border-default: var(--paper-400);
+    --border-strong: var(--paper-500);
+
+    --iris-on-surface: var(--paper-50);
+
+    /* Aliases shadcn ré-évalués automatiquement parce qu'ils pointent
+       déjà sur les rôles abstraits — sauf ceux qui pointent
+       directement sur des paliers ash. On override ces derniers. */
+    --secondary: var(--paper-300);
+    --secondary-foreground: var(--paper-800);
+    --secondary-hover: var(--paper-400);
+    --muted: var(--paper-200);
+    --warning-foreground: var(--paper-900);
+
+    /* Ombres adaptées light — moins denses, sans inner highlight. */
+    --shadow-xs: 0 1px 2px rgba(15, 17, 21, 0.06);
+    --shadow-sm: 0 1px 3px rgba(15, 17, 21, 0.08), 0 1px 2px rgba(15, 17, 21, 0.04);
+    --shadow-md: 0 4px 12px rgba(15, 17, 21, 0.10), 0 2px 4px rgba(15, 17, 21, 0.06);
+    --shadow-lg: 0 12px 32px rgba(15, 17, 21, 0.14), 0 4px 8px rgba(15, 17, 21, 0.08);
+    --shadow-xl: 0 24px 64px rgba(15, 17, 21, 0.18), 0 8px 16px rgba(15, 17, 21, 0.10);
+    --shadow-glow-iris:
+      0 0 0 1px rgba(91, 108, 255, 0.42),
+      0 4px 16px rgba(91, 108, 255, 0.22);
+  }
+
+  /*
    * La classe `.dark` historique (héritée de shadcn/ui) reste exposée
-   * pour ne pas casser un usage tiers, mais elle n'a plus d'effet
-   * différenciant (le dark est déjà le défaut).
+   * pour ne pas casser un usage tiers, mais n'a plus d'effet
+   * différenciant — le dark est le défaut.
    */
   .dark {
     color-scheme: dark;
   }
 
-  [data-theme="light"] {
-    color-scheme: light;
-    /* Override des tokens pour le mode clair — à remplir en PR 7.4. */
-  }
-
   html,
   body {
-    background-color: var(--background);
-    color: var(--foreground);
+    background-color: var(--bg-page);
+    color: var(--fg-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 }
 
+/*
+ * Mapping `@theme inline` — expose les tokens en classes utilitaires
+ * Tailwind 4. Les noms de classe restent compatibles avec l'existant
+ * (bg-background, text-foreground…) ; les nouveaux rôles s'ajoutent
+ * sans conflit.
+ */
 @theme inline {
-  /* Couches DA exposées comme classes Tailwind */
-  --color-rail: var(--rail);
-  --color-sidebar: var(--sidebar);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
-  --color-surface-active: var(--surface-active);
+  /* Rôles abstraits exposés en classes (.bg-page, .bg-surface-1, etc.) */
+  --color-bg-page: var(--bg-page);
+  --color-bg-rail: var(--bg-rail);
+  --color-bg-surface-1: var(--bg-surface-1);
+  --color-bg-surface-2: var(--bg-surface-2);
+  --color-bg-surface-3: var(--bg-surface-3);
+  --color-bg-overlay: var(--bg-overlay);
+  --color-fg-primary: var(--fg-primary);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-fg-on-accent: var(--fg-on-accent);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
 
-  /* Tokens sémantiques (compat shadcn) */
+  /* Iris (rampe complète exposée) */
+  --color-iris-100: var(--iris-100);
+  --color-iris-300: var(--iris-300);
+  --color-iris-500: var(--iris-500);
+  --color-iris-600: var(--iris-600);
+  --color-iris-700: var(--iris-700);
+  --color-iris-900: var(--iris-900);
+
+  /* Sémantiques (les 3 paliers) */
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-success-text: var(--success-text);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-border: var(--warning-border);
+  --color-warning-text: var(--warning-text);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-danger-text: var(--danger-text);
+  --color-info-bg: var(--info-bg);
+  --color-info-border: var(--info-border);
+  --color-info-text: var(--info-text);
+
+  /* Aliases shadcn (compat) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -231,20 +411,42 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --radius-sm: 0.1875rem; /* 3px — boutons Discord */
-  --radius-md: 0.25rem;   /* 4px — inputs, panels */
-  --radius-lg: 0.5rem;    /* 8px — cards */
-  --radius-xl: 0.75rem;   /* 12px */
+  /* Aliases anciens noms Discord (.bg-rail, .bg-sidebar, etc.) */
+  --color-rail: var(--rail);
+  --color-sidebar: var(--sidebar);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
 
-  /* Ombres Discord-marketing — exposées en classes shadow-*. */
+  /* Rayons */
+  --radius-none: var(--radius-none);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  /* Ombres */
+  --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-glow-iris: var(--shadow-glow-iris);
   --shadow-glow-primary: var(--shadow-glow-primary);
 
-  --color-border-strong: var(--border-strong);
-
+  /* Typo */
+  --font-display: var(--font-display);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-}
 
+  /* Z-index (.z-elevated, .z-modal, etc.) */
+  --z-base: var(--z-base);
+  --z-elevated: var(--z-elevated);
+  --z-dropdown: var(--z-dropdown);
+  --z-overlay: var(--z-overlay);
+  --z-modal: var(--z-modal);
+  --z-toast: var(--z-toast);
+  --z-tooltip: var(--z-tooltip);
+}
