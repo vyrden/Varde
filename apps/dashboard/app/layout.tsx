@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { cookies } from 'next/headers';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import type { ReactElement, ReactNode } from 'react';
+
+import { ThemeProvider } from '../components/theme/ThemeProvider';
+import { ThemeScript, themeCookieName } from '../components/theme/ThemeScript';
+import { normalizeStoredTheme } from '../lib/resolve-theme';
 
 import './globals.css';
 
@@ -50,11 +55,34 @@ export default async function RootLayout({
   // charge le JSON correspondant côté serveur.
   const locale = await getLocale();
   const messages = await getMessages();
+
+  // Thème (jalon 7 PR 7.4.9). On lit la préférence brute depuis le
+  // cookie ; le `<ThemeScript>` injecté dans `<head>` la résout
+  // contre `prefers-color-scheme` côté client avant le premier paint
+  // pour éviter le flash. Le `ThemeProvider` qui enveloppe l'arbre
+  // tient ensuite l'état React et la persistance.
+  const cookieStore = await cookies();
+  const storedTheme = normalizeStoredTheme(cookieStore.get(themeCookieName)?.value);
+
+  // `dataTheme` initial côté server : on applique uniquement quand le
+  // user a explicitement choisi `light`. Pour `system` ou `dark`, on
+  // n'applique rien — `dark` est le défaut CSS, `system` est résolu
+  // par le ThemeScript juste après que `<head>` soit parsé. Cette
+  // logique évite un attribut `data-theme="dark"` redondant.
+  const initialDataTheme = storedTheme === 'light' ? 'light' : undefined;
+
   return (
-    <html lang={locale} className={`${inter.variable} dark`}>
+    <html
+      lang={locale}
+      className={`${inter.variable} dark`}
+      {...(initialDataTheme !== undefined ? { 'data-theme': initialDataTheme } : {})}
+    >
+      <head>
+        <ThemeScript />
+      </head>
       <body className="font-sans antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
+          <ThemeProvider initialStored={storedTheme}>{children}</ThemeProvider>
         </NextIntlClientProvider>
       </body>
     </html>

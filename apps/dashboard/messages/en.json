@@ -27,6 +27,14 @@
       "grabHandle": "Reorder {name} (drag or Space + arrows)"
     }
   },
+  "theme": {
+    "groupLabel": "Appearance",
+    "options": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    }
+  },
   "moduleConfig": {
     "header": {
       "breadcrumbLabel": "Breadcrumb",

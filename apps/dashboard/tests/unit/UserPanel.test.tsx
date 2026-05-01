@@ -5,6 +5,15 @@ vi.mock('../../auth', () => ({
   signOut: vi.fn(),
 }));
 
+// Stub du sélecteur de thème (jalon 7 PR 7.4.9) — il dépend du
+// `ThemeProvider` et de `useTranslations`, deux contextes que les
+// tests de `UserPanel` n'instancient pas. Le panneau garde sa
+// fonction principale (avatar, nom, badge, logout) ; le picker est
+// testé séparément via `ThemeMenu`.
+vi.mock('../../components/theme/ThemeMenu', () => ({
+  ThemeMenu: () => null,
+}));
+
 import { UserPanel } from '../../components/shell/UserPanel';
 
 describe('UserPanel', () => {

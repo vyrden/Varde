@@ -27,6 +27,14 @@
       "grabHandle": "Réordonner {name} (drag ou Espace + flèches)"
     }
   },
+  "theme": {
+    "groupLabel": "Apparence",
+    "options": {
+      "system": "Système",
+      "light": "Clair",
+      "dark": "Sombre"
+    }
+  },
   "moduleConfig": {
     "header": {
       "breadcrumbLabel": "Fil d'Ariane",
