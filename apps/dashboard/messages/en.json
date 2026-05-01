@@ -21,6 +21,12 @@
   "header": {
     "signOut": "Sign out"
   },
+  "sidebar": {
+    "pinned": {
+      "label": "Pinned",
+      "grabHandle": "Reorder {name} (drag or Space + arrows)"
+    }
+  },
   "home": {
     "empty": {
       "title": "No server",

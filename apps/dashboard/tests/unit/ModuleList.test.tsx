@@ -16,6 +16,11 @@ const mod = (
   description,
   enabled,
   permissions: [],
+  category: null,
+  icon: null,
+  shortDescription: null,
+  isPinned: false,
+  lastConfiguredAt: null,
 });
 
 describe('ModuleList', () => {

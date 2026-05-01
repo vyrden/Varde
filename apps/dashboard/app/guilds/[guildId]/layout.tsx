@@ -10,6 +10,7 @@ import { UserPanel } from '../../../components/shell/UserPanel';
 import {
   ApiError,
   fetchAdminGuilds,
+  fetchGuildPreferences,
   fetchGuildUserLevel,
   fetchModules,
 } from '../../../lib/api-client';
@@ -39,6 +40,7 @@ export default async function GuildLayout({
   let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>> = [];
   let modules: Awaited<ReturnType<typeof fetchModules>> = [];
   let userLevel: Awaited<ReturnType<typeof fetchGuildUserLevel>> | null = null;
+  let pinnedModules: Awaited<ReturnType<typeof fetchGuildPreferences>>['pinnedModules'] = [];
   // Résolution de l'App ID Discord pour l'URL d'invitation du bouton « + »
   // du rail (ADR 0016). Source unique : `instance_config` via l'endpoint
   // interne `/internal/oauth-credentials`. Échec silencieux → bouton masqué,
@@ -51,11 +53,16 @@ export default async function GuildLayout({
     inviteClientId = null;
   }
   try {
-    [guilds, modules, userLevel] = await Promise.all([
+    const [guildsResult, modulesResult, userLevelResult, preferencesResult] = await Promise.all([
       fetchAdminGuilds(),
       fetchModules(guildId),
       fetchGuildUserLevel(guildId),
+      fetchGuildPreferences(guildId),
     ]);
+    guilds = guildsResult;
+    modules = modulesResult;
+    userLevel = userLevelResult;
+    pinnedModules = preferencesResult.pinnedModules;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
     if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
@@ -74,6 +81,15 @@ export default async function GuildLayout({
     hasDedicatedPage: MODULES_WITH_PAGE.has(m.id),
   }));
 
+  // Index { moduleId → { name, enabled } } pour la section épinglés
+  // (jalon 7 PR 7.4.5). Couvre tous les modules visibles par le user
+  // — un pin pointant sur un moduleId absent (module désinstallé)
+  // est filtré côté client.
+  const pinnedEntries: Record<string, { moduleId: string; name: string; enabled: boolean }> = {};
+  for (const m of modules) {
+    pinnedEntries[m.id] = { moduleId: m.id, name: m.name, enabled: m.enabled };
+  }
+
   // global_name (le pseudo affiché public Discord) > username
   // historique > fallback statique. Discord encourage global_name
   // partout depuis 2023.
@@ -90,6 +106,8 @@ export default async function GuildLayout({
           guildId={guildId}
           guildName={currentGuild.name}
           modules={sidebarModules}
+          pinnedModules={pinnedModules}
+          pinnedEntries={pinnedEntries}
           {...(userLevel !== null ? { userLevel } : {})}
           footer={
             <UserPanel

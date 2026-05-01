@@ -41,6 +41,32 @@ export interface ModuleListItemDto {
   readonly enabled: boolean;
   /** Permissions déclarées dans le manifeste du module. */
   readonly permissions: readonly PermissionDefinitionDto[];
+  /**
+   * Champs d'enrichissement (jalon 7 PR 7.4.3) consommés par la grille
+   * de modules et la section épinglés de la sidebar (jalon 7 PR 7.4.5).
+   * `null` pour un module tiers qui ne fournit pas le champ — l'UI
+   * tombe sur ses fallbacks.
+   */
+  readonly category: string | null;
+  readonly icon: string | null;
+  readonly shortDescription: string | null;
+  readonly isPinned: boolean;
+  readonly lastConfiguredAt: string | null;
+}
+
+/** Une épingle de module (jalon 7 PR 7.4.5). */
+export interface PinnedModuleDto {
+  readonly moduleId: string;
+  readonly position: number;
+}
+
+/**
+ * Préférences d'un user pour une guild — uniquement les pins en V1
+ * (jalon 7 PR 7.4.5). Le couple `theme` / `locale` global vit ailleurs
+ * sur `/me/preferences` (cf. PR 7.4.9 thème).
+ */
+export interface GuildPreferencesDto {
+  readonly pinnedModules: readonly PinnedModuleDto[];
 }
 
 export interface ModuleConfigDto {
@@ -128,6 +154,16 @@ export async function fetchAdminGuilds(): Promise<readonly AdminGuildDto[]> {
 /** Liste des modules chargés côté core pour une guild (enabled/disabled). */
 export async function fetchModules(guildId: string): Promise<readonly ModuleListItemDto[]> {
   return apiGet<readonly ModuleListItemDto[]>(`/guilds/${encodeURIComponent(guildId)}/modules`);
+}
+
+/**
+ * Préférences du user courant pour une guild (jalon 7 PR 7.4.5) :
+ * liste ordonnée des modules épinglés. Le service serveur applique
+ * `requireGuildAccess('moderator')` ; admin et moderator voient leurs
+ * propres pins isolément.
+ */
+export async function fetchGuildPreferences(guildId: string): Promise<GuildPreferencesDto> {
+  return apiGet<GuildPreferencesDto>(`/me/guilds/${encodeURIComponent(guildId)}/preferences`);
 }
 
 /**

@@ -21,6 +21,12 @@
   "header": {
     "signOut": "Se déconnecter"
   },
+  "sidebar": {
+    "pinned": {
+      "label": "Épinglés",
+      "grabHandle": "Réordonner {name} (drag ou Espace + flèches)"
+    }
+  },
   "home": {
     "empty": {
       "title": "Aucun serveur",

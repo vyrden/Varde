@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactElement, ReactNode } from 'react';
 
+import type { PinnedModuleDto } from '../../lib/api-client';
 import { moduleIcon } from './module-icons';
+import { type PinnedModuleEntry, PinnedModulesSection } from './PinnedModulesSection';
 
 interface ModuleEntry {
   readonly id: string;
@@ -25,6 +27,19 @@ export interface GuildSidebarProps {
    * en transition.
    */
   readonly userLevel?: 'admin' | 'moderator';
+  /**
+   * Liste ordonnée des modules épinglés par l'utilisateur courant
+   * pour cette guild (jalon 7 PR 7.4.5). Vide ou absent → la section
+   * « Épinglés » ne s'affiche pas.
+   */
+  readonly pinnedModules?: readonly PinnedModuleDto[];
+  /**
+   * Vue enrichie des modules par id (nom + état d'activation),
+   * utilisée par la section épinglés pour afficher le label et
+   * griser les modules désactivés. Couvre tous les modules de
+   * `modules` côté layout.
+   */
+  readonly pinnedEntries?: Readonly<Record<string, PinnedModuleEntry>>;
   /**
    * Slot footer rendu en bas de la sidebar (pinned `mt-auto`). Le
    * layout y branche typiquement `<UserPanel>` (Server Component
@@ -185,6 +200,8 @@ export function GuildSidebar({
   guildName,
   modules,
   userLevel,
+  pinnedModules,
+  pinnedEntries,
   footer,
 }: GuildSidebarProps): ReactElement {
   const pathname = usePathname() ?? '';
@@ -267,6 +284,13 @@ export function GuildSidebar({
 
       <div className="space-y-1 py-2">
         <SidebarSection label="Gestion" items={gestion} currentPath={pathname} />
+        {pinnedModules && pinnedModules.length > 0 && pinnedEntries ? (
+          <PinnedModulesSection
+            guildId={guildId}
+            initialPins={pinnedModules}
+            modulesById={pinnedEntries}
+          />
+        ) : null}
         {settings.length > 0 ? (
           <SidebarSection label="Paramètres" items={settings} currentPath={pathname} />
         ) : null}
