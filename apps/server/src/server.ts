@@ -9,6 +9,7 @@ import {
   type DiscordClient,
   type DiscordStatusSnapshot,
   type GuildRoleDto,
+  type GuildSnapshot,
   type GuildTextChannelDto,
   type OnboardingActionContextFactory,
   reconcileOnboardingSessions,
@@ -23,6 +24,7 @@ import {
   registerBotSettingsRoutes,
   registerDiscordChannelsRoutes,
   registerDiscordEmojisRoutes,
+  registerGuildOverviewRoutes,
   registerGuildsRoutes,
   registerInternalCredentialsRoutes,
   registerLogsRoutes,
@@ -248,6 +250,13 @@ export interface CreateServerOptions<D extends DbDriver> {
   readonly listGuildTextChannels?: (guildId: string) => Promise<readonly GuildTextChannelDto[]>;
   /** Fonction listant les rôles Discord d'une guild. Voir `listGuildTextChannels`. */
   readonly listGuildRoles?: (guildId: string) => Promise<readonly GuildRoleDto[]>;
+  /**
+   * Snapshot Discord (name + iconUrl + memberCount) d'une guild,
+   * utilisé par `GET /guilds/:guildId/overview` (jalon 7 PR 7.4.2).
+   * Fournie par `bin.ts` à partir du Client discord.js. Absente →
+   * la route répond avec `name: null, iconUrl: null, memberCount: null`.
+   */
+  readonly getGuildSnapshot?: (guildId: string) => Promise<GuildSnapshot | null>;
   /**
    * Fonction listant les emojis custom visibles depuis une guild
    * (emojis du serveur courant + emojis des autres serveurs où le bot
@@ -786,6 +795,18 @@ export async function createServer<D extends DbDriver>(
     userPreferences,
     guildPermissions,
     listKnownModuleIds: () => loader.loadOrder() as readonly string[],
+  });
+  // Vue d'ensemble par guild (jalon 7 PR 7.4.2). `getGuildSnapshot`
+  // est fourni par `bin.ts` à partir du Client discord.js ; absent →
+  // fallback sur `null` qui se traduit par des champs `null` côté
+  // réponse plutôt qu'une 503.
+  registerGuildOverviewRoutes(api, {
+    client,
+    loader,
+    guildPermissions,
+    audit,
+    getGuildSnapshot: options.getGuildSnapshot ?? (async () => null),
+    getDiscordStatus: () => discordStatusProvider(),
   });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
   registerModulePermissionsRoutes(api, { loader, permissions, discord });

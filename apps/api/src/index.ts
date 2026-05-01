@@ -90,6 +90,12 @@ export {
   registerDiscordEmojisRoutes,
 } from './routes/discord-emojis.js';
 export {
+  type GuildOverviewResponse,
+  type GuildSnapshot,
+  type RegisterGuildOverviewRoutesOptions,
+  registerGuildOverviewRoutes,
+} from './routes/guild-overview.js';
+export {
   type AdminGuildDto,
   type RegisterGuildsRoutesOptions,
   registerGuildsRoutes,
