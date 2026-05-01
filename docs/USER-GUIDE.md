@@ -13,13 +13,14 @@ ouvrir un terminal.
 
 1. [Première connexion](#première-connexion)
 2. [Vue d'ensemble du dashboard](#vue-densemble-du-dashboard)
-3. [Configurer votre serveur en quelques minutes (onboarding)](#configurer-votre-serveur-en-quelques-minutes-onboarding)
-4. [Les modules officiels, un par un](#les-modules-officiels-un-par-un)
-5. [Le journal d'audit](#le-journal-daudit)
-6. [Permissions : qui peut faire quoi](#permissions--qui-peut-faire-quoi)
-7. [Brancher une IA (facultatif)](#brancher-une-ia-facultatif)
-8. [Administration de l'instance](#administration-de-linstance)
-9. [Pièges fréquents et comment s'en sortir](#pièges-fréquents-et-comment-sen-sortir)
+3. [Personnaliser votre expérience](#personnaliser-votre-expérience)
+4. [Configurer votre serveur en quelques minutes (onboarding)](#configurer-votre-serveur-en-quelques-minutes-onboarding)
+5. [Les modules officiels, un par un](#les-modules-officiels-un-par-un)
+6. [Le journal d'audit](#le-journal-daudit)
+7. [Permissions : qui peut faire quoi](#permissions--qui-peut-faire-quoi)
+8. [Brancher une IA (facultatif)](#brancher-une-ia-facultatif)
+9. [Administration de l'instance](#administration-de-linstance)
+10. [Pièges fréquents et comment s'en sortir](#pièges-fréquents-et-comment-sen-sortir)
 
 ---
 
@@ -48,13 +49,76 @@ Une fois sur la page d'un serveur, vous trouvez :
 | Zone | À quoi ça sert |
 | --- | --- |
 | 📋 **Sidebar à gauche** | Navigation entre les modules et les pages globales (audit, paramètres, permissions). |
-| 🏠 **Page d'accueil** | Récapitulatif rapide du serveur et accès aux modules. |
+| 🏠 **Aperçu du serveur** | Tableau de bord d'actions : modules épinglés, modifications récentes, activité 24 h, démarrage rapide si peu de modules sont actifs. |
+| 🧱 **Grille de modules** | Liste filtrable de tous les modules disponibles, avec activation et épinglage en un clic. |
 | 🧩 **Une page par module** | Configuration détaillée du module concerné. Chaque module a sa propre interface. |
-| 🪪 **Identité en haut à droite** | Votre avatar Discord, et le bouton de déconnexion. |
+| 🪪 **Panel utilisateur en bas de sidebar** | Votre avatar Discord, le sélecteur de thème (Système / Clair / Sombre) et le bouton de déconnexion. |
+
+La page d'aperçu sert à **agir vite** : elle indique ce qui demande
+votre attention (modules récemment modifiés, activité chiffrée des
+24 dernières heures) sans noyer l'écran de graphiques. Tout y est
+cliquable et amène à une page de configuration ou au journal complet.
 
 Tout se sauvegarde **après confirmation explicite**. Vous pouvez
 modifier des champs sans crainte : tant que vous n'avez pas
-cliqué sur « Enregistrer », rien ne change réellement.
+cliqué sur « Enregistrer », rien ne change réellement. Quand vous
+modifiez la config d'un module, une **barre d'enregistrement
+collante** apparaît en bas de page avec un compteur des
+modifications non sauvegardées et deux boutons : **Annuler**
+(restaure la valeur initiale) et **Enregistrer**.
+
+---
+
+## Personnaliser votre expérience
+
+### Épingler des modules dans la sidebar
+
+Les modules que vous configurez le plus souvent peuvent être
+**épinglés** pour rester accessibles en un clic depuis la sidebar.
+Sur la page **Modules** (entrée « Modules » dans la sidebar), chaque
+carte a un bouton 📌 en bas à gauche :
+
+- Cliquez sur 📌 pour épingler le module.
+- Cliquez à nouveau pour le retirer.
+
+Les épingles s'affichent dans la section **« Épinglés »** de la
+sidebar, entre la navigation principale et les pages dédiées des
+modules officiels.
+
+**Limite :** 8 épingles maximum par couple (utilisateur, serveur). Au
+delà, un message vous demande d'en retirer une avant d'en ajouter
+une autre. La limite se justifie par la place disponible — au-delà
+de 8, la sidebar devient peu lisible.
+
+**Réorganiser :** dans la sidebar, survolez une épingle pour faire
+apparaître la poignée de glissement (les six points à gauche).
+Glissez pour réordonner. Au clavier, Tab pour focus la poignée,
+Espace pour saisir, flèches haut/bas pour bouger, Espace pour
+relâcher. L'ordre est persisté immédiatement.
+
+**Modules désactivés :** ils restent affichés dans la sidebar en
+**grisé**. Click navigue toujours vers la page de config — vous
+n'avez pas à désépingler avant de désactiver un module et inversement.
+
+Vos épingles sont **par utilisateur et par serveur** : vous voyez
+les vôtres, pas celles des autres administrateurs ; et chaque serveur
+a sa propre liste.
+
+### Choisir un thème (clair, sombre, système)
+
+Dans le panel utilisateur en bas de la sidebar, trois icônes
+permettent de choisir l'apparence du dashboard :
+
+- 💻 **Système** (par défaut) : suit le réglage de votre OS, et
+  bascule automatiquement quand l'OS bascule (cas typique : macOS qui
+  passe en sombre la nuit).
+- ☀️ **Clair** : force le mode clair quel que soit l'OS.
+- 🌙 **Sombre** : force le mode sombre.
+
+Le choix est persisté **par utilisateur sur l'instance Varde** : il
+vous suit d'un serveur à l'autre, et reste après reconnexion.
+Le rendu s'applique sans flash de couleur intermédiaire — le
+dashboard décide du thème à servir avant le premier paint.
 
 ---
 

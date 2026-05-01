@@ -153,6 +153,43 @@ Quelques règles à connaître :
 > au runtime toute permission non préfixée, pour empêcher un module
 > de fabriquer une permission au nom d'un autre.
 
+### Champs d'affichage pour la grille de modules (jalon 7 PR 7.4)
+
+Trois champs **optionnels** alimentent la carte de votre module dans
+la grille du dashboard et la sidebar épingles. Tous sont rétrocompat :
+un module qui ne les fournit pas reste pleinement fonctionnel, l'UI
+tombe simplement sur des fallbacks.
+
+```ts
+export const manifest: ManifestStatic = {
+  id: 'example-counter' as ModuleId,
+  name: 'Example Counter',
+  version: '1.0.0',
+  // ...
+  category: 'utility',
+  icon: 'sparkles',
+  shortDescription: 'Compte les messages par membre, paginé.',
+};
+```
+
+| Champ | Type | Limite | À quoi ça sert |
+| --- | --- | --- | --- |
+| `category` | `string` non vide | Libre | Regroupement visuel futur. V1 : non exploité graphiquement, mais le champ est lu et persisté dès maintenant. |
+| `icon` | `string` non vide | Libre | Nom d'icône Lucide (ex. `shield-check`) ou identifiant SVG inline géré côté dashboard. Pour un module officiel, le mapping est défini dans `apps/dashboard/components/shell/module-icons.tsx`. |
+| `shortDescription` | `string` | 1 à 120 caractères | Phrase courte affichée sous le nom du module dans la grille et dans la sidebar épingles. **Doit tenir sur une ligne** ; si vous avez plus à dire, gardez-le pour `description`. |
+
+Recommandation pour le `shortDescription` : commencez par un verbe
+d'action (« Modère… », « Distribue… », « Affiche… »). 70 caractères
+ou moins est confortable côté i18n — au-delà l'EN risque de déborder.
+
+Quand ces champs ne sont **pas** fournis, le dashboard rend :
+
+- Pas d'icône (placeholder neutre).
+- Catégorie « Autres ».
+- `shortDescription` = première phrase de `description` (coupée au
+  premier `.` ou `\n`), sans garantie de longueur — pour un rendu
+  propre, fournissez explicitement `shortDescription`.
+
 ---
 
 ## La configuration

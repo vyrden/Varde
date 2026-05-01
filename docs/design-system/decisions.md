@@ -306,8 +306,8 @@ system.
    l'asset arrive, l'intégration consiste à remplacer le placeholder
    sans bouger la composition.
 
-**Décision.** Option 2. `04-mascot-usage.md` documente règles + tests
-+ contraintes techniques + cahier des charges illustrateur.
+**Décision.** Option 2. `04-mascot-usage.md` documente règles, tests,
+contraintes techniques et cahier des charges illustrateur.
 
 **Conséquences.**
 
@@ -484,3 +484,142 @@ d'implémentation, pas pendant ce cadrage (qui n'écrit que dans
   Référence active : docs/design-system/00-index.md` au début de
   `docs/DA/DA.md`. Les fichiers HTML wireframes restent comme
   trace historique.
+
+---
+
+## D-12 — Sélecteur de thème inline plutôt qu'en sous-menu
+
+**Statut** : Acceptée (déviation d'implémentation, à revoir si une primitive dropdown apparaît).
+
+**Date** : 2026-05-02 (consigné en PR 7.4.11).
+
+**Contexte.** La spec PR 7.4 §11 et `03-screens-map.md` parlaient
+d'un « sous-menu Apparence » dans le panel utilisateur (pattern
+classique : icône cliquable qui ouvre un dropdown contenant les 3
+options). À l'implémentation en PR 7.4.9, le dashboard ne dispose
+pas de primitive dropdown / popover réutilisable dans `@varde/ui`,
+et en concevoir une serait un PR à part entière (focus trap,
+positioning, escape, click outside, a11y).
+
+**Options envisagées.**
+
+1. *Construire une primitive `<DropdownMenu>` ad-hoc dans cette PR.*
+   Recalé : la primitive devient son propre sujet (5+ patterns à
+   supporter, tests d'a11y, docs), trop pour une PR qui devait
+   livrer le sélecteur.
+2. *Importer une lib (Radix, Headless UI).*
+   Recalé : `@varde/ui` n'a aucune dépendance UI tierce aujourd'hui
+   (par choix architectural — cf. principe 7 self-host first et
+   ADR 0012). L'ajout d'une lib est un sujet projet, pas une
+   décision d'implémentation tactique.
+3. *Inline le sélecteur en segmented control compact (3 boutons
+   icônes).* (retenue)
+   3 options visibles en permanence dans le panel utilisateur,
+   icônes seules en mode `compact` pour s'intégrer dans la largeur
+   disponible. Label « Apparence » de la fieldset reste lu par les
+   lecteurs d'écran.
+
+**Décision.** Option 3. Le sélecteur est inline, intégré au-dessus
+de la rangée avatar/nom/badge/logout dans `<UserPanel>`.
+
+**Conséquences.**
+
+- Léger écart visuel par rapport à la cible « sous-menu » de la
+  cartographie d'écrans. À reconvertir en dropdown quand une
+  primitive sera disponible — l'API publique de `<ThemeMenu>` (prop
+  `compact`) ne change pas, seule la présentation extérieure
+  bascule.
+- Espace pris dans le panel utilisateur : ~32 px de hauteur en
+  plus. Acceptable côté densité ; à surveiller si la sidebar
+  rétrécit en mobile (post-V1).
+- L'API du `<ThemeMenu compact />` reste réutilisable telle quelle
+  ailleurs (page de paramètres globale par exemple).
+
+---
+
+## D-13 — Inter Display déféré : `--font-display` aliasé sur Inter
+
+**Statut** : Acceptée (alias temporaire, à revoir quand une variant Display dédiée sera disponible).
+
+**Date** : 2026-05-01 (consigné en PR 7.4.11).
+
+**Contexte.** D-04 actait Inter Display + Inter via `next/font/google`.
+À l'implémentation en PR 7.4.4, Google Fonts n'expose pas Inter
+Display comme une famille séparée — c'est une variant optique de la
+famille Inter qui s'active via `font-feature-settings` (optical
+sizing automatique) ou via une distribution dédiée à charger
+manuellement.
+
+**Décision.** Le token `--font-display` est aliasé sur
+`--font-inter` aujourd'hui. Le rendu utilise donc la même famille
+pour titres et corps, l'optical sizing géré par le navigateur
+quand il est disponible. Quand on injectera une variable
+`--font-inter-display` distincte (en chargeant la distribution
+Inter Display séparément, ou en migrant vers une autre stack), la
+fallback chain de `--font-display` la prendra automatiquement —
+aucun composant à modifier.
+
+**Conséquences.**
+
+- Différence visuelle imperceptible sur la plupart des paliers
+  typographiques (Inter à `--text-display` 60 px reste lisible et
+  caractéristique).
+- Le bénéfice principal de D-04 (cohérence entre titre et corps
+  dans la même famille) reste tenu.
+- Bascule vers une vraie Inter Display = ajout de la variable
+  `--font-inter-display` dans `apps/dashboard/app/layout.tsx`. La
+  CSS chain fait le reste.
+
+---
+
+## D-14 — Tests E2E exhaustifs déférés à un chantier dédié
+
+**Statut** : Acceptée (scope tight pour clore le chantier 7.4).
+
+**Date** : 2026-05-02 (consigné en PR 7.4.11).
+
+**Contexte.** La spec PR 7.4 §16 listait neuf scénarios E2E
+Playwright (épingler/désépingler, drag-reorder persisté, toggle
+modules avec/sans données, recherche grille, sticky save bar,
+bascule de thème sans flash, etc.) plus l'audit axe-core
+automatisé et Lighthouse > 90.
+
+À l'implémentation, écrire les neuf scénarios + l'audit a11y +
+Lighthouse aurait demandé d'étendre substantiellement le mock API
+E2E (`tests/e2e/fixtures/setup-api-mock.mjs`) avec les nouvelles
+routes (`/me/preferences`, `/me/guilds/:id/preferences`,
+`/me/guilds/:id/preferences/pins`, `/guilds/:id/overview`,
+`/guilds/:id/modules` enrichi). Et la mise en place axe-core
+Playwright + Lighthouse demande sa propre infrastructure
+(@axe-core/playwright, lighthouse CI, seuils de régression).
+
+**Options envisagées.**
+
+1. *Tout implémenter dans la PR de clôture du chantier 7.4.*
+   Recalé : explose le périmètre, pollue le diff de la PR, retarde
+   la mise en main de la refonte.
+2. *Sortir les E2E en chantier dédié post-7.4.* (retenue)
+   Le travail E2E + a11y + perf devient un chantier de
+   « durcissement » qui peut être priorisé indépendamment, et
+   exécuté de manière itérative (ajout de specs au fur et à
+   mesure plutôt qu'un big-bang).
+
+**Décision.** Option 2. Le chantier 7.4 clôture avec les tests
+unitaires et d'intégration livrés au fil des PR (159 fichiers de
+tests au compteur, dont les helpers purs systématiquement TDD).
+Les neuf scénarios E2E sont consignés ici comme dette technique
+explicite.
+
+**Conséquences.**
+
+- À programmer en chantier dédié (post-7.4) : « Durcissement E2E +
+  a11y + perf du dashboard ». Inclura :
+  - Extension du mock API E2E avec les routes du chantier 7.4.
+  - Les neuf specs Playwright listés en PR 7.4 §16.
+  - Intégration `@axe-core/playwright` avec assertions zéro
+    violation A et AA sur chaque page refondue.
+  - Lighthouse CI avec seuil > 90 sur la vue d'ensemble et la
+    grille de modules.
+- Le risque de régression visuelle sans E2E reste contenu par la
+  base solide d'unit + intégration (helpers purs testés, routes
+  API testées, composants UI testés).
