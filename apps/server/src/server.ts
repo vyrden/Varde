@@ -33,6 +33,7 @@ import {
   registerReactionRolesRoutes,
   registerSetupRoutes,
   registerUnboundPermissionsRoutes,
+  registerUserPreferencesRoutes,
   registerWelcomeRoutes,
   type WelcomeUploadsService,
 } from '@varde/api';
@@ -73,6 +74,7 @@ import {
   createPermissionService,
   createPluginLoader,
   createSchedulerService,
+  createUserPreferencesService,
   type DiscordReconnectService,
   type GuildPermissionsContext,
   type GuildPermissionsService,
@@ -589,6 +591,15 @@ export async function createServer<D extends DbDriver>(
     cache: { maxSize: 1000, ttlMs: 60_000 },
   });
 
+  // Préférences utilisateur (jalon 7 PR 7.4.1). Cache mémoire court
+  // — les préférences sont lues à chaque navigation dashboard, mais
+  // changent rarement. Invalidation immédiate côté service à
+  // l'écriture.
+  const userPreferences = createUserPreferencesService({
+    client,
+    cache: { maxSize: 1000, ttlMs: 60_000 },
+  });
+
   // Subscriber global : toute `config.changed` émise sur le bus
   // devient une entrée `core.config.updated` dans l audit log. On
   // évite ainsi l audit inline par route (dette PR 2.10) et on
@@ -767,6 +778,14 @@ export async function createServer<D extends DbDriver>(
     guildPermissions,
     listGuildRoles: options.listGuildRoles ?? (async () => []),
     listGuildMembers: options.listGuildMembers ?? (async () => []),
+  });
+  // Préférences utilisateur (jalon 7 PR 7.4.1). `listKnownModuleIds`
+  // utilise `loader.loadOrder()` — la liste des modules chargés sur
+  // l'instance, indépendamment de leur état d'activation par-guild.
+  registerUserPreferencesRoutes(api, {
+    userPreferences,
+    guildPermissions,
+    listKnownModuleIds: () => loader.loadOrder() as readonly string[],
   });
   registerUnboundPermissionsRoutes(api, { loader, permissions, discord });
   registerModulePermissionsRoutes(api, { loader, permissions, discord });

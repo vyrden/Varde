@@ -152,6 +152,12 @@ export {
   registerUnboundPermissionsRoutes,
 } from './routes/unbound-permissions.js';
 export {
+  type RegisterUserPreferencesRoutesOptions,
+  registerUserPreferencesRoutes,
+  type UserGuildPreferencesResponse,
+  type UserPreferencesResponse,
+} from './routes/user-preferences.js';
+export {
   type RegisterWelcomeRoutesOptions,
   registerWelcomeRoutes,
 } from './routes/welcome.js';

@@ -123,3 +123,15 @@ export {
   createSchedulerService,
 } from './scheduler.js';
 export { createUIService, isUIMessage } from './ui.js';
+export {
+  type CreateUserPreferencesServiceOptions,
+  createUserPreferencesService,
+  PINNED_MODULES_MAX,
+  type PinnedModule,
+  type UserGuildPreferences,
+  type UserPreferences,
+  type UserPreferencesCacheConfig,
+  type UserPreferencesPatch,
+  type UserPreferencesService,
+  type UserTheme,
+} from './user-preferences.js';
