@@ -15,6 +15,9 @@ export const manifest: ManifestStatic = {
   coreVersion: '^1.0.0',
   description:
     "Message d'accueil/départ avec carte d'avatar, auto-rôle (avec délai optionnel) et filtre comptes neufs.",
+  shortDescription: "Messages d'arrivée et de départ, auto-rôle et filtre comptes neufs.",
+  category: 'community',
+  icon: 'door-open',
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

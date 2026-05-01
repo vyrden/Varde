@@ -62,6 +62,14 @@ export type Dependencies = z.infer<typeof dependenciesSchema>;
 /**
  * Partie statique du manifeste d'un module : ce qu'un outil externe
  * (site catalogue, lint de CI) peut lire sans exécuter de code.
+ *
+ * Champs `category`, `icon`, `shortDescription` (jalon 7 PR 7.4.0) :
+ * métadonnées d'affichage consommées par la grille de modules du
+ * dashboard. Tous trois optionnels — un module tiers qui ne les
+ * fournit pas voit un fallback côté UI (catégorie « Autres », pas
+ * d'icône, troncature de `description`). Limite stricte à 120
+ * caractères pour `shortDescription` afin de garantir un rendu sur
+ * une ligne dans la carte de la grille, indépendamment de la langue.
  */
 export const manifestStaticSchema = z.object({
   id: moduleIdSchema,
@@ -75,6 +83,9 @@ export const manifestStaticSchema = z.object({
   permissions: z.array(permissionDefinitionSchema).readonly(),
   events: eventsDeclarationSchema,
   dependencies: dependenciesSchema.optional(),
+  category: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(),
+  shortDescription: z.string().min(1).max(120).optional(),
 });
 
 export type ManifestStatic = z.infer<typeof manifestStaticSchema>;

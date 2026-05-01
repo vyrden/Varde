@@ -484,6 +484,52 @@ export const instanceAuditLog = pgTable(
   ],
 );
 
+/**
+ * Préférences globales d'un utilisateur Discord (jalon 7 PR 7.4.0).
+ * Une seule ligne par user. `theme` matérialisé par TEXT + CHECK pour
+ * rester portable vers SQLite. Pas de FK : les users vivent sur Discord,
+ * pas en DB.
+ *
+ * Une fois étendue post-V1 (couleurs custom, densité, raccourcis), la
+ * table reste centralisée ici — éviter d'éparpiller des préférences
+ * user dans plusieurs tables.
+ */
+export const userPreferences = pgTable(
+  'user_preferences',
+  {
+    userId: varchar('user_id', { length: 20 }).primaryKey(),
+    theme: text('theme').$type<'system' | 'light' | 'dark'>().notNull().default('system'),
+    locale: text('locale').notNull().default('fr'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check('user_preferences_theme_check', sql`${t.theme} IN ('system', 'light', 'dark')`)],
+);
+
+/**
+ * Préférences d'un utilisateur **pour une guild** (jalon 7 PR 7.4.0).
+ * Clé composite (user, guild). `pinnedModules` est une liste ordonnée
+ * `{ moduleId, position }` (max 8 entrées, validation côté service
+ * `userPreferencesService`). FK guild ON DELETE CASCADE — si la guild
+ * disparaît, ses préférences user-scopées disparaissent aussi.
+ */
+export const userGuildPreferences = pgTable(
+  'user_guild_preferences',
+  {
+    userId: varchar('user_id', { length: 20 }).notNull(),
+    guildId: varchar('guild_id', { length: 20 })
+      .notNull()
+      .references(() => guilds.id, { onDelete: 'cascade' }),
+    pinnedModules: jsonb('pinned_modules')
+      .$type<readonly { moduleId: string; position: number }[]>()
+      .notNull()
+      .default([]),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.guildId] })],
+);
+
 /** Table union utile pour l'introspection. */
 export const pgSchema = {
   guilds,
@@ -502,6 +548,8 @@ export const pgSchema = {
   instanceOwners,
   instanceAuditLog,
   guildPermissions,
+  userPreferences,
+  userGuildPreferences,
 } as const;
 
 export type PgSchema = typeof pgSchema;

@@ -25,6 +25,9 @@ export const manifest: ManifestStatic = {
   coreVersion: '^1.0.0',
   description:
     'Dispatch les événements Discord (arrivées/départs, messages supprimés/édités, etc.) vers des salons de logs configurables.',
+  shortDescription: 'Journal des événements Discord vers des salons configurables.',
+  category: 'observability',
+  icon: 'scroll-text',
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

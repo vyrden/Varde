@@ -420,6 +420,43 @@ export const instanceAuditLog = sqliteTable(
   ],
 );
 
+/**
+ * Miroir SQLite de `user_preferences` PG (jalon 7 PR 7.4.0). Voir doc
+ * dans `./pg.ts`.
+ */
+export const userPreferences = sqliteTable(
+  'user_preferences',
+  {
+    userId: text('user_id').primaryKey(),
+    theme: text('theme').$type<'system' | 'light' | 'dark'>().notNull().default('system'),
+    locale: text('locale').notNull().default('fr'),
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [check('user_preferences_theme_check', sql`${t.theme} IN ('system', 'light', 'dark')`)],
+);
+
+/**
+ * Miroir SQLite de `user_guild_preferences` PG (jalon 7 PR 7.4.0).
+ * Voir doc dans `./pg.ts`.
+ */
+export const userGuildPreferences = sqliteTable(
+  'user_guild_preferences',
+  {
+    userId: text('user_id').notNull(),
+    guildId: text('guild_id')
+      .notNull()
+      .references(() => guilds.id, { onDelete: 'cascade' }),
+    pinnedModules: text('pinned_modules', { mode: 'json' })
+      .$type<readonly { moduleId: string; position: number }[]>()
+      .notNull()
+      .default([]),
+    createdAt: text('created_at').notNull().default(nowIso),
+    updatedAt: text('updated_at').notNull().default(nowIso),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.guildId] })],
+);
+
 export const sqliteSchema = {
   guilds,
   guildConfig,
@@ -437,6 +474,8 @@ export const sqliteSchema = {
   instanceOwners,
   instanceAuditLog,
   guildPermissions,
+  userPreferences,
+  userGuildPreferences,
 } as const;
 
 export type SqliteSchema = typeof sqliteSchema;

@@ -35,7 +35,7 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
     await client.close();
   });
 
-  it('crée les 16 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1 + instance_owners + instance_audit_log jalon 7 PR 7.2 + guild_permissions jalon 7 PR 7.3)', async () => {
+  it('crée les 18 tables attendues (ajoute user_preferences + user_guild_preferences en jalon 7 PR 7.4.0)', async () => {
     const rows = await client.db.all<{ name: string }>(
       sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__drizzle%' ORDER BY name`,
     );
@@ -56,6 +56,8 @@ describe('@varde/db — intégration SQLite (in-memory)', () => {
       'permission_bindings',
       'permissions_registry',
       'scheduled_tasks',
+      'user_guild_preferences',
+      'user_preferences',
     ]);
   });
 

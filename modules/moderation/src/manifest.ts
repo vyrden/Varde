@@ -27,6 +27,9 @@ export const manifest: ManifestStatic = {
   coreVersion: '^1.0.0',
   description:
     "Commandes de modération (warn, kick, ban, tempban, unban, mute, tempmute, unmute, clear, slowmode, role-info, server-info, user-info) avec historique d'infractions consultable, et automod configurable : règles blacklist (substring), regex, rate-limit (sliding window), classification IA. Chaque règle peut combiner librement les actions delete / warn / mute (multi-sélection), avec rôles bypass et DM consolidé optionnel.",
+  shortDescription: "Sanctions, automod et historique d'infractions pour modérer un serveur.",
+  category: 'moderation',
+  icon: 'shield-check',
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

@@ -42,9 +42,15 @@ const tablesInResetOrder = [
   'guild_modules',
   'modules_registry',
   'guild_config',
+  // user_guild_preferences est cascadé via guilds (FK ON DELETE
+  // CASCADE) — pas besoin de l'inclure explicitement, comme
+  // guild_permissions.
   'guilds',
   'instance_config',
   'instance_owners',
+  // user_preferences n'a aucune FK vers les tables ci-dessus :
+  // truncate explicite pour ne pas accumuler de lignes entre tests.
+  'user_preferences',
 ] as const;
 
 /**
@@ -83,7 +89,7 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
     }
   });
 
-  it('crée les 16 tables attendues (ADR 0001 + onboarding_actions_log + instance_config jalon 7 PR 7.1 + instance_owners + instance_audit_log jalon 7 PR 7.2 + guild_permissions jalon 7 PR 7.3)', async () => {
+  it('crée les 18 tables attendues (ajoute user_preferences + user_guild_preferences en jalon 7 PR 7.4.0)', async () => {
     const rows = await client.db.execute<{ table_name: string }>(
       sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name NOT LIKE '__drizzle%' ORDER BY table_name`,
     );
@@ -104,6 +110,8 @@ describe('@varde/db — intégration Postgres (Testcontainers)', () => {
       'permission_bindings',
       'permissions_registry',
       'scheduled_tasks',
+      'user_guild_preferences',
+      'user_preferences',
     ]);
   });
 

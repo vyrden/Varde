@@ -14,6 +14,9 @@ export const manifest: ManifestStatic = {
   coreVersion: '^1.0.0',
   description:
     "Auto-attribution de rôles quand les membres réagissent à un message (templates prêts à l'emploi : vérification, couleurs, continents, zodiaque, etc.).",
+  shortDescription: 'Auto-attribution de rôles via réactions à un message.',
+  category: 'roles',
+  icon: 'tags',
   author: { name: 'Mainteneur' },
   license: 'Apache-2.0',
   schemaVersion: 0,

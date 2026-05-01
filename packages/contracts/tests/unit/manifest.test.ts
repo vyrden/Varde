@@ -74,6 +74,25 @@ describe('manifestStaticSchema — acceptation', () => {
     });
     expect(parsed.schemaVersion).toBe(0);
   });
+
+  it('accepte category / icon / shortDescription et les préserve (jalon 7 PR 7.4.0)', () => {
+    const parsed = manifestStaticSchema.parse({
+      ...validManifest,
+      category: 'utility',
+      icon: 'sparkles',
+      shortDescription: 'Module témoin de la grille modules.',
+    });
+    expect(parsed.category).toBe('utility');
+    expect(parsed.icon).toBe('sparkles');
+    expect(parsed.shortDescription).toBe('Module témoin de la grille modules.');
+  });
+
+  it('accepte un manifeste sans category / icon / shortDescription (rétrocompat)', () => {
+    const parsed = manifestStaticSchema.parse(validManifest);
+    expect(parsed.category).toBeUndefined();
+    expect(parsed.icon).toBeUndefined();
+    expect(parsed.shortDescription).toBeUndefined();
+  });
 });
 
 describe('manifestStaticSchema — rejets', () => {
@@ -151,6 +170,38 @@ describe('manifestStaticSchema — rejets', () => {
     const { events: _, ...withoutEvents } = validManifest;
     const result = manifestStaticSchema.safeParse(withoutEvents);
     expect(result.success).toBe(false);
+  });
+
+  it('refuse une category vide (jalon 7 PR 7.4.0)', () => {
+    const result = manifestStaticSchema.safeParse({
+      ...validManifest,
+      category: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse un icon vide (jalon 7 PR 7.4.0)', () => {
+    const result = manifestStaticSchema.safeParse({
+      ...validManifest,
+      icon: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('refuse un shortDescription > 120 caractères (jalon 7 PR 7.4.0)', () => {
+    const result = manifestStaticSchema.safeParse({
+      ...validManifest,
+      shortDescription: 'a'.repeat(121),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepte un shortDescription de 120 caractères pile (jalon 7 PR 7.4.0)', () => {
+    const result = manifestStaticSchema.safeParse({
+      ...validManifest,
+      shortDescription: 'a'.repeat(120),
+    });
+    expect(result.success).toBe(true);
   });
 });
 
