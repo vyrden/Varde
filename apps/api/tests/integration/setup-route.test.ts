@@ -1156,6 +1156,48 @@ describe('POST /setup/identity', () => {
     }
   });
 
+  it('banner : forwardé à PATCH /users/@me, persiste l URL CDN banners', async () => {
+    const BOT_USER_ID = '111111111111111111';
+    const BANNER_HASH = 'b1c2d3e4f5b1c2d3e4f5b1c2d3e4f5b1';
+    const BANNER_DATA_URI =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/users/@me')) {
+        return new Response(
+          JSON.stringify({ id: BOT_USER_ID, username: 'Varde', banner: BANNER_HASH }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return patchOkResponse();
+    });
+    const { app, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await seedToken(instanceConfig);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/setup/identity',
+        payload: { name: 'Varde', banner: BANNER_DATA_URI },
+      });
+      expect(res.statusCode).toBe(200);
+      const expectedBannerUrl = `https://cdn.discordapp.com/banners/${BOT_USER_ID}/${BANNER_HASH}.png?size=1024`;
+      expect(res.json()).toMatchObject({ bannerUrl: expectedBannerUrl });
+      const config = await instanceConfig.getConfig();
+      expect(config.botBannerUrl).toBe(expectedBannerUrl);
+
+      // /users/@me a bien été appelé avec `banner` dans le body.
+      const userMeCall = fetchImpl.mock.calls.find(([url]) =>
+        (typeof url === 'string' ? url : url.toString()).endsWith('/users/@me'),
+      );
+      if (!userMeCall) throw new Error('userMeCall introuvable');
+      const body = JSON.parse(userMeCall[1]?.body as string) as Record<string, unknown>;
+      expect(body['banner']).toBe(BANNER_DATA_URI);
+      expect(body['username']).toBe('Varde');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('502 si Discord répond 5xx', async () => {
     const fetchImpl: FetchLike = vi.fn(async () => new Response('ko', { status: 503 }));
     const { app, instanceConfig } = await build(client, { fetchImpl });

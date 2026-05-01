@@ -217,6 +217,58 @@ describe('PUT /admin/identity', () => {
     }
   });
 
+  it('banner : forwardé à PATCH /users/@me, persiste l URL CDN banners', async () => {
+    const BOT_USER_ID = '222222222222222222';
+    const BANNER_HASH = 'b1c2d3e4f5b1c2d3e4f5b1c2d3e4f5b1';
+    const BANNER_DATA_URI =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/users/@me')) {
+        return new Response(
+          JSON.stringify({ id: BOT_USER_ID, username: 'Varde', banner: BANNER_HASH }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return patchOk();
+    });
+    const { app, ownership, instanceConfig } = await build(client, { fetchImpl });
+    try {
+      await ownership.claimFirstOwnership('111111111111111111');
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/admin/identity',
+        headers: ownerSession('111111111111111111'),
+        payload: { name: 'Varde', banner: BANNER_DATA_URI },
+      });
+      expect(res.statusCode).toBe(200);
+      const expectedBannerUrl = `https://cdn.discordapp.com/banners/${BOT_USER_ID}/${BANNER_HASH}.png?size=1024`;
+      expect(res.json()).toMatchObject({ bannerUrl: expectedBannerUrl });
+      const config = await instanceConfig.getConfig();
+      expect(config.botBannerUrl).toBe(expectedBannerUrl);
+
+      // /users/@me a bien reçu `banner` + `username`. /applications/@me
+      // ne doit PAS recevoir `banner` (champ user, pas app).
+      const userMeCall = fetchImpl.mock.calls.find(([url]) =>
+        (typeof url === 'string' ? url : url.toString()).endsWith('/users/@me'),
+      );
+      if (!userMeCall) throw new Error('userMeCall introuvable');
+      const userBody = JSON.parse(userMeCall[1]?.body as string) as Record<string, unknown>;
+      expect(userBody['banner']).toBe(BANNER_DATA_URI);
+      expect(userBody['username']).toBe('Varde');
+
+      const appMeCall = fetchImpl.mock.calls.find(([url]) =>
+        (typeof url === 'string' ? url : url.toString()).endsWith('/applications/@me'),
+      );
+      if (!appMeCall) throw new Error('appMeCall introuvable');
+      const appBody = JSON.parse(appMeCall[1]?.body as string) as Record<string, unknown>;
+      expect(appBody['banner']).toBeUndefined();
+      expect(appBody['name']).toBe('Varde');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('avatar : data URI envoyée à Discord, URL CDN dérivée du hash retourné', async () => {
     const fetchImpl = vi.fn(async () => patchOk({ avatar: AVATAR_HASH }));
     const { app, ownership, instanceConfig } = await build(client, { fetchImpl });
