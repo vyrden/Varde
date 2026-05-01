@@ -90,6 +90,17 @@ const nextConfig = {
   // workspace (`@varde/ui`, `@varde/contracts`, etc.) — le bundle
   // standalone serait cassé en runtime.
   outputFileTracingRoot: path.join(__dirname, '../..'),
+  // Limite des body Server Actions. Défaut Next.js 16 : 1 Mo,
+  // insuffisant pour les uploads d'images en data URI base64
+  // (ImageDropZone limite à 2 Mo binaire → ≈ 2.7 Mo base64 ;
+  // welcome envoie potentiellement 2 backgrounds simultanés). 8 Mo
+  // couvre les cas usuels avec marge sans ouvrir un vecteur de
+  // saturation mémoire.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '8mb',
+    },
+  },
   images: {
     // Domaines autorisés pour `next/image`. La CDN Discord sert :
     // - `/icons/**` : icônes de guilds (rail)
