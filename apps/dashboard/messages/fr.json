@@ -27,6 +27,38 @@
       "grabHandle": "Réordonner {name} (drag ou Espace + flèches)"
     }
   },
+  "modulesGrid": {
+    "title": "Modules",
+    "description": "Activez, configurez et épinglez les modules disponibles sur ce serveur.",
+    "emptyAll": "Aucun module n'est chargé sur cette instance.",
+    "emptyFiltered": "Aucun module ne correspond à « {query} ».",
+    "filterBar": {
+      "searchLabel": "Rechercher un module",
+      "searchPlaceholder": "Rechercher un module…",
+      "statusLabel": "Filtrer par statut",
+      "status": {
+        "all": "Tous",
+        "active": "Actifs",
+        "inactive": "Inactifs"
+      }
+    },
+    "card": {
+      "cardLabel": "Configurer {name}",
+      "badgeActive": "Actif",
+      "badgeInactive": "Inactif",
+      "badgeConfigured": "Configuré",
+      "badgeUnconfigured": "Non configuré"
+    },
+    "pinAria": "Épingler {name}",
+    "unpinAria": "Désépingler {name}",
+    "pinTooltip": "Épingler dans la sidebar",
+    "unpinTooltip": "Retirer de la sidebar",
+    "toast": {
+      "maxPinsTitle": "Limite d'épingles atteinte",
+      "maxPinsDescription": "Vous avez déjà 8 modules épinglés. Retirez-en un avant d'en ajouter un autre.",
+      "pinErrorTitle": "Impossible de modifier l'épingle"
+    }
+  },
   "overview": {
     "hero": {
       "memberCount": "{count} membres",

@@ -50,6 +50,64 @@ const buildCookieHeader = async (): Promise<string> => {
 };
 
 /**
+ * Lit la liste actuelle des pins pour (sessionUser, guildId). Sert
+ * de pré-fetch à `togglePinnedModule` qui doit composer la nouvelle
+ * liste à partir de l'existante. Erreur silencieuse → liste vide.
+ */
+const fetchCurrentPins = async (guildId: string): Promise<readonly PinnedModuleDto[]> => {
+  try {
+    const res = await fetch(`${API_URL}/me/guilds/${encodeURIComponent(guildId)}/preferences`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json',
+        cookie: await buildCookieHeader(),
+      },
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { pinnedModules?: readonly PinnedModuleDto[] };
+    return body.pinnedModules ?? [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Toggle d'un module dans les épingles de l'utilisateur courant
+ * pour une guild (jalon 7 PR 7.4.7).
+ *
+ * - Module pas encore épinglé → ajouté en fin de liste.
+ * - Module déjà épinglé → retiré, positions renumérotées.
+ *
+ * Le plafond `max 8` est appliqué côté serveur dans
+ * `userPreferencesService.updatePinnedModules` ; on remonte le code
+ * d'erreur tel quel pour que le client puisse afficher le toast
+ * approprié.
+ *
+ * Comme `savePinnedModules`, l'action invalide le segment du layout
+ * guild après écriture pour que la sidebar refresh ses pins.
+ */
+export async function togglePinnedModule(
+  guildId: string,
+  moduleId: string,
+): Promise<SavePinnedModulesState> {
+  if (typeof guildId !== 'string' || guildId.length === 0) {
+    return { kind: 'error', code: 'invalid_form', message: 'guildId absent.' };
+  }
+  if (typeof moduleId !== 'string' || moduleId.length === 0) {
+    return { kind: 'error', code: 'invalid_form', message: 'moduleId absent.' };
+  }
+  const current = await fetchCurrentPins(guildId);
+  const isCurrentlyPinned = current.some((p) => p.moduleId === moduleId);
+  const next: PinnedModuleDto[] = isCurrentlyPinned
+    ? current
+        .filter((p) => p.moduleId !== moduleId)
+        .map((p, index) => ({ moduleId: p.moduleId, position: index }))
+    : [...current, { moduleId, position: current.length }];
+  return savePinnedModules(guildId, next);
+}
+
+/**
  * Persiste la nouvelle liste ordonnée des modules épinglés pour
  * (sessionUser, guildId). La validation côté serveur (max 8, pas de
  * doublon, positions cohérentes) est portée par

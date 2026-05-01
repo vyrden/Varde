@@ -27,6 +27,38 @@
       "grabHandle": "Reorder {name} (drag or Space + arrows)"
     }
   },
+  "modulesGrid": {
+    "title": "Modules",
+    "description": "Enable, configure, and pin the modules available on this server.",
+    "emptyAll": "No module is loaded on this instance.",
+    "emptyFiltered": "No module matches \"{query}\".",
+    "filterBar": {
+      "searchLabel": "Search modules",
+      "searchPlaceholder": "Search modules…",
+      "statusLabel": "Filter by status",
+      "status": {
+        "all": "All",
+        "active": "Active",
+        "inactive": "Inactive"
+      }
+    },
+    "card": {
+      "cardLabel": "Configure {name}",
+      "badgeActive": "Active",
+      "badgeInactive": "Inactive",
+      "badgeConfigured": "Configured",
+      "badgeUnconfigured": "Not configured"
+    },
+    "pinAria": "Pin {name}",
+    "unpinAria": "Unpin {name}",
+    "pinTooltip": "Pin in the sidebar",
+    "unpinTooltip": "Remove from the sidebar",
+    "toast": {
+      "maxPinsTitle": "Pin limit reached",
+      "maxPinsDescription": "You already have 8 modules pinned. Unpin one before adding another.",
+      "pinErrorTitle": "Could not update the pin"
+    }
+  },
   "overview": {
     "hero": {
       "memberCount": "{count} members",
