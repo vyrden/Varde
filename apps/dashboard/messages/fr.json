@@ -27,6 +27,39 @@
       "grabHandle": "Réordonner {name} (drag ou Espace + flèches)"
     }
   },
+  "overview": {
+    "hero": {
+      "memberCount": "{count} membres",
+      "connected": "Connecté",
+      "disconnected": "Déconnecté",
+      "latency": "{ms} ms",
+      "latencyUnknown": "latence inconnue",
+      "lastEvent": "dernier événement {when}",
+      "lastEventUnknown": "aucun événement enregistré"
+    },
+    "pinned": {
+      "title": "Modules épinglés",
+      "emptyDescription": "Aucun module épinglé. Épinglez les modules que vous configurez le plus souvent pour les retrouver d'un clic.",
+      "emptyCta": "Aller à la liste des modules"
+    },
+    "recentChanges": {
+      "title": "Modifié récemment",
+      "empty": "Aucun module modifié sur les 30 derniers jours.",
+      "byUser": "modifié par {user}, {when}",
+      "bySystem": "modifié {when}"
+    },
+    "recentActivity": {
+      "title": "Activité du bot (24 h)",
+      "empty": "Pas d'activité enregistrée sur les 24 dernières heures.",
+      "totalLast24h": "{count} événement(s) au total",
+      "seeAuditLog": "Voir le journal complet"
+    },
+    "quickStart": {
+      "title": "Démarrage rapide",
+      "subtitle": "Suggestions pour commencer",
+      "configure": "Configurer"
+    }
+  },
   "home": {
     "empty": {
       "title": "Aucun serveur",

@@ -64,12 +64,12 @@ interface NavLink {
   readonly exact?: boolean;
 }
 
-const iconModules = (
+const iconOverview = (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor" />
-    <rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" />
-    <rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" />
-    <rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor" />
+    <rect x="2" y="2" width="6" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="2" y="7" width="6" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="10" y="2" width="4" height="7" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    <rect x="10" y="11" width="4" height="3" rx="1" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
 
@@ -212,10 +212,10 @@ export function GuildSidebar({
 
   const gestion: NavLink[] = [
     {
-      key: 'modules',
-      label: 'Modules',
+      key: 'overview',
+      label: 'Aperçu',
       href: `/guilds/${guildId}`,
-      icon: iconModules,
+      icon: iconOverview,
       exact: true,
     },
     { key: 'audit', label: 'Audit', href: `/guilds/${guildId}/audit`, icon: iconAudit },

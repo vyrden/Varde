@@ -1,237 +1,126 @@
-import { Badge, Card, CardContent, CardHeader, CardTitle, Separator } from '@varde/ui';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { auth } from '../../../auth';
-import { ModuleList } from '../../../components/ModuleList';
-import { PageBreadcrumb } from '../../../components/shell/PageBreadcrumb';
+import { OverviewHero } from '../../../components/guild-overview/OverviewHero';
+import { PinnedShortcutsCard } from '../../../components/guild-overview/PinnedShortcutsCard';
+import { QuickStartSection } from '../../../components/guild-overview/QuickStartSection';
+import { RecentActivityCard } from '../../../components/guild-overview/RecentActivityCard';
+import { RecentChangesCard } from '../../../components/guild-overview/RecentChangesCard';
 import {
   ApiError,
-  type AuditLogItemDto,
-  type AuditSeverity,
-  fetchAdminGuilds,
-  fetchAudit,
+  fetchGuildOverview,
+  fetchGuildPreferences,
   fetchModules,
+  type GuildOverviewDto,
+  type GuildPreferencesDto,
+  type ModuleListItemDto,
 } from '../../../lib/api-client';
-import { formatRelativeDate } from '../../../lib/format-relative-date';
+
+/**
+ * Vue d'ensemble d'une guild (jalon 7 PR 7.4.6). Tableau de bord
+ * d'actions pensé pour qu'un admin trouve en moins de 5 secondes ce
+ * qui demande son attention :
+ *
+ * - Bandeau identité du serveur + signal vital « bot répond ».
+ * - Carte « Modules épinglés » : raccourcis personnalisés, ou empty
+ *   state qui pointe vers la liste complète.
+ * - Carte « Modifié récemment » : top 3 modules dont la config a
+ *   changé. Permet de revenir vite sur ce qu'on a touché hier.
+ * - Carte « Activité du bot (24h) » : compteurs par catégorie
+ *   d'événement audit. Lien vers les logs complets.
+ * - Section « Démarrage rapide » : visible uniquement si < 2
+ *   modules actifs. Suggère les modules officiels à activer.
+ *
+ * Pas de chart, pas de stats analytiques, pas de panneau « stats du
+ * jour » — la page sert à agir, pas à contempler. Cf.
+ * `docs/Jalon 7/PR4-experience-serveur.md` § 8 et anti-pattern n°3
+ * du design system.
+ *
+ * Robustesse : `fetchGuildOverview` et `fetchGuildPreferences` sont
+ * isolés dans leurs propres try/catch — un échec sur l'un d'eux
+ * laisse la page se rendre avec des fallbacks vides plutôt que de
+ * tomber en 404. Seul `fetchModules` reste critique : sans la liste
+ * des modules, on ne peut afficher ni les raccourcis épinglés ni le
+ * démarrage rapide.
+ */
 
 interface GuildPageProps {
   readonly params: Promise<{ readonly guildId: string }>;
 }
 
-const RECENT_AUDIT_LIMIT = 5;
-
-const QUICK_LINKS: ReadonlyArray<{
-  readonly icon: string;
-  readonly label: string;
-  readonly hrefSuffix: string;
-}> = [
-  { icon: '🚀', label: 'Onboarding', hrefSuffix: '/onboarding' },
-  { icon: '📋', label: "Journal d'audit", hrefSuffix: '/audit' },
-  { icon: '🔑', label: 'Permissions', hrefSuffix: '/settings/permissions' },
-  { icon: '✦', label: 'Fournisseur IA', hrefSuffix: '/settings/ai' },
-];
-
-const SEVERITY_DOT: Record<AuditSeverity, string> = {
-  info: 'bg-primary',
-  warn: 'bg-warning',
-  error: 'bg-destructive',
+const EMPTY_OVERVIEW: GuildOverviewDto = {
+  guild: { id: '', name: null, iconUrl: null, memberCount: null },
+  bot: { connected: false, latencyMs: null, lastEventAt: null },
+  recentChanges: [],
+  recentActivity: { byCategory: {}, totalLast24h: 0 },
+  modulesStats: { total: 0, active: 0, configured: 0 },
 };
 
-interface RecentActivityProps {
-  readonly items: readonly AuditLogItemDto[];
-  readonly guildId: string;
-}
+const EMPTY_PREFERENCES: GuildPreferencesDto = { pinnedModules: [] };
 
-function RecentActivity({ items, guildId }: RecentActivityProps): ReactElement {
-  if (items.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Aucune activité récente. Le journal se remplira au fur et à mesure que les modules agissent.
-      </p>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      <ul className="space-y-2.5">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-start gap-2 text-xs">
-            <span
-              aria-hidden="true"
-              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${SEVERITY_DOT[item.severity]}`}
-            />
-            <div className="min-w-0 flex-1">
-              <code className="block truncate font-mono text-[11px] text-foreground">
-                {item.action}
-              </code>
-              <span className="text-muted-foreground">
-                {formatRelativeDate(item.createdAt).primary}
-              </span>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <Link
-        href={`/guilds/${guildId}/audit`}
-        className="block text-xs font-medium text-primary hover:underline"
-      >
-        Voir tout le journal →
-      </Link>
-    </div>
-  );
-}
-
-/**
- * Hub modules — page d'accueil d'une guild. Header custom (breadcrumb,
- * icône, titre, description), Separator, puis layout 2 colonnes :
- *
- * - Main : grille de cards modules (ModuleList)
- * - Sidebar : « Vue d'ensemble » (modules actifs / total + nom de
- *   serveur), « Activité récente » (5 dernières lignes audit), et
- *   « Accès rapides » (raccourcis vers Onboarding / Audit /
- *   Permissions / IA).
- *
- * Les fetches audit/modules/guilds sont parallélisés. Les erreurs
- * audit sont swallowed silencieusement (la page reste utilisable
- * sans la sidebar activité).
- */
-export default async function GuildPage({ params }: GuildPageProps): Promise<ReactElement> {
+export default async function GuildOverviewPage({ params }: GuildPageProps): Promise<ReactElement> {
   const { guildId } = await params;
   const session = await auth();
   if (!session?.user) redirect('/');
 
-  let guilds: Awaited<ReturnType<typeof fetchAdminGuilds>>;
-  let modules: Awaited<ReturnType<typeof fetchModules>>;
+  let modules: readonly ModuleListItemDto[] = [];
   try {
-    [guilds, modules] = await Promise.all([fetchAdminGuilds(), fetchModules(guildId)]);
+    modules = await fetchModules(guildId);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect('/');
-    if (error instanceof ApiError && error.status === 403) notFound();
+    if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+      notFound();
+    }
     throw error;
   }
 
-  const guild = guilds.find((g) => g.id === guildId);
-  if (!guild) notFound();
-
-  // Audit récent : best-effort, ne bloque pas la page.
-  let recentAudit: readonly AuditLogItemDto[] = [];
+  let overview = EMPTY_OVERVIEW;
   try {
-    const page = await fetchAudit(guildId, { limit: RECENT_AUDIT_LIMIT });
-    recentAudit = page.items.slice(0, RECENT_AUDIT_LIMIT);
-  } catch {
-    recentAudit = [];
+    overview = await fetchGuildOverview(guildId);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect('/');
+    // 403/404 sur l'overview : on garde le fallback vide. Le layout
+    // a déjà géré l'accès à la guild en amont, on ne va pas tomber
+    // ici une seconde fois.
   }
 
-  const activeCount = modules.filter((m) => m.enabled).length;
+  let preferences = EMPTY_PREFERENCES;
+  try {
+    preferences = await fetchGuildPreferences(guildId);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect('/');
+  }
+
+  // Index moduleId → ModuleListItemDto pour résoudre nom / icône /
+  // shortDescription depuis les pins (qui ne portent que { moduleId,
+  // position }) et depuis les recentChanges.
+  const modulesById: Record<string, ModuleListItemDto> = {};
+  for (const m of modules) {
+    modulesById[m.id] = m;
+  }
+
+  // Liste des modules épinglés résolue en ordre des positions, en
+  // ignorant les pins dont le moduleId n'a plus d'entrée (module
+  // supprimé du système, cleanup background pas encore passé).
+  const pinned = preferences.pinnedModules
+    .map((p) => modulesById[p.moduleId])
+    .filter((m): m is ModuleListItemDto => m !== undefined);
 
   return (
     <>
-      <header className="bg-surface px-6 pt-5 pb-4">
-        <PageBreadcrumb items={[{ label: 'Gestion' }, { label: 'Modules' }]} />
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor" />
-              <rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" />
-              <rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" />
-              <rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor" />
-            </svg>
-          </div>
-          <h1 className="text-[26px] font-bold leading-tight tracking-tight text-foreground">
-            Modules
-          </h1>
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Gérez et configurez les modules actifs sur votre serveur.
-        </p>
-      </header>
-      <Separator />
+      <OverviewHero guild={overview.guild} bot={overview.bot} />
       <div className="mx-auto w-full max-w-7xl px-6 py-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <ModuleList guildId={guildId} modules={modules} />
-          </div>
-
-          <aside className="lg:col-span-1">
-            <div className="sticky top-6 flex flex-col gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Vue d'ensemble</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div>
-                    <p className="truncate text-xs uppercase tracking-wider text-muted-foreground">
-                      Serveur
-                    </p>
-                    <p className="truncate font-medium text-foreground" title={guild.name}>
-                      {guild.name}
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Modules actifs</span>
-                      <span className="font-mono text-foreground">
-                        {activeCount} / {modules.length}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-active">
-                      <div
-                        aria-hidden="true"
-                        className="h-full bg-primary transition-all duration-150 ease-out"
-                        style={{
-                          width: `${modules.length === 0 ? 0 : Math.round((activeCount / modules.length) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                  {activeCount < modules.length ? (
-                    <Badge variant="warning" className="text-[9px]">
-                      {modules.length - activeCount} module
-                      {modules.length - activeCount > 1 ? 's' : ''} inactif
-                      {modules.length - activeCount > 1 ? 's' : ''}
-                    </Badge>
-                  ) : null}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Activité récente</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RecentActivity items={recentAudit} guildId={guildId} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Accès rapides</CardTitle>
-                </CardHeader>
-                <CardContent className="-mt-2">
-                  <ul className="flex flex-col">
-                    {QUICK_LINKS.map((link) => (
-                      <li key={link.hrefSuffix}>
-                        <Link
-                          href={`/guilds/${guildId}${link.hrefSuffix}`}
-                          className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-hover"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span aria-hidden="true">{link.icon}</span>
-                            {link.label}
-                          </span>
-                          <span aria-hidden="true" className="text-muted-foreground">
-                            →
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-          </aside>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <PinnedShortcutsCard guildId={guildId} pinned={pinned} />
+          <RecentChangesCard
+            guildId={guildId}
+            changes={overview.recentChanges}
+            modulesById={modulesById}
+          />
+          <RecentActivityCard guildId={guildId} activity={overview.recentActivity} />
         </div>
+        <QuickStartSection guildId={guildId} modules={modules} />
       </div>
     </>
   );

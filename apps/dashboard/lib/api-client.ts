@@ -69,6 +69,39 @@ export interface GuildPreferencesDto {
   readonly pinnedModules: readonly PinnedModuleDto[];
 }
 
+/**
+ * Réponse de `GET /guilds/:guildId/overview` (jalon 7 PR 7.4.2),
+ * consommée par la vue d'ensemble (jalon 7 PR 7.4.6). Tableau de
+ * bord d'actions, pas un panneau de stats.
+ */
+export interface GuildOverviewDto {
+  readonly guild: {
+    readonly id: string;
+    readonly name: string | null;
+    readonly iconUrl: string | null;
+    readonly memberCount: number | null;
+  };
+  readonly bot: {
+    readonly connected: boolean;
+    readonly latencyMs: number | null;
+    readonly lastEventAt: string | null;
+  };
+  readonly recentChanges: readonly {
+    readonly moduleId: string | null;
+    readonly modifiedBy: string | null;
+    readonly at: string;
+  }[];
+  readonly recentActivity: {
+    readonly byCategory: Readonly<Record<string, number>>;
+    readonly totalLast24h: number;
+  };
+  readonly modulesStats: {
+    readonly total: number;
+    readonly active: number;
+    readonly configured: number;
+  };
+}
+
 export interface ModuleConfigDto {
   readonly config: Readonly<Record<string, unknown>>;
   readonly configUi: ConfigUi | null;
@@ -164,6 +197,15 @@ export async function fetchModules(guildId: string): Promise<readonly ModuleList
  */
 export async function fetchGuildPreferences(guildId: string): Promise<GuildPreferencesDto> {
   return apiGet<GuildPreferencesDto>(`/me/guilds/${encodeURIComponent(guildId)}/preferences`);
+}
+
+/**
+ * Vue d'ensemble actionnable d'une guild (jalon 7 PR 7.4.6).
+ * Composée des 5 blocs documentés dans
+ * `apps/api/src/routes/guild-overview.ts`.
+ */
+export async function fetchGuildOverview(guildId: string): Promise<GuildOverviewDto> {
+  return apiGet<GuildOverviewDto>(`/guilds/${encodeURIComponent(guildId)}/overview`);
 }
 
 /**

@@ -27,6 +27,39 @@
       "grabHandle": "Reorder {name} (drag or Space + arrows)"
     }
   },
+  "overview": {
+    "hero": {
+      "memberCount": "{count} members",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "latency": "{ms} ms",
+      "latencyUnknown": "latency unknown",
+      "lastEvent": "last event {when}",
+      "lastEventUnknown": "no event recorded"
+    },
+    "pinned": {
+      "title": "Pinned modules",
+      "emptyDescription": "No module pinned yet. Pin the modules you configure most often to keep them one click away.",
+      "emptyCta": "Go to the module list"
+    },
+    "recentChanges": {
+      "title": "Recently modified",
+      "empty": "No module modified in the last 30 days.",
+      "byUser": "modified by {user}, {when}",
+      "bySystem": "modified {when}"
+    },
+    "recentActivity": {
+      "title": "Bot activity (24h)",
+      "empty": "No activity recorded over the last 24 hours.",
+      "totalLast24h": "{count} event(s) in total",
+      "seeAuditLog": "See the full audit log"
+    },
+    "quickStart": {
+      "title": "Quick start",
+      "subtitle": "Suggestions to get going",
+      "configure": "Configure"
+    }
+  },
   "home": {
     "empty": {
       "title": "No server",
