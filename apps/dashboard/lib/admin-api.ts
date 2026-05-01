@@ -72,6 +72,7 @@ export interface AdminIdentityDto {
   readonly name: string | null;
   readonly description: string | null;
   readonly avatarUrl: string | null;
+  readonly bannerUrl: string | null;
 }
 
 export const fetchAdminIdentity = (): Promise<AdminIdentityDto> =>

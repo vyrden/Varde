@@ -66,6 +66,7 @@ export interface InstanceConfig {
   readonly discordClientSecret: string | null;
   readonly botName: string | null;
   readonly botAvatarUrl: string | null;
+  readonly botBannerUrl: string | null;
   readonly botDescription: string | null;
   /** URL principale persistée. `null` si l'instance retombe sur l'env. */
   readonly baseUrl: string | null;
@@ -86,6 +87,7 @@ export interface InstanceConfigPatch {
   readonly discordClientSecret?: string;
   readonly botName?: string;
   readonly botAvatarUrl?: string;
+  readonly botBannerUrl?: string;
   readonly botDescription?: string;
   /** Override de l'URL principale. `null` rebascule sur l'environnement. */
   readonly baseUrl?: string | null;
@@ -119,6 +121,7 @@ const DEFAULT_CONFIG: InstanceConfig = {
   discordClientSecret: null,
   botName: null,
   botAvatarUrl: null,
+  botBannerUrl: null,
   botDescription: null,
   baseUrl: null,
   additionalUrls: [],
@@ -170,6 +173,7 @@ interface RawRow {
   readonly discordClientSecretAuthTag: Buffer | Uint8Array | null;
   readonly botName: string | null;
   readonly botAvatarUrl: string | null;
+  readonly botBannerUrl: string | null;
   readonly botDescription: string | null;
   readonly baseUrl: string | null;
   readonly additionalUrls: readonly AdditionalUrl[];
@@ -246,6 +250,7 @@ const rowToConfig = (row: RawRow, masterKey: Buffer): InstanceConfig => {
     discordClientSecret: decryptOrThrow(secretBlob, 'discord_client_secret'),
     botName: row.botName,
     botAvatarUrl: row.botAvatarUrl,
+    botBannerUrl: row.botBannerUrl,
     botDescription: row.botDescription,
     baseUrl: row.baseUrl,
     additionalUrls: row.additionalUrls,
@@ -267,6 +272,7 @@ interface WriteValues {
   discordClientSecretAuthTag?: Buffer;
   botName?: string;
   botAvatarUrl?: string;
+  botBannerUrl?: string;
   botDescription?: string;
   baseUrl?: string | null;
   additionalUrls?: readonly AdditionalUrl[];
@@ -301,6 +307,9 @@ const buildPatchValues = (
   }
   if (patch.botAvatarUrl !== undefined) {
     values.botAvatarUrl = patch.botAvatarUrl;
+  }
+  if (patch.botBannerUrl !== undefined) {
+    values.botBannerUrl = patch.botBannerUrl;
   }
   if (patch.botDescription !== undefined) {
     values.botDescription = patch.botDescription;

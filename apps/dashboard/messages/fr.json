@@ -200,10 +200,22 @@
         "placeholder": "Varde Bot"
       },
       "avatar": {
-        "label": "Avatar (PNG, JPG ou GIF)",
-        "hint": "Laissez vide pour conserver l'avatar par défaut. Taille max 8 Mo.",
+        "label": "Avatar",
+        "hint": "PNG, JPEG ou GIF. Maximum 2 Mo. Visible dans les conversations.",
         "remove": "Retirer",
+        "dropPrompt": "Glissez une image ici, ou cliquez pour parcourir.",
+        "errorUnsupportedType": "Format non supporté. Utilisez un PNG, JPEG ou GIF.",
+        "errorTooLarge": "Image trop lourde ({size}). Maximum : 2 Mo.",
         "savedLabel": "Avatar déjà enregistré. Choisissez un fichier ci-dessus pour le remplacer, ou laissez vide pour le garder."
+      },
+      "banner": {
+        "label": "Bannière (optionnel)",
+        "hint": "Image large affichée en haut du profil du bot dans Discord. PNG, JPEG ou GIF, ratio 5:2 recommandé. Maximum 2 Mo.",
+        "remove": "Retirer",
+        "dropPrompt": "Glissez une image large ici, ou cliquez pour parcourir.",
+        "errorUnsupportedType": "Format non supporté. Utilisez un PNG, JPEG ou GIF.",
+        "errorTooLarge": "Image trop lourde ({size}). Maximum : 2 Mo.",
+        "savedLabel": "Bannière déjà enregistrée. Choisissez un fichier ci-dessus pour la remplacer, ou laissez vide pour la garder."
       },
       "description": {
         "label": "Description",
@@ -374,6 +386,14 @@
           "remove": "Annuler la sélection",
           "dropPrompt": "Glissez une image ici, ou cliquez pour parcourir.",
           "loadedTemplate": "Image chargée : {name} ({size})",
+          "errorUnsupportedType": "Format non supporté. Utilisez un PNG, JPEG ou GIF.",
+          "errorTooLarge": "Image trop lourde ({size}). Maximum : 2 Mo."
+        },
+        "banner": {
+          "label": "Bannière",
+          "hint": "Image large affichée en haut du profil du bot dans Discord (cliquer sur le nom du bot). PNG, JPEG ou GIF, ratio recommandé 5:2 (par exemple 600×240).",
+          "remove": "Annuler la sélection",
+          "dropPrompt": "Glissez une image large ici, ou cliquez pour parcourir.",
           "errorUnsupportedType": "Format non supporté. Utilisez un PNG, JPEG ou GIF.",
           "errorTooLarge": "Image trop lourde ({size}). Maximum : 2 Mo."
         },

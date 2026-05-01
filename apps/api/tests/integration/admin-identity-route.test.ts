@@ -117,7 +117,12 @@ describe('GET /admin/identity', () => {
         headers: ownerSession('111111111111111111'),
       });
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toEqual({ name: null, avatarUrl: null, description: null });
+      expect(res.json()).toEqual({
+        name: null,
+        avatarUrl: null,
+        bannerUrl: null,
+        description: null,
+      });
     } finally {
       await app.close();
     }
@@ -141,6 +146,7 @@ describe('GET /admin/identity', () => {
       expect(res.json()).toEqual({
         name: 'Varde',
         avatarUrl: 'https://cdn.example.com/avatar.png',
+        bannerUrl: null,
         description: 'Le bot.',
       });
     } finally {

@@ -1,25 +1,25 @@
 'use client';
 
-import type { ChangeEvent, DragEvent, ReactElement } from 'react';
-import { useActionState, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
+import { useActionState, useState } from 'react';
 
 import type { AdminIdentityDto } from '../../lib/admin-api';
 import { type AdminActionState, submitAdminIdentity } from '../../lib/admin-identity-actions';
+import { ImageDropZone, type ImageDropZoneCopy } from '../ImageDropZone';
 
 /**
  * Formulaire admin de modification de l'identité du bot (jalon 7
- * PR 7.2 sub-livrable 7b, drop zone + feedback ajoutés en PR 7.7).
+ * PR 7.2 sub-livrable 7b ; drop zones avec drag & drop ajoutées en
+ * PR 7.7 ; bannière en PR 7.8).
  *
  * Layout 2 colonnes : à gauche les champs `name`, `avatar`,
- * `description` ; à droite un aperçu temps-réel qui rejoue le
- * rendu d'un message Discord (avatar rond + name + description).
+ * `bannière`, `description` ; à droite un aperçu temps-réel qui rejoue
+ * le rendu d'un message Discord (bannière + avatar rond + name +
+ * description) et donc permet de juger de la cohérence visuelle avant
+ * de soumettre.
  *
- * Avatar : drop zone qui accepte clic OU glisser-déposer. Une fois
- * un fichier choisi, on affiche son nom + sa taille pour confirmer
- * visuellement le chargement (sans ça, l'admin ne sait pas s'il a
- * effectivement uploadé). Persistance Discord répond avec un hash
- * CDN — on rebascule l'aperçu sur l'URL CDN dès que l'API répond
- * avec succès.
+ * Persistance Discord répond avec des hashes CDN — on rebascule les
+ * aperçus sur les URLs CDN dès que l'API répond avec succès.
  *
  * Rate limit Discord (PATCH /applications/@me ~ 2 req/min) : on
  * affiche `retryAfterMs` quand l'API renvoie `429 rate_limited`,
@@ -29,13 +29,8 @@ import { type AdminActionState, submitAdminIdentity } from '../../lib/admin-iden
 export interface AdminIdentityFormCopy {
   readonly nameLabel: string;
   readonly namePlaceholder: string;
-  readonly avatarLabel: string;
-  readonly avatarHint: string;
-  readonly avatarRemove: string;
-  readonly avatarDropPrompt: string;
-  readonly avatarLoadedTemplate: string;
-  readonly avatarErrorUnsupportedType: string;
-  readonly avatarErrorTooLarge: string;
+  readonly avatar: ImageDropZoneCopy;
+  readonly banner: ImageDropZoneCopy;
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly submit: string;
@@ -50,41 +45,6 @@ export interface AdminIdentityFormCopy {
 
 const initial: AdminActionState<AdminIdentityDto> = { kind: 'idle' };
 
-const readFileAsDataUri = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('FileReader.result n est pas une string'));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader a échoué'));
-    reader.readAsDataURL(file);
-  });
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} o`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
-};
-
-const ACCEPTED_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif']);
-
-/**
- * Plafond côté client. Discord limite les avatars à 8 Mo, mais
- * 2 Mo suffisent largement pour un PNG ou un GIF d'avatar — au-delà,
- * la data URI base64 alourdit la requête HTTP au point de pouvoir
- * timeout ou crasher le worker Next.js. Le filtre côté client évite
- * que l'utilisateur upload un fichier de 20 Mo et fige le dashboard.
- */
-const MAX_BYTES = 2 * 1024 * 1024;
-
-type FileError =
-  | { readonly kind: 'unsupported_type' }
-  | { readonly kind: 'too_large'; readonly size: number };
-
 export interface AdminIdentityFormProps {
   readonly initial: AdminIdentityDto;
   readonly copy: AdminIdentityFormCopy;
@@ -98,97 +58,28 @@ export function AdminIdentityForm({
 
   const [name, setName] = useState(initialIdentity.name ?? '');
   const [description, setDescription] = useState(initialIdentity.description ?? '');
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(initialIdentity.avatarUrl);
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
-  const [avatarFileMeta, setAvatarFileMeta] = useState<{ name: string; size: number } | null>(null);
-  const [fileError, setFileError] = useState<FileError | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bannerDataUri, setBannerDataUri] = useState<string | null>(null);
 
+  // Aperçu : data URI fraîche si l'admin vient d'uploader, sinon CDN
+  // URL renvoyée par Discord après le dernier save, sinon l'URL CDN
+  // initiale chargée par le server component.
   const stateAvatarUrl =
     state.kind === 'success' && state.data.avatarUrl !== null ? state.data.avatarUrl : null;
-  const effectivePreviewUrl = stateAvatarUrl ?? avatarPreview;
+  const stateBannerUrl =
+    state.kind === 'success' && state.data.bannerUrl !== null ? state.data.bannerUrl : null;
+  const effectiveAvatarUrl = avatarDataUri ?? stateAvatarUrl ?? initialIdentity.avatarUrl;
+  const effectiveBannerUrl = bannerDataUri ?? stateBannerUrl ?? initialIdentity.bannerUrl;
 
   const errorMessage = state.kind === 'error' ? (copy.errors[state.code] ?? state.message) : null;
   const rateLimitMs = state.kind === 'error' ? state.retryAfterMs : undefined;
 
-  const ingestFile = async (file: File): Promise<void> => {
-    if (!ACCEPTED_TYPES.has(file.type)) {
-      setAvatarDataUri(null);
-      setAvatarFileMeta(null);
-      setFileError({ kind: 'unsupported_type' });
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setAvatarDataUri(null);
-      setAvatarFileMeta(null);
-      setFileError({ kind: 'too_large', size: file.size });
-      return;
-    }
-    try {
-      const dataUri = await readFileAsDataUri(file);
-      setAvatarDataUri(dataUri);
-      setAvatarPreview(dataUri);
-      setAvatarFileMeta({ name: file.name, size: file.size });
-      setFileError(null);
-    } catch {
-      setAvatarDataUri(null);
-      setAvatarFileMeta(null);
-    }
-  };
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      setAvatarDataUri(null);
-      setAvatarPreview(initialIdentity.avatarUrl);
-      setAvatarFileMeta(null);
-      return;
-    }
-    await ingestFile(file);
-  };
-
-  const handleDrop = async (event: DragEvent<HTMLButtonElement>): Promise<void> => {
-    event.preventDefault();
-    setIsDragging(false);
-    const file = event.dataTransfer.files?.[0];
-    if (file) {
-      await ingestFile(file);
-    }
-  };
-
-  const handleDragOver = (event: DragEvent<HTMLButtonElement>): void => {
-    event.preventDefault();
-    if (!isDragging) setIsDragging(true);
-  };
-
-  const handleDragLeave = (event: DragEvent<HTMLButtonElement>): void => {
-    event.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleRemoveAvatar = (): void => {
-    setAvatarDataUri(null);
-    setAvatarPreview(initialIdentity.avatarUrl);
-    setAvatarFileMeta(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
   const handleReset = (): void => {
     setName(initialIdentity.name ?? '');
     setDescription(initialIdentity.description ?? '');
-    handleRemoveAvatar();
+    setAvatarDataUri(null);
+    setBannerDataUri(null);
   };
-
-  const dropZoneClass = `flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
-    isDragging
-      ? 'border-primary bg-primary/10'
-      : avatarDataUri !== null
-        ? 'border-emerald-500/60 bg-emerald-500/10'
-        : 'border-border-muted bg-card-muted/30 hover:border-primary hover:bg-card-muted/50'
-  }`;
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -196,6 +87,7 @@ export function AdminIdentityForm({
         <input type="hidden" name="initialName" value={initialIdentity.name ?? ''} />
         <input type="hidden" name="initialDescription" value={initialIdentity.description ?? ''} />
         <input type="hidden" name="avatar" value={avatarDataUri ?? ''} />
+        <input type="hidden" name="banner" value={bannerDataUri ?? ''} />
 
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
@@ -225,77 +117,21 @@ export function AdminIdentityForm({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <span className="block text-sm font-medium text-foreground">{copy.avatarLabel}</span>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`${dropZoneClass} w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
-            data-testid="admin-identity-avatar-dropzone"
-          >
-            {avatarDataUri !== null && avatarFileMeta !== null ? (
-              <div className="flex items-center gap-3">
-                {/* biome-ignore lint/performance/noImgElement: data URI thumbnail, not an external asset */}
-                <img
-                  src={avatarDataUri}
-                  alt=""
-                  className="h-14 w-14 rounded-md border border-border-muted object-cover"
-                  data-testid="admin-identity-avatar-dropzone-preview"
-                />
-                <div className="flex flex-col items-start text-left">
-                  <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
-                    <span aria-hidden="true">✓</span>
-                    <span>{avatarFileMeta.name}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatFileSize(avatarFileMeta.size)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <span aria-hidden="true" className="text-2xl text-muted-foreground">
-                  📎
-                </span>
-                <span className="text-sm text-muted-foreground">{copy.avatarDropPrompt}</span>
-              </>
-            )}
-          </button>
-          <input
-            ref={fileInputRef}
-            id="admin-identity-avatar-file"
-            type="file"
-            accept="image/png,image/jpeg,image/gif"
-            onChange={handleFileChange}
-            className="sr-only"
-            aria-hidden="true"
-            tabIndex={-1}
-          />
-          {avatarDataUri !== null ? (
-            <button
-              type="button"
-              onClick={handleRemoveAvatar}
-              className="text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              {copy.avatarRemove}
-            </button>
-          ) : null}
-          {fileError !== null ? (
-            <p
-              className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
-              role="alert"
-              data-testid="admin-identity-avatar-file-error"
-            >
-              {fileError.kind === 'unsupported_type'
-                ? copy.avatarErrorUnsupportedType
-                : copy.avatarErrorTooLarge.replace('{size}', formatFileSize(fileError.size))}
-            </p>
-          ) : null}
-          <p className="text-xs text-muted-foreground">{copy.avatarHint}</p>
-        </div>
+        <ImageDropZone
+          testIdPrefix="admin-identity-avatar"
+          aspect="square"
+          copy={copy.avatar}
+          onLoaded={(uri) => setAvatarDataUri(uri)}
+          onCleared={() => setAvatarDataUri(null)}
+        />
+
+        <ImageDropZone
+          testIdPrefix="admin-identity-banner"
+          aspect="wide"
+          copy={copy.banner}
+          onLoaded={(uri) => setBannerDataUri(uri)}
+          onCleared={() => setBannerDataUri(null)}
+        />
 
         <div className="space-y-1.5">
           <div className="flex items-baseline justify-between gap-2">
@@ -371,25 +207,39 @@ export function AdminIdentityForm({
       </form>
 
       <aside
-        className="rounded-lg border border-border-muted bg-card p-5 shadow-sm"
+        className="overflow-hidden rounded-lg border border-border-muted bg-card shadow-sm"
         aria-label={copy.previewHeading}
       >
-        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="px-5 pt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {copy.previewHeading}
         </h3>
-        <div className="flex items-start gap-3">
-          {effectivePreviewUrl !== null ? (
+        {effectiveBannerUrl !== null ? (
+          // biome-ignore lint/performance/noImgElement: data URI / CDN preview, not Next-optimizable
+          <img
+            src={effectiveBannerUrl}
+            alt=""
+            className="mt-3 h-24 w-full object-cover"
+            data-testid="admin-identity-preview-banner"
+          />
+        ) : (
+          <div
+            className="mt-3 h-24 w-full bg-muted"
+            data-testid="admin-identity-preview-banner-empty"
+          />
+        )}
+        <div className="-mt-6 flex items-start gap-3 px-5 pb-5">
+          {effectiveAvatarUrl !== null ? (
             // biome-ignore lint/performance/noImgElement: data URI / CDN preview, not Next-optimizable
             <img
-              src={effectivePreviewUrl}
+              src={effectiveAvatarUrl}
               alt=""
-              className="h-12 w-12 shrink-0 rounded-full border border-border-muted object-cover"
+              className="h-16 w-16 shrink-0 rounded-full border-4 border-card object-cover"
               data-testid="admin-identity-preview-avatar"
             />
           ) : (
-            <div className="h-12 w-12 shrink-0 rounded-full border border-border-muted bg-muted" />
+            <div className="h-16 w-16 shrink-0 rounded-full border-4 border-card bg-muted" />
           )}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pt-7">
             <p
               className="truncate text-sm font-semibold text-foreground"
               data-testid="admin-identity-preview-name"

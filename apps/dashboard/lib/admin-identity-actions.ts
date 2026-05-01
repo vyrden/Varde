@@ -57,6 +57,7 @@ const buildCookieHeader = async (): Promise<string> => {
 interface IdentityPatch {
   name?: string;
   avatar?: string;
+  banner?: string;
   description?: string;
 }
 
@@ -73,6 +74,7 @@ export async function submitAdminIdentity(
 ): Promise<AdminActionState<AdminIdentityDto>> {
   const name = formData.get('name');
   const avatar = formData.get('avatar');
+  const banner = formData.get('banner');
   const description = formData.get('description');
   const initialName = formData.get('initialName');
   const initialDescription = formData.get('initialDescription');
@@ -83,6 +85,9 @@ export async function submitAdminIdentity(
   }
   if (typeof avatar === 'string' && avatar.length > 0) {
     patch.avatar = avatar;
+  }
+  if (typeof banner === 'string' && banner.length > 0) {
+    patch.banner = banner;
   }
   if (
     typeof description === 'string' &&

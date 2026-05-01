@@ -202,10 +202,22 @@
         "placeholder": "Varde Bot"
       },
       "avatar": {
-        "label": "Avatar (PNG, JPG or GIF)",
-        "hint": "Leave empty to keep the default avatar. Max size 8 MB.",
+        "label": "Avatar",
+        "hint": "PNG, JPEG or GIF. Max 2 MB. Shown in chat conversations.",
         "remove": "Remove",
+        "dropPrompt": "Drop an image here, or click to browse.",
+        "errorUnsupportedType": "Unsupported format. Use a PNG, JPEG or GIF.",
+        "errorTooLarge": "Image too large ({size}). Maximum: 2 MB.",
         "savedLabel": "Avatar already saved. Pick a file above to replace it, or leave empty to keep it."
+      },
+      "banner": {
+        "label": "Banner (optional)",
+        "hint": "Wide image shown at the top of the bot's Discord profile. PNG, JPEG or GIF, recommended 5:2 ratio. Max 2 MB.",
+        "remove": "Remove",
+        "dropPrompt": "Drop a wide image here, or click to browse.",
+        "errorUnsupportedType": "Unsupported format. Use a PNG, JPEG or GIF.",
+        "errorTooLarge": "Image too large ({size}). Maximum: 2 MB.",
+        "savedLabel": "Banner already saved. Pick a file above to replace it, or leave empty to keep it."
       },
       "description": {
         "label": "Description",
@@ -376,6 +388,14 @@
           "remove": "Cancel selection",
           "dropPrompt": "Drop an image here, or click to browse.",
           "loadedTemplate": "Image loaded: {name} ({size})",
+          "errorUnsupportedType": "Unsupported format. Use a PNG, JPEG or GIF.",
+          "errorTooLarge": "Image too large ({size}). Maximum: 2 MB."
+        },
+        "banner": {
+          "label": "Banner",
+          "hint": "Wide image shown at the top of the bot's Discord profile (click on the bot's name). PNG, JPEG or GIF, recommended 5:2 ratio (e.g. 600×240).",
+          "remove": "Cancel selection",
+          "dropPrompt": "Drop a wide image here, or click to browse.",
           "errorUnsupportedType": "Unsupported format. Use a PNG, JPEG or GIF.",
           "errorTooLarge": "Image too large ({size}). Maximum: 2 MB."
         },

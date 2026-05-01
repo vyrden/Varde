@@ -41,13 +41,28 @@ export default async function IdentityPage(): Promise<ReactElement> {
           initialName={status?.botName ?? null}
           initialDescription={status?.botDescription ?? null}
           initialAvatarUrl={status?.botAvatarUrl ?? null}
+          initialBannerUrl={status?.botBannerUrl ?? null}
           copy={{
             nameLabel: t('name.label'),
             namePlaceholder: t('name.placeholder'),
-            avatarLabel: t('avatar.label'),
-            avatarHint: t('avatar.hint'),
-            avatarRemove: t('avatar.remove'),
+            avatar: {
+              label: t('avatar.label'),
+              hint: t('avatar.hint'),
+              dropPrompt: t('avatar.dropPrompt'),
+              remove: t('avatar.remove'),
+              errorUnsupportedType: t('avatar.errorUnsupportedType'),
+              errorTooLarge: t.raw('avatar.errorTooLarge') as string,
+            },
             avatarSavedLabel: t('avatar.savedLabel'),
+            banner: {
+              label: t('banner.label'),
+              hint: t('banner.hint'),
+              dropPrompt: t('banner.dropPrompt'),
+              remove: t('banner.remove'),
+              errorUnsupportedType: t('banner.errorUnsupportedType'),
+              errorTooLarge: t.raw('banner.errorTooLarge') as string,
+            },
+            bannerSavedLabel: t('banner.savedLabel'),
             descriptionLabel: t('description.label'),
             descriptionPlaceholder: t('description.placeholder'),
             skip: t('skip'),

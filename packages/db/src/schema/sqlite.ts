@@ -352,6 +352,7 @@ export const instanceConfig = sqliteTable(
     discordClientSecretAuthTag: blob('discord_client_secret_auth_tag', { mode: 'buffer' }),
     botName: text('bot_name'),
     botAvatarUrl: text('bot_avatar_url'),
+    botBannerUrl: text('bot_banner_url'),
     botDescription: text('bot_description'),
     baseUrl: text('base_url'),
     additionalUrls: text('additional_urls', { mode: 'json' })

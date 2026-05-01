@@ -1,36 +1,33 @@
 'use client';
 
 import Link from 'next/link';
-import type { ChangeEvent, ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { type SetupActionState, submitIdentity } from '../../lib/setup-actions';
 import type { IdentityResponse } from '../../lib/setup-client';
 import { setupStepHref } from '../../lib/setup-steps';
 import { useDebounced } from '../../lib/use-debounced';
+import { ImageDropZone, type ImageDropZoneCopy } from '../ImageDropZone';
 
 /**
- * Formulaire client de l'étape « Identité du bot » du wizard, refondu
- * en auto-save (jalon 7 PR 7.7).
+ * Formulaire client de l'étape « Identité du bot » du wizard
+ * (jalon 7 PR 7.1 sub-livrable 5 ; auto-save PR 7.7 ; bannière PR 7.8).
  *
  * Étape facultative — l'admin peut ne rien saisir et passer
  * directement. Si l'admin saisit quelque chose, ça se persiste tout
- * seul après 500 ms d'inactivité (PATCH `/applications/@me` côté
- * Discord, qui peut renvoyer une URL CDN pour l'avatar).
- *
- * Avatar : champ `<input type="file">` qui lit le fichier en data URI
- * côté navigateur. Le data URI est forwardé à l'API qui le
- * transmet à Discord. Pas de drag&drop ni de magic-bytes check —
- * Discord rejette les non-images, ça suffit.
+ * seul après 500 ms d'inactivité (PATCH `/users/@me` pour l'avatar
+ * et la bannière, PATCH `/applications/@me` pour le name et la
+ * description, cf. ADR Discord side dans setup.ts).
  */
 
 export interface IdentityFormCopy {
   readonly nameLabel: string;
   readonly namePlaceholder: string;
-  readonly avatarLabel: string;
-  readonly avatarHint: string;
-  readonly avatarRemove: string;
+  readonly avatar: ImageDropZoneCopy;
   readonly avatarSavedLabel: string;
+  readonly banner: ImageDropZoneCopy;
+  readonly bannerSavedLabel: string;
   readonly descriptionLabel: string;
   readonly descriptionPlaceholder: string;
   readonly skip: string;
@@ -46,21 +43,8 @@ export interface IdentityFormProps {
   readonly initialName?: string | null;
   readonly initialDescription?: string | null;
   readonly initialAvatarUrl?: string | null;
+  readonly initialBannerUrl?: string | null;
 }
-
-const readFileAsDataUri = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('FileReader.result n est pas une string'));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader a échoué'));
-    reader.readAsDataURL(file);
-  });
 
 type SaveState =
   | { readonly kind: 'idle' }
@@ -73,11 +57,12 @@ export function IdentityForm({
   initialName,
   initialDescription,
   initialAvatarUrl,
+  initialBannerUrl,
 }: IdentityFormProps): ReactElement {
   const [name, setName] = useState(initialName ?? '');
   const [description, setDescription] = useState(initialDescription ?? '');
   const [avatarDataUri, setAvatarDataUri] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [bannerDataUri, setBannerDataUri] = useState<string | null>(null);
 
   const debouncedName = useDebounced(name, 500);
   const debouncedDescription = useDebounced(description, 500);
@@ -85,14 +70,19 @@ export function IdentityForm({
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
   const lastSavedRef = useRef<string>(`${name} ${description}`);
 
-  // Auto-save sur changement stabilisé. On inclut l'avatar dans
-  // la même boucle : sa sélection met setAvatarDataUri, ce qui
+  // Auto-save sur changement stabilisé. On inclut avatar et bannière
+  // dans la même boucle : leur sélection met le state, ce qui
   // re-render et déclenche le submit ci-dessous.
   useEffect(() => {
-    const fingerprint = `${debouncedName} ${debouncedDescription} ${avatarDataUri ?? ''}`;
+    const fingerprint = `${debouncedName} ${debouncedDescription} ${avatarDataUri ?? ''} ${bannerDataUri ?? ''}`;
     if (fingerprint === lastSavedRef.current) return;
-    if (debouncedName.length === 0 && debouncedDescription.length === 0 && avatarDataUri === null) {
-      // Tout est vide ET aucun avatar choisi : pas de persist.
+    if (
+      debouncedName.length === 0 &&
+      debouncedDescription.length === 0 &&
+      avatarDataUri === null &&
+      bannerDataUri === null
+    ) {
+      // Tout est vide : pas de persist.
       lastSavedRef.current = fingerprint;
       return;
     }
@@ -103,6 +93,7 @@ export function IdentityForm({
       if (debouncedName.length > 0) formData.append('name', debouncedName);
       if (debouncedDescription.length > 0) formData.append('description', debouncedDescription);
       if (avatarDataUri !== null) formData.append('avatar', avatarDataUri);
+      if (bannerDataUri !== null) formData.append('banner', bannerDataUri);
       const result: SetupActionState<IdentityResponse> = await submitIdentity(
         { kind: 'idle' },
         formData,
@@ -118,28 +109,7 @@ export function IdentityForm({
     return () => {
       cancelled = true;
     };
-  }, [debouncedName, debouncedDescription, avatarDataUri]);
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      setAvatarDataUri(null);
-      return;
-    }
-    try {
-      const dataUri = await readFileAsDataUri(file);
-      setAvatarDataUri(dataUri);
-    } catch {
-      setAvatarDataUri(null);
-    }
-  };
-
-  const handleRemoveAvatar = (): void => {
-    setAvatarDataUri(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  }, [debouncedName, debouncedDescription, avatarDataUri, bannerDataUri]);
 
   const errorMessage = save.kind === 'error' ? (copy.errors[save.code] ?? save.message) : null;
 
@@ -147,9 +117,18 @@ export function IdentityForm({
     <div className="space-y-6">
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <label htmlFor="identity-name" className="block text-sm font-medium text-foreground">
-            {copy.nameLabel}
-          </label>
+          <div className="flex items-baseline justify-between gap-2">
+            <label htmlFor="identity-name" className="block text-sm font-medium text-foreground">
+              {copy.nameLabel}
+            </label>
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              data-testid="identity-name-counter"
+              aria-live="polite"
+            >
+              {name.length} / 32
+            </span>
+          </div>
           <input
             id="identity-name"
             name="name"
@@ -162,59 +141,66 @@ export function IdentityForm({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label
-            htmlFor="identity-avatar-file"
-            className="block text-sm font-medium text-foreground"
+        <ImageDropZone
+          testIdPrefix="identity-avatar"
+          aspect="square"
+          copy={copy.avatar}
+          onLoaded={(uri) => setAvatarDataUri(uri)}
+          onCleared={() => setAvatarDataUri(null)}
+        />
+        {avatarDataUri === null && initialAvatarUrl !== null && initialAvatarUrl !== undefined ? (
+          <div
+            className="-mt-3 flex items-center gap-3 rounded-md border border-border-muted bg-card-muted/30 px-3 py-2"
+            data-testid="identity-avatar-saved"
           >
-            {copy.avatarLabel}
-          </label>
-          <input
-            ref={fileInputRef}
-            id="identity-avatar-file"
-            type="file"
-            accept="image/png,image/jpeg,image/gif"
-            onChange={handleFileChange}
-            className="block w-full text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-secondary/80"
-          />
-          {avatarDataUri !== null ? (
-            <div className="flex items-center gap-3">
-              {/* biome-ignore lint/performance/noImgElement: data URI preview, not an external asset */}
-              <img
-                src={avatarDataUri}
-                alt=""
-                className="h-12 w-12 rounded-full border border-border-muted object-cover"
-                data-testid="identity-avatar-preview"
-              />
-              <button
-                type="button"
-                onClick={handleRemoveAvatar}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                {copy.avatarRemove}
-              </button>
-            </div>
-          ) : initialAvatarUrl !== null && initialAvatarUrl !== undefined ? (
-            <div className="flex items-center gap-3" data-testid="identity-avatar-saved">
-              {/* biome-ignore lint/performance/noImgElement: avatar Discord déjà servi par leur CDN, pas besoin du loader Next */}
-              <img
-                src={initialAvatarUrl}
-                alt=""
-                className="h-12 w-12 rounded-full border border-border-muted object-cover"
-              />
-              <span className="text-xs text-muted-foreground">{copy.avatarSavedLabel}</span>
-            </div>
-          ) : null}
-          <p className="text-xs text-muted-foreground">{copy.avatarHint}</p>
-        </div>
+            {/* biome-ignore lint/performance/noImgElement: avatar Discord déjà servi par leur CDN */}
+            <img
+              src={initialAvatarUrl}
+              alt=""
+              className="h-12 w-12 rounded-full border border-border-muted object-cover"
+            />
+            <span className="text-xs text-muted-foreground">{copy.avatarSavedLabel}</span>
+          </div>
+        ) : null}
+
+        <ImageDropZone
+          testIdPrefix="identity-banner"
+          aspect="wide"
+          copy={copy.banner}
+          onLoaded={(uri) => setBannerDataUri(uri)}
+          onCleared={() => setBannerDataUri(null)}
+        />
+        {bannerDataUri === null && initialBannerUrl !== null && initialBannerUrl !== undefined ? (
+          <div
+            className="-mt-3 flex items-center gap-3 rounded-md border border-border-muted bg-card-muted/30 px-3 py-2"
+            data-testid="identity-banner-saved"
+          >
+            {/* biome-ignore lint/performance/noImgElement: bannière Discord déjà servie par leur CDN */}
+            <img
+              src={initialBannerUrl}
+              alt=""
+              className="h-12 w-32 rounded-md border border-border-muted object-cover"
+            />
+            <span className="text-xs text-muted-foreground">{copy.bannerSavedLabel}</span>
+          </div>
+        ) : null}
 
         <div className="space-y-1.5">
-          <label
-            htmlFor="identity-description"
-            className="block text-sm font-medium text-foreground"
-          >
-            {copy.descriptionLabel}
-          </label>
+          <div className="flex items-baseline justify-between gap-2">
+            <label
+              htmlFor="identity-description"
+              className="block text-sm font-medium text-foreground"
+            >
+              {copy.descriptionLabel}
+            </label>
+            <span
+              className="text-xs tabular-nums text-muted-foreground"
+              data-testid="identity-description-counter"
+              aria-live="polite"
+            >
+              {description.length} / 400
+            </span>
+          </div>
           <textarea
             id="identity-description"
             name="description"

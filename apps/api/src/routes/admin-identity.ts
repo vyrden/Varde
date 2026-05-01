@@ -43,6 +43,10 @@ const identityBodySchema = z.object({
     .string()
     .regex(/^data:image\/(png|jpe?g|gif);base64,/u, 'avatar doit être un data URI image')
     .optional(),
+  banner: z
+    .string()
+    .regex(/^data:image\/(png|jpe?g|gif);base64,/u, 'banner doit être un data URI image')
+    .optional(),
   description: z.string().max(400).optional(),
 });
 
@@ -54,6 +58,13 @@ const applicationPatchSchema = z.object({
   avatar: z.string().nullable().optional(),
 });
 
+const userPatchSchema = z.object({
+  id: z.string(),
+  username: z.string().nullable().optional(),
+  avatar: z.string().nullable().optional(),
+  banner: z.string().nullable().optional(),
+});
+
 const rateLimitBodySchema = z.object({
   retry_after: z.number().nonnegative(),
 });
@@ -63,6 +74,7 @@ export interface AdminIdentityResponse {
   readonly name: string | null;
   readonly description: string | null;
   readonly avatarUrl: string | null;
+  readonly bannerUrl: string | null;
 }
 
 /** Options de construction. */
@@ -99,7 +111,8 @@ const buildAdminIdentityResponse = (
   name: string | null,
   description: string | null,
   avatarUrl: string | null,
-): AdminIdentityResponse => ({ name, description, avatarUrl });
+  bannerUrl: string | null,
+): AdminIdentityResponse => ({ name, description, avatarUrl, bannerUrl });
 
 export function registerAdminIdentityRoutes(
   app: FastifyInstance,
@@ -113,7 +126,12 @@ export function registerAdminIdentityRoutes(
   app.get('/admin/identity', async (request): Promise<AdminIdentityResponse> => {
     await requireOwner(app, request, ownership);
     const config = await instanceConfig.getConfig();
-    return buildAdminIdentityResponse(config.botName, config.botDescription, config.botAvatarUrl);
+    return buildAdminIdentityResponse(
+      config.botName,
+      config.botDescription,
+      config.botAvatarUrl,
+      config.botBannerUrl,
+    );
   });
 
   app.put('/admin/identity', async (request, reply): Promise<AdminIdentityResponse | undefined> => {
@@ -124,14 +142,22 @@ export function registerAdminIdentityRoutes(
     }
     const patch = parsed.data;
     const hasAnyField =
-      patch.name !== undefined || patch.avatar !== undefined || patch.description !== undefined;
+      patch.name !== undefined ||
+      patch.avatar !== undefined ||
+      patch.banner !== undefined ||
+      patch.description !== undefined;
 
     // PUT vide = no-op : on retourne l'état actuel sans appel
     // Discord. Évite de marteler `PATCH /applications/@me` qui est
     // sévèrement rate-limité côté Discord.
     if (!hasAnyField) {
       const config = await instanceConfig.getConfig();
-      return buildAdminIdentityResponse(config.botName, config.botDescription, config.botAvatarUrl);
+      return buildAdminIdentityResponse(
+        config.botName,
+        config.botDescription,
+        config.botAvatarUrl,
+        config.botBannerUrl,
+      );
     }
 
     const config = await instanceConfig.getConfig();
@@ -152,16 +178,22 @@ export function registerAdminIdentityRoutes(
     const appId = config.discordAppId;
     const authHeader = `Bot ${config.discordBotToken}`;
 
+    // URL CDN bannière — composée à partir du `id` + `banner` hash
+    // retournés par PATCH /users/@me. `null` si l'admin n'a pas
+    // envoyé de bannière dans ce PUT.
+    let bannerUrl: string | null = null;
+
     // Identité bot = deux endpoints Discord (cf. setup.ts pour le
     // raisonnement complet). On envoie aux deux pour cohérence
     // username serveur ↔ nom application portail Developer.
 
-    // PATCH /users/@me — username + avatar du bot user. Skippé si
-    // ni name ni avatar dans le patch.
-    if (patch.name !== undefined || patch.avatar !== undefined) {
-      const userPatch: { username?: string; avatar?: string } = {};
+    // PATCH /users/@me — username + avatar + banner du bot user.
+    // Skippé si ni name ni avatar ni banner dans le patch.
+    if (patch.name !== undefined || patch.avatar !== undefined || patch.banner !== undefined) {
+      const userPatch: { username?: string; avatar?: string; banner?: string } = {};
       if (patch.name !== undefined) userPatch.username = patch.name;
       if (patch.avatar !== undefined) userPatch.avatar = patch.avatar;
+      if (patch.banner !== undefined) userPatch.banner = patch.banner;
       let userResponse: Response;
       try {
         userResponse = await fetchImpl(`${discordBaseUrl}/users/@me`, {
@@ -190,6 +222,18 @@ export function registerAdminIdentityRoutes(
       // Si /users/@me renvoie 429 on continue quand même vers
       // /applications/@me — la suite gère son propre 429 et l'admin
       // pourra retenter, le username sera à jour au coup d'après.
+      if (userResponse.ok && patch.banner !== undefined) {
+        let userBody: unknown;
+        try {
+          userBody = await userResponse.json();
+        } catch {
+          userBody = null;
+        }
+        const userPatchResult = userPatchSchema.safeParse(userBody);
+        if (userPatchResult.success && userPatchResult.data.banner != null) {
+          bannerUrl = `https://cdn.discordapp.com/banners/${userPatchResult.data.id}/${userPatchResult.data.banner}.png?size=1024`;
+        }
+      }
     }
 
     // PATCH /applications/@me — name (app), description, icon (icône
@@ -271,10 +315,12 @@ export function registerAdminIdentityRoutes(
       botName?: string;
       botDescription?: string;
       botAvatarUrl?: string;
+      botBannerUrl?: string;
     } = {};
     if (patch.name !== undefined) persistPatch.botName = patch.name;
     if (patch.description !== undefined) persistPatch.botDescription = patch.description;
     if (avatarUrl !== null) persistPatch.botAvatarUrl = avatarUrl;
+    if (bannerUrl !== null) persistPatch.botBannerUrl = bannerUrl;
     // On reste à l'étape 6 du wizard côté setup_step ; on ne
     // touche pas au compteur.
     await instanceConfig.setStep(6, persistPatch);
@@ -291,6 +337,11 @@ export function registerAdminIdentityRoutes(
     });
 
     const after = await instanceConfig.getConfig();
-    return buildAdminIdentityResponse(after.botName, after.botDescription, after.botAvatarUrl);
+    return buildAdminIdentityResponse(
+      after.botName,
+      after.botDescription,
+      after.botAvatarUrl,
+      after.botBannerUrl,
+    );
   });
 }

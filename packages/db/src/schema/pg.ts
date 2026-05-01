@@ -397,6 +397,7 @@ export const instanceConfig = pgTable(
     discordClientSecretAuthTag: bytea('discord_client_secret_auth_tag'),
     botName: text('bot_name'),
     botAvatarUrl: text('bot_avatar_url'),
+    botBannerUrl: text('bot_banner_url'),
     botDescription: text('bot_description'),
     baseUrl: text('base_url'),
     additionalUrls: jsonb('additional_urls')

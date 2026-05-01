@@ -89,6 +89,7 @@ export interface SetupStatusResponse {
   readonly botName: string | null;
   readonly botDescription: string | null;
   readonly botAvatarUrl: string | null;
+  readonly botBannerUrl: string | null;
 }
 
 /** Forme d'un check du POST `/setup/system-check`. */
@@ -336,6 +337,11 @@ const identityBodySchema = z.object({
     .string()
     .regex(/^data:image\/(png|jpe?g|gif);base64,/u, 'avatar doit être un data URI image')
     .optional(),
+  /** Bannière du bot — Data URI image (PR 7.8). */
+  banner: z
+    .string()
+    .regex(/^data:image\/(png|jpe?g|gif);base64,/u, 'banner doit être un data URI image')
+    .optional(),
   description: z.string().max(400).optional(),
 });
 
@@ -344,6 +350,7 @@ export interface IdentityResponse {
   readonly name: string | null;
   readonly description: string | null;
   readonly avatarUrl: string | null;
+  readonly bannerUrl: string | null;
 }
 
 /**
@@ -358,6 +365,18 @@ const applicationPatchSchema = z.object({
   description: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
+});
+
+/**
+ * Forme minimale de la réponse `PATCH /users/@me` (bot user). On a
+ * besoin de l'`id` pour construire les URL CDN avatar et banner, et
+ * du hash `banner` pour persister l'URL bannière (jalon 7 PR 7.8).
+ */
+const userPatchSchema = z.object({
+  id: z.string(),
+  username: z.string().nullable().optional(),
+  avatar: z.string().nullable().optional(),
+  banner: z.string().nullable().optional(),
 });
 
 /** Réponse de `POST /setup/complete`. */
@@ -449,6 +468,7 @@ export function registerSetupRoutes(
         botName: config.botName,
         botDescription: config.botDescription,
         botAvatarUrl: config.botAvatarUrl,
+        botBannerUrl: config.botBannerUrl,
       };
     },
   );
@@ -761,7 +781,10 @@ export function registerSetupRoutes(
       }
       const patch = parsed.data;
       const hasAnyField =
-        patch.name !== undefined || patch.avatar !== undefined || patch.description !== undefined;
+        patch.name !== undefined ||
+        patch.avatar !== undefined ||
+        patch.banner !== undefined ||
+        patch.description !== undefined;
 
       // Skip de l'étape (clic « Passer cette étape » côté wizard) :
       // body vide → on bumpe juste le compteur, pas d'appel Discord.
@@ -772,6 +795,7 @@ export function registerSetupRoutes(
           name: config.botName,
           description: config.botDescription,
           avatarUrl: config.botAvatarUrl,
+          bannerUrl: config.botBannerUrl,
         };
       }
 
@@ -796,6 +820,11 @@ export function registerSetupRoutes(
       const appId = config.discordAppId;
       const authHeader = `Bot ${config.discordBotToken}`;
 
+      // URL CDN bannière — composée à partir du `id` + `banner` hash
+      // retournés par PATCH /users/@me. `null` si l'admin n'a pas
+      // envoyé de bannière dans ce body.
+      let bannerUrl: string | null = null;
+
       // **Deux endpoints Discord à appeler.** L'identité « visible »
       // d'un bot est éclatée en deux côtés Discord :
       //
@@ -814,10 +843,11 @@ export function registerSetupRoutes(
 
       // 1. PATCH /users/@me — bot user (username + avatar). Skippé
       //    si ni name ni avatar dans le patch.
-      if (patch.name !== undefined || patch.avatar !== undefined) {
-        const userPatch: { username?: string; avatar?: string } = {};
+      if (patch.name !== undefined || patch.avatar !== undefined || patch.banner !== undefined) {
+        const userPatch: { username?: string; avatar?: string; banner?: string } = {};
         if (patch.name !== undefined) userPatch.username = patch.name;
         if (patch.avatar !== undefined) userPatch.avatar = patch.avatar;
+        if (patch.banner !== undefined) userPatch.banner = patch.banner;
         let userResponse: Response;
         try {
           userResponse = await fetchImpl(`${discordBaseUrl}/users/@me`, {
@@ -842,6 +872,21 @@ export function registerSetupRoutes(
             'discord_unreachable',
             `Discord a répondu ${userResponse.status} sur PATCH /users/@me.`,
           );
+        }
+        // On lit la réponse uniquement si une bannière a été envoyée
+        // — sinon le hash banner reste à sa valeur précédente côté
+        // Discord et on ne touche pas à `botBannerUrl` en DB.
+        if (patch.banner !== undefined) {
+          let userBody: unknown;
+          try {
+            userBody = await userResponse.json();
+          } catch {
+            userBody = null;
+          }
+          const userPatchResult = userPatchSchema.safeParse(userBody);
+          if (userPatchResult.success && userPatchResult.data.banner != null) {
+            bannerUrl = `https://cdn.discordapp.com/banners/${userPatchResult.data.id}/${userPatchResult.data.banner}.png?size=1024`;
+          }
         }
       }
 
@@ -911,10 +956,12 @@ export function registerSetupRoutes(
         botName?: string;
         botDescription?: string;
         botAvatarUrl?: string;
+        botBannerUrl?: string;
       } = {};
       if (patch.name !== undefined) persistPatch.botName = patch.name;
       if (patch.description !== undefined) persistPatch.botDescription = patch.description;
       if (avatarUrl !== null) persistPatch.botAvatarUrl = avatarUrl;
+      if (bannerUrl !== null) persistPatch.botBannerUrl = bannerUrl;
       await instanceConfig.setStep(6, persistPatch);
 
       const after = await instanceConfig.getConfig();
@@ -922,6 +969,7 @@ export function registerSetupRoutes(
         name: after.botName,
         description: after.botDescription,
         avatarUrl: after.botAvatarUrl,
+        bannerUrl: after.botBannerUrl,
       };
     },
   );

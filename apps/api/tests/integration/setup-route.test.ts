@@ -91,6 +91,7 @@ describe('GET /setup/status', () => {
         botName: null,
         botDescription: null,
         botAvatarUrl: null,
+        botBannerUrl: null,
       });
     } finally {
       await app.close();

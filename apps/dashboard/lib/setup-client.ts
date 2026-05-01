@@ -39,6 +39,7 @@ export interface SetupStatusPayload {
   readonly botName: string | null;
   readonly botDescription: string | null;
   readonly botAvatarUrl: string | null;
+  readonly botBannerUrl: string | null;
 }
 
 /** Réponse de `POST /setup/discord-app`. */
